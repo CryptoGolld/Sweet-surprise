@@ -33,7 +33,7 @@ module suilfg_launch::bonding_curve {
         // For simplicity in this stub, we don’t model the token type mint/burn
     }
 
-    struct TokenCoin<T: store> has key, store {
+    public struct TokenCoin<T: store> has key, store {
         id: UID,
         amount: u64,
     }

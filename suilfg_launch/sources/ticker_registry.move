@@ -11,16 +11,16 @@ module suilfg_launch::ticker_registry {
 
     use crate::platform_config::AdminCap;
 
-    enum TickerStatus { Available, Active, OnCooldown, Banned, Reserved, Whitelisted }
+    public enum TickerStatus { Available, Active, OnCooldown, Banned, Reserved, Whitelisted }
 
-    struct TickerInfo has store {
+    public struct TickerInfo has store {
         status: TickerStatus,
         token_id: Option<ID>,
         cooldown_ends_ts_ms: u64,
         whitelist: vector<address>,
     }
 
-    struct TickerRegistry has key {
+    public struct TickerRegistry has key {
         id: UID,
         tickers: Table<String, TickerInfo>,
         default_cooldown_ms: u64,

@@ -30,7 +30,7 @@ module suilfg_launch::platform_config {
     public fun get_graduation_reward_sui(cfg: &PlatformConfig): u64 { cfg.graduation_reward_sui }
 
     /// Called automatically when the package is published
-    fun init(ctx: &mut TxContext) {
+    public entry fun init(ctx: &mut TxContext) {
         let admin = AdminCap { id: object::new(ctx) };
         let cfg = PlatformConfig {
             id: object::new(ctx),
