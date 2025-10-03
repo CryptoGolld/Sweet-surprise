@@ -191,14 +191,14 @@ module suilfg_launch::bonding_curve {
         let net = gross - platform_fee - creator_fee;
 
         // Burn the tokens being sold; if needed, split first
-        let to_burn = if (tokens.amount == amount_tokens) {
-            tokens
+        if (tokens.amount == amount_tokens) {
+            let _burned = burn_tokens::<T>(tokens);
         } else {
-            split_tokens::<T>(&mut tokens, amount_tokens, ctx)
+            let to_burn = split_tokens::<T>(&mut tokens, amount_tokens, ctx);
+            let _burned = burn_tokens::<T>(to_burn);
+            // Return remaining tokens to sender
+            transfer::public_transfer(tokens, sender(ctx));
         };
-        let _burned = burn_tokens::<T>(to_burn);
-        // Return any remainder tokens to sender
-        if (tokens.amount > 0) { transfer::public_transfer(tokens, sender(ctx)); }
 
         // Withdraw from reserve
         let payout_bal = balance::split(&mut curve.sui_reserve, net);
