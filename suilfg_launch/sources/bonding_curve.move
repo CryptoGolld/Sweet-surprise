@@ -8,6 +8,7 @@ module suilfg_launch::bonding_curve {
     use sui::event;
     use sui::clock::{Self as clock, Clock};
     use sui::vector;
+    use sui::option::{Self as opt, Option};
 
     use std::u128;
     use std::u64;
@@ -30,6 +31,11 @@ module suilfg_launch::bonding_curve {
         m_num: u128, // numerator for price coefficient m
         m_den: u128, // denominator for price coefficient m
         // For simplicity in this stub, we don’t model the token type mint/burn
+    }
+
+    struct TokenCoin<T: store> has key, store {
+        id: UID,
+        amount: u64,
     }
 
     struct Created has copy, drop { creator: address }
@@ -61,14 +67,21 @@ module suilfg_launch::bonding_curve {
 
     public entry fun create_new_meme_token<T: store>(
         cfg: &PlatformConfig,
-        _creator_buy_amount: u64,
+        mut creator_buy_payment: Option<Coin<SUI>>, // None => no auto-buy; Some(payment) => perform first buy
+        max_sui_in: u64,
+        min_tokens_out: u64,
+        deadline_ts_ms: u64,
+        clk: &Clock,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; }
         let creator_addr = sender(ctx);
-        let curve = init_for_token<T>(cfg, creator_addr, ctx);
+        let mut curve = init_for_token<T>(cfg, creator_addr, ctx);
         event::emit(Created { creator: creator_addr });
-        // NOTE: Creator auto-buy should be batched by the frontend in same PTB via calling `buy`
+        if (opt::is_some(&creator_buy_payment)) {
+            let payment = opt::extract(&mut creator_buy_payment);
+            buy::<T>(cfg, &mut curve, payment, max_sui_in, min_tokens_out, deadline_ts_ms, clk, ctx);
+        };
         transfer::share_object(curve);
     }
 
@@ -136,14 +149,17 @@ module suilfg_launch::bonding_curve {
         let deposit = coin::into_balance(payment);
         balance::join(&mut curve.sui_reserve, deposit);
 
-        // Mint tokens_out notionally by updating supply
+        // Mint token coins to buyer and update supply
         curve.token_supply = s2_clamped;
+        let minted = TokenCoin<T> { id: object::new(ctx), amount: tokens_out };
+        transfer::public_transfer(minted, sender(ctx));
         event::emit(Bought { buyer: sender(ctx), amount_sui: used });
     }
 
     public entry fun sell<T: store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
+        mut tokens: TokenCoin<T>,
         amount_tokens: u64,
         min_sui_out: u64,
         deadline_ts_ms: u64,
@@ -162,7 +178,7 @@ module suilfg_launch::bonding_curve {
 
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4 } // E_DEADLINE_EXPIRED
 
-        // Compute payout (stubbed) and fees
+        // Compute payout and fees
         let s1 = curve.token_supply;
         let s2 = s1 - amount_tokens;
         let gross_u128 = integrate_cost_u128(s2, s1, curve.m_num, curve.m_den);
@@ -173,6 +189,16 @@ module suilfg_launch::bonding_curve {
         let platform_fee = gross * curve.platform_fee_bps / 10_000;
         let creator_fee = gross * curve.creator_fee_bps / 10_000;
         let net = gross - platform_fee - creator_fee;
+
+        // Burn the tokens being sold; if needed, split first
+        let to_burn = if (tokens.amount == amount_tokens) {
+            tokens
+        } else {
+            split_tokens::<T>(&mut tokens, amount_tokens, ctx)
+        };
+        let _burned = burn_tokens::<T>(to_burn);
+        // Return any remainder tokens to sender
+        if (tokens.amount > 0) { transfer::public_transfer(tokens, sender(ctx)); }
 
         // Withdraw from reserve
         let payout_bal = balance::split(&mut curve.sui_reserve, net);
@@ -260,4 +286,16 @@ module suilfg_launch::bonding_curve {
     }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
+
+    public fun split_tokens<T: store>(tokens: &mut TokenCoin<T>, amount: u64, ctx: &mut TxContext): TokenCoin<T> {
+        assert!(amount <= tokens.amount, 8); // E_INSUFFICIENT_TOKENS
+        tokens.amount = tokens.amount - amount;
+        TokenCoin<T> { id: object::new(ctx), amount }
+    }
+
+    public fun burn_tokens<T: store>(tokens: TokenCoin<T>): u64 {
+        let TokenCoin { id, amount } = tokens;
+        object::delete(id);
+        amount
+    }
 }
