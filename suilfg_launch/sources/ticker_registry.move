@@ -4,10 +4,10 @@ module suilfg_launch::ticker_registry {
     use sui::transfer;
     use sui::table::{Table};
     use sui::table as table;
-    use sui::string::String;
-    use sui::option::{Self as opt, Option};
+    use std::string::String;
+    use std::option::{Self as opt, Option};
     use sui::clock::Clock;
-    use sui::vector;
+    use std::vector;
 
     use crate::platform_config::AdminCap;
 

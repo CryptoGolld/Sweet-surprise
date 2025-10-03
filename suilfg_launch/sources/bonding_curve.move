@@ -7,8 +7,8 @@ module suilfg_launch::bonding_curve {
     use sui::sui::SUI;
     use sui::event;
     use sui::clock::{Self as clock, Clock};
-    use sui::vector;
-    use sui::option::{Self as opt, Option};
+    use std::vector;
+    use std::option::{Self as opt, Option};
 
     use std::u128;
     use std::u64;
