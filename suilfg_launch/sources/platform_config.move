@@ -1,10 +1,11 @@
 module suilfg_launch::platform_config {
-    use sui::object::{self, UID, ID};
+    use sui::object::{UID};
+    use sui::object;
     use sui::tx_context::{TxContext, sender};
     use sui::transfer;
 
     /// Shared platform configuration object
-    struct PlatformConfig has key {
+    public struct PlatformConfig has key {
         id: UID,
         treasury_address: address,
         creation_is_paused: bool,
@@ -15,7 +16,7 @@ module suilfg_launch::platform_config {
     }
 
     /// Capability that authorizes admin-only operations
-    struct AdminCap has key, store { id: UID }
+    public struct AdminCap has key, store { id: UID }
 
     const DEFAULT_FIRST_BUYER_FEE_MIST: u64 = 1_000_000_000; // 1 SUI
     const DEFAULT_PLATFORM_FEE_BPS: u64 = 450; // 4.5%

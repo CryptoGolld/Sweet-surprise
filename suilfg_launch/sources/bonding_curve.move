@@ -1,5 +1,6 @@
 module suilfg_launch::bonding_curve {
-    use sui::object::{self, UID};
+    use sui::object::{UID};
+    use sui::object;
     use sui::tx_context::{TxContext, sender};
     use sui::transfer;
     use sui::balance::{Self as balance, Balance};
@@ -13,7 +14,8 @@ module suilfg_launch::bonding_curve {
     use std::u128;
     use std::u64;
 
-    use crate::platform_config::{self as platform_config, PlatformConfig, AdminCap};
+    use suilfg_launch::platform_config as platform_config;
+    use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
 

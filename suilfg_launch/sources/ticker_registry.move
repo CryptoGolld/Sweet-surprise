@@ -1,5 +1,6 @@
 module suilfg_launch::ticker_registry {
-    use sui::object::{self, UID, ID};
+    use sui::object::{UID, ID};
+    use sui::object;
     use sui::tx_context::TxContext;
     use sui::transfer;
     use sui::table::{Table};
@@ -9,7 +10,7 @@ module suilfg_launch::ticker_registry {
     use sui::clock::Clock;
     use std::vector;
 
-    use crate::platform_config::AdminCap;
+    use suilfg_launch::platform_config::AdminCap;
 
     public enum TickerStatus { Available, Active, OnCooldown, Banned, Reserved, Whitelisted }
 
