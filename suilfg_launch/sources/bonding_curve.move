@@ -61,8 +61,8 @@ module suilfg_launch::bonding_curve {
         }
     }
 
-    public entry fun freeze_trading<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
-    public entry fun initiate_whitelisted_exit<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
+    public fun freeze_trading<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
+    public fun initiate_whitelisted_exit<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
 
     public entry fun create_new_meme_token<T: store>(
         cfg: &PlatformConfig,
@@ -208,7 +208,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Sold { seller: sender(ctx), amount_sui: net });
     }
 
-    public entry fun graduate_to_cetus<T: store>(
+    public fun graduate_to_cetus<T: store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         _ctx: &mut TxContext
@@ -217,7 +217,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Graduated { creator: curve.creator, reward_sui: platform_config::get_graduation_reward_sui(cfg), treasury: platform_config::get_treasury_address(cfg) });
     }
 
-    public entry fun add_to_whitelist<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
+    public fun add_to_whitelist<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
         vector::push_back(&mut curve.whitelist, user);
     }
 

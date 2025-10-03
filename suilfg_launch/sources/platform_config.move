@@ -30,8 +30,8 @@ module suilfg_launch::platform_config {
     public fun get_default_creator_fee_bps(cfg: &PlatformConfig): u64 { cfg.default_creator_fee_bps }
     public fun get_graduation_reward_sui(cfg: &PlatformConfig): u64 { cfg.graduation_reward_sui }
 
-    /// Called automatically when the package is published
-    public entry fun init(ctx: &mut TxContext) {
+    /// One-time module initializer (Sui requirement: internal, witness + ctx)
+    fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
         let admin = AdminCap { id: object::new(ctx) };
         let cfg = PlatformConfig {
             id: object::new(ctx),
@@ -45,6 +45,8 @@ module suilfg_launch::platform_config {
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
     }
+
+    public struct PLATFORM_CONFIG has drop {}
 
     /// Admin setters. AdminCap must be passed in and is returned to the caller.
 

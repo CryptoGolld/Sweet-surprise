@@ -36,7 +36,8 @@ module suilfg_launch::ticker_registry {
         // Funds and bidding mechanics will be added in a later iteration
     }
 
-    fun init(_witness: TICKER_REGISTRY, default_cooldown_ms: u64, ctx: &mut TxContext) {
+    fun init(_witness: TICKER_REGISTRY, ctx: &mut TxContext) {
+        let default_cooldown_ms: u64 = 30 * 24 * 60 * 60 * 1000; // 30 days default
         let reg = TickerRegistry { id: object::new(ctx), tickers: table::new<String, TickerInfo>(ctx), default_cooldown_ms };
         transfer::share_object(reg);
     }
