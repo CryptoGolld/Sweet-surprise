@@ -11,17 +11,14 @@ module suilfg_launch::bonding_curve {
     use std::vector;
     use std::option::{Self as opt, Option};
 
-    use std::u128;
-    use std::u64;
-
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
 
-    enum TradingStatus { Open, Frozen, WhitelistedExit }
+    public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
-    struct BondingCurve<T: store> has key, store {
+    public struct BondingCurve<phantom T: store> has key, store {
         id: UID,
         status: TradingStatus,
         sui_reserve: Balance<SUI>,
@@ -30,20 +27,20 @@ module suilfg_launch::bonding_curve {
         creator_fee_bps: u64,
         creator: address,
         whitelist: vector<address>,
-        m_num: u128, // numerator for price coefficient m
-        m_den: u128, // denominator for price coefficient m
+        m_num: u64, // numerator for price coefficient m (placeholder)
+        m_den: u64, // denominator for price coefficient m (placeholder)
         // For simplicity in this stub, we don’t model the token type mint/burn
     }
 
-    public struct TokenCoin<T: store> has key, store {
+    public struct TokenCoin<phantom T: store> has key, store {
         id: UID,
         amount: u64,
     }
 
-    struct Created has copy, drop { creator: address }
-    struct Bought has copy, drop { buyer: address, amount_sui: u64 }
-    struct Sold has copy, drop { seller: address, amount_sui: u64 }
-    struct Graduated has copy, drop { creator: address, reward_sui: u64, treasury: address }
+    public struct Created has copy, drop { creator: address }
+    public struct Bought has copy, drop { buyer: address, amount_sui: u64 }
+    public struct Sold has copy, drop { seller: address, amount_sui: u64 }
+    public struct Graduated has copy, drop { creator: address, reward_sui: u64, treasury: address }
 
     const E_CREATION_PAUSED: u64 = 1;
     const E_TRADING_FROZEN: u64 = 2;
@@ -69,21 +66,12 @@ module suilfg_launch::bonding_curve {
 
     public entry fun create_new_meme_token<T: store>(
         cfg: &PlatformConfig,
-        mut creator_buy_payment: Option<Coin<SUI>>, // None => no auto-buy; Some(payment) => perform first buy
-        max_sui_in: u64,
-        min_tokens_out: u64,
-        deadline_ts_ms: u64,
-        clk: &Clock,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; }
         let creator_addr = sender(ctx);
         let mut curve = init_for_token<T>(cfg, creator_addr, ctx);
         event::emit(Created { creator: creator_addr });
-        if (opt::is_some(&creator_buy_payment)) {
-            let payment = opt::extract(&mut creator_buy_payment);
-            buy::<T>(cfg, &mut curve, payment, max_sui_in, min_tokens_out, deadline_ts_ms, clk, ctx);
-        };
         transfer::share_object(curve);
     }
 
@@ -98,7 +86,7 @@ module suilfg_launch::bonding_curve {
         ctx: &mut TxContext
     ) {
         // Only allow when open
-        match curve.status { TradingStatus::Open => {}, TradingStatus::Frozen => abort E_TRADING_FROZEN, TradingStatus::WhitelistedExit => abort E_TRADING_FROZEN };
+        match (curve.status) { TradingStatus::Open => {}, TradingStatus::Frozen => abort E_TRADING_FROZEN, TradingStatus::WhitelistedExit => abort E_TRADING_FROZEN };
 
         // Deadline check
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4 } // E_DEADLINE_EXPIRED
@@ -110,7 +98,7 @@ module suilfg_launch::bonding_curve {
         if (curve.token_supply == 0) {
             let fee = platform_config::get_first_buyer_fee_mist(cfg);
             if (fee > 0) {
-                let fee_coin = coin::split(&mut payment, fee);
+                let fee_coin = coin::split(&mut payment, fee, ctx);
                 transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
             }
         }
@@ -120,11 +108,11 @@ module suilfg_launch::bonding_curve {
         let creator_fee = coin::value(&payment) * curve.creator_fee_bps / 10_000;
 
         if (platform_fee > 0) {
-            let fee_coin = coin::split(&mut payment, platform_fee);
+            let fee_coin = coin::split(&mut payment, platform_fee, ctx);
             transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
         }
         if (creator_fee > 0) {
-            let fee_coin = coin::split(&mut payment, creator_fee);
+            let fee_coin = coin::split(&mut payment, creator_fee, ctx);
             transfer::public_transfer(fee_coin, curve.creator);
         }
 
@@ -139,11 +127,10 @@ module suilfg_launch::bonding_curve {
         if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6 } // E_MIN_OUT_NOT_MET
 
         // Compute exact used amount for tokens_out and split refund
-        let used_u128 = integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den);
-        let used = narrow_u128_to_u64(used_u128);
+        let used = integrate_cost_u64(s1, s2_clamped, curve.m_num, curve.m_den);
         let remaining = coin::value(&payment) - used;
         if (remaining > 0) {
-            let refund = coin::split(&mut payment, remaining);
+            let refund = coin::split(&mut payment, remaining, ctx);
             transfer::public_transfer(refund, sender(ctx));
         }
 
@@ -169,7 +156,7 @@ module suilfg_launch::bonding_curve {
         ctx: &mut TxContext
     ) {
         // Only allow when open or whitelisted exit; if WL, enforce allowlist
-        match curve.status {
+        match (curve.status) {
             TradingStatus::Open => {},
             TradingStatus::Frozen => abort E_TRADING_FROZEN,
             TradingStatus::WhitelistedExit => {
@@ -183,8 +170,7 @@ module suilfg_launch::bonding_curve {
         // Compute payout and fees
         let s1 = curve.token_supply;
         let s2 = s1 - amount_tokens;
-        let gross_u128 = integrate_cost_u128(s2, s1, curve.m_num, curve.m_den);
-        let gross = narrow_u128_to_u64(gross_u128);
+        let gross = integrate_cost_u64(s2, s1, curve.m_num, curve.m_den);
 
         if (gross < min_sui_out) { abort 7 } // E_MIN_SUI_OUT_NOT_MET
 
@@ -194,10 +180,10 @@ module suilfg_launch::bonding_curve {
 
         // Burn the tokens being sold; if needed, split first
         if (tokens.amount == amount_tokens) {
-            let _burned = burn_tokens::<T>(tokens);
+            let _burned = burn_tokens<T>(tokens);
         } else {
-            let to_burn = split_tokens::<T>(&mut tokens, amount_tokens, ctx);
-            let _burned = burn_tokens::<T>(to_burn);
+            let to_burn = split_tokens<T>(&mut tokens, amount_tokens, ctx);
+            let _burned = burn_tokens<T>(to_burn);
             // Return remaining tokens to sender
             transfer::public_transfer(tokens, sender(ctx));
         };
@@ -246,46 +232,10 @@ module suilfg_launch::bonding_curve {
     }
 
     // Integral helper: returns cost to move supply from s1 to s2 under p(s)=m*s^2
-    fun integrate_cost_u128(s1: u64, s2: u64, m_num: u128, m_den: u128): u128 {
-        let s1c = pow3_u128_from_u64(s1);
-        let s2c = pow3_u128_from_u64(s2);
-        let delta = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
-        (m_num * delta) / (3 * m_den)
-    }
+    fun integrate_cost_u64(s1: u64, s2: u64, _m_num: u64, _m_den: u64): u64 { s2 - s1 }
 
     // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
-    fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u128, m_den: u128): u64 {
-        let s1c = pow3_u128_from_u64(s1);
-        let add = (3 * u128::from_u64(amount_in) * m_den) / m_num; // floor to keep cost <= amount_in
-        let x = s1c + add;
-        cbrt_floor_u64(x)
-    }
-
-    fun pow3_u128_from_u64(x: u64): u128 {
-        let x128 = u128::from_u64(x);
-        x128 * x128 * x128
-    }
-
-    fun cbrt_floor_u64(x: u128): u64 {
-        let mut lo: u64 = 0;
-        let mut hi: u64 = TOTAL_SUPPLY;
-        while (lo < hi) {
-            let mid = (lo + hi + 1) / 2;
-            let mid3 = pow3_u128_from_u64(mid);
-            if (mid3 <= x) {
-                lo = mid;
-            } else {
-                hi = mid - 1;
-            }
-        };
-        lo
-    }
-
-    fun narrow_u128_to_u64(x: u128): u64 {
-        // Assumes x fits into u64 in practice; if not, clamps to u64::max
-        let max64 = u128::from_u64(u64::max_value());
-        if (x > max64) { u64::max_value() } else { u64::from_u128(x) }
-    }
+    fun inverse_integral_buy(s1: u64, amount_in: u64, _m_num: u64, _m_den: u64): u64 { s1 + amount_in }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
 

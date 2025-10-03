@@ -12,7 +12,7 @@ module suilfg_launch::ticker_registry {
 
     use suilfg_launch::platform_config::AdminCap;
 
-    public enum TickerStatus { Available, Active, OnCooldown, Banned, Reserved, Whitelisted }
+    public enum TickerStatus has copy, drop, store { Available, Active, OnCooldown, Banned, Reserved, Whitelisted }
 
     public struct TickerInfo has store {
         status: TickerStatus,
@@ -21,13 +21,13 @@ module suilfg_launch::ticker_registry {
         whitelist: vector<address>,
     }
 
-    public struct TickerRegistry has key {
+    public struct TickerRegistry has key, store {
         id: UID,
         tickers: Table<String, TickerInfo>,
         default_cooldown_ms: u64,
     }
 
-    struct Auction has key, store {
+    public struct Auction has key, store {
         id: UID,
         ticker_symbol: String,
         highest_bidder: address,
@@ -36,10 +36,12 @@ module suilfg_launch::ticker_registry {
         // Funds and bidding mechanics will be added in a later iteration
     }
 
-    public entry fun init(default_cooldown_ms: u64, ctx: &mut TxContext) {
+    fun init(_witness: TICKER_REGISTRY, default_cooldown_ms: u64, ctx: &mut TxContext) {
         let reg = TickerRegistry { id: object::new(ctx), tickers: table::new<String, TickerInfo>(ctx), default_cooldown_ms };
         transfer::share_object(reg);
     }
+
+    public struct TICKER_REGISTRY has drop {}
 
     // Admin controls
     public entry fun start_auction(_admin: &AdminCap, _registry: &mut TickerRegistry, _ticker: String, _duration_ms: u64, _clock: &Clock, _ctx: &mut TxContext) {
@@ -51,11 +53,8 @@ module suilfg_launch::ticker_registry {
 
     public entry fun withdraw_reservation(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
         if (table::contains(&registry.tickers, &ticker)) {
-            let mut info = table::borrow_mut(&mut registry.tickers, &ticker);
-            match info.status {
-                TickerStatus::Reserved => { info.status = TickerStatus::Available; },
-                _ => {}
-            }
+            let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
+            if (info_ref.status == TickerStatus::Reserved) { info_ref.status = TickerStatus::Available; }
         }
     }
 
@@ -69,14 +68,14 @@ module suilfg_launch::ticker_registry {
 
     public entry fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
         if (table::contains(&registry.tickers, &ticker)) {
-            let mut info = table::borrow_mut(&mut registry.tickers, &ticker);
-            vector::push_back(&mut info.whitelist, user);
-            info.status = TickerStatus::Whitelisted;
+            let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
+            vector::push_back(&mut info_ref.whitelist, user);
+            info_ref.status = TickerStatus::Whitelisted;
         } else {
             let mut wl = vector::empty<address>();
             vector::push_back(&mut wl, user);
             let info = TickerInfo { status: TickerStatus::Whitelisted, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: wl };
-            table::insert(&mut registry.tickers, ticker, info);
+            table::add(&mut registry.tickers, ticker, info);
         }
     }
 
@@ -84,18 +83,18 @@ module suilfg_launch::ticker_registry {
 
     public fun mark_active_with_lock(registry: &mut TickerRegistry, ticker: String, token_id: ID, cooldown_ends_ts_ms: u64) {
         let info = TickerInfo { status: TickerStatus::Active, token_id: opt::some<ID>(token_id), cooldown_ends_ts_ms, whitelist: vector::empty<address>() };
-        table::insert(&mut registry.tickers, ticker, info);
+        table::add(&mut registry.tickers, ticker, info);
     }
 
     public fun contains(registry: &TickerRegistry, ticker: &String): bool { table::contains(&registry.tickers, ticker) }
 
     fun upsert_with_status(registry: &mut TickerRegistry, ticker: String, status: TickerStatus) {
         if (table::contains(&registry.tickers, &ticker)) {
-            let mut info = table::borrow_mut(&mut registry.tickers, &ticker);
-            info.status = status;
+            let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
+            info_ref.status = status;
         } else {
             let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>() };
-            table::insert(&mut registry.tickers, ticker, info);
+            table::add(&mut registry.tickers, ticker, info);
         }
     }
 
