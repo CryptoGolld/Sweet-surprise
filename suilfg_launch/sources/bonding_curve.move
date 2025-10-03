@@ -6,6 +6,11 @@ module suilfg_launch::bonding_curve {
     use sui::coin::{Self as coin, Coin};
     use sui::sui::SUI;
     use sui::event;
+    use sui::clock::{Self as clock, Clock};
+    use sui::vector;
+
+    use std::u128;
+    use std::u64;
 
     use crate::platform_config::{self as platform_config, PlatformConfig, AdminCap};
 
@@ -22,6 +27,8 @@ module suilfg_launch::bonding_curve {
         creator_fee_bps: u64,
         creator: address,
         whitelist: vector<address>,
+        m_num: u128, // numerator for price coefficient m
+        m_den: u128, // denominator for price coefficient m
         // For simplicity in this stub, we don’t model the token type mint/burn
     }
 
@@ -44,6 +51,8 @@ module suilfg_launch::bonding_curve {
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
             creator: creator,
             whitelist: vector::empty<address>(),
+            m_num: 1, // default m = 1/1; calibrate via admin later if needed
+            m_den: 1,
         }
     }
 
@@ -67,27 +76,33 @@ module suilfg_launch::bonding_curve {
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         mut payment: Coin<SUI>,
+        max_sui_in: u64,
+        min_tokens_out: u64,
+        deadline_ts_ms: u64,
+        clk: &Clock,
         ctx: &mut TxContext
     ) {
         // Only allow when open
         match curve.status { TradingStatus::Open => {}, TradingStatus::Frozen => abort E_TRADING_FROZEN, TradingStatus::WhitelistedExit => abort E_TRADING_FROZEN };
 
-        let total_in = coin::value(&payment);
+        // Deadline check
+        if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4 } // E_DEADLINE_EXPIRED
+
+        let gross_in = coin::value(&payment);
+        if (gross_in > max_sui_in) { abort 5 } // E_MAX_IN_EXCEEDED
 
         // First buyer fee if first-ever buy
-        let mut first_fee = 0;
         if (curve.token_supply == 0) {
-            first_fee = platform_config::get_first_buyer_fee_mist(cfg);
-            if (first_fee > 0) {
-                let fee_coin = coin::split(&mut payment, first_fee);
+            let fee = platform_config::get_first_buyer_fee_mist(cfg);
+            if (fee > 0) {
+                let fee_coin = coin::split(&mut payment, fee);
                 transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
             }
         }
 
         // Platform and creator fees based on trade size (excluding first_fee)
-        let mut trade_amount = coin::value(&payment);
-        let platform_fee = trade_amount * curve.platform_fee_bps / 10_000;
-        let creator_fee = trade_amount * curve.creator_fee_bps / 10_000;
+        let platform_fee = coin::value(&payment) * curve.platform_fee_bps / 10_000;
+        let creator_fee = coin::value(&payment) * curve.creator_fee_bps / 10_000;
 
         if (platform_fee > 0) {
             let fee_coin = coin::split(&mut payment, platform_fee);
@@ -98,20 +113,41 @@ module suilfg_launch::bonding_curve {
             transfer::public_transfer(fee_coin, curve.creator);
         }
 
-        // Remainder goes into the curve reserve
+        // Remaining trade amount
+        let trade_in = coin::value(&payment);
+
+        // Compute target s2 via inverse integral, clamped by TOTAL_SUPPLY
+        let s1 = curve.token_supply;
+        let s2_target = inverse_integral_buy(s1, trade_in, curve.m_num, curve.m_den);
+        let s2_clamped = min_u64(s2_target, TOTAL_SUPPLY);
+        let tokens_out = s2_clamped - s1;
+        if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6 } // E_MIN_OUT_NOT_MET
+
+        // Compute exact used amount for tokens_out and split refund
+        let used_u128 = integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den);
+        let used = narrow_u128_to_u64(used_u128);
+        let remaining = coin::value(&payment) - used;
+        if (remaining > 0) {
+            let refund = coin::split(&mut payment, remaining);
+            transfer::public_transfer(refund, sender(ctx));
+        }
+
+        // Deposit used amount into reserve
         let deposit = coin::into_balance(payment);
         balance::join(&mut curve.sui_reserve, deposit);
 
-        // Compute tokens out via exponential integral (stubbed)
-        let tokens_out = calculate_tokens_out(curve.token_supply, balance::value(&curve.sui_reserve), total_in);
-        curve.token_supply = curve.token_supply + tokens_out;
-        event::emit(Bought { buyer: sender(ctx), amount_sui: total_in });
+        // Mint tokens_out notionally by updating supply
+        curve.token_supply = s2_clamped;
+        event::emit(Bought { buyer: sender(ctx), amount_sui: used });
     }
 
     public entry fun sell<T: store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         amount_tokens: u64,
+        min_sui_out: u64,
+        deadline_ts_ms: u64,
+        clk: &Clock,
         ctx: &mut TxContext
     ) {
         // Only allow when open or whitelisted exit; if WL, enforce allowlist
@@ -124,8 +160,16 @@ module suilfg_launch::bonding_curve {
             }
         };
 
+        if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4 } // E_DEADLINE_EXPIRED
+
         // Compute payout (stubbed) and fees
-        let gross = calculate_sui_out(curve.token_supply, balance::value(&curve.sui_reserve), amount_tokens);
+        let s1 = curve.token_supply;
+        let s2 = s1 - amount_tokens;
+        let gross_u128 = integrate_cost_u128(s2, s1, curve.m_num, curve.m_den);
+        let gross = narrow_u128_to_u64(gross_u128);
+
+        if (gross < min_sui_out) { abort 7 } // E_MIN_SUI_OUT_NOT_MET
+
         let platform_fee = gross * curve.platform_fee_bps / 10_000;
         let creator_fee = gross * curve.creator_fee_bps / 10_000;
         let net = gross - platform_fee - creator_fee;
@@ -173,7 +217,47 @@ module suilfg_launch::bonding_curve {
         false
     }
 
-    // Placeholder pricing functions to be implemented with exponential integral
-    fun calculate_tokens_out(_current_supply: u64, _current_reserve: u64, _sui_in: u64): u64 { 0 }
-    fun calculate_sui_out(_current_supply: u64, _current_reserve: u64, _tokens_in: u64): u64 { 0 }
+    // Integral helper: returns cost to move supply from s1 to s2 under p(s)=m*s^2
+    fun integrate_cost_u128(s1: u64, s2: u64, m_num: u128, m_den: u128): u128 {
+        let s1c = pow3_u128_from_u64(s1);
+        let s2c = pow3_u128_from_u64(s2);
+        let delta = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
+        (m_num * delta) / (3 * m_den)
+    }
+
+    // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
+    fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u128, m_den: u128): u64 {
+        let s1c = pow3_u128_from_u64(s1);
+        let add = (3 * u128::from_u64(amount_in) * m_den) / m_num; // floor to keep cost <= amount_in
+        let x = s1c + add;
+        cbrt_floor_u64(x)
+    }
+
+    fun pow3_u128_from_u64(x: u64): u128 {
+        let x128 = u128::from_u64(x);
+        x128 * x128 * x128
+    }
+
+    fun cbrt_floor_u64(x: u128): u64 {
+        let mut lo: u64 = 0;
+        let mut hi: u64 = TOTAL_SUPPLY;
+        while (lo < hi) {
+            let mid = (lo + hi + 1) / 2;
+            let mid3 = pow3_u128_from_u64(mid);
+            if (mid3 <= x) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        };
+        lo
+    }
+
+    fun narrow_u128_to_u64(x: u128): u64 {
+        // Assumes x fits into u64 in practice; if not, clamps to u64::max
+        let max64 = u128::from_u64(u64::max_value());
+        if (x > max64) { u64::max_value() } else { u64::from_u128(x) }
+    }
+
+    fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
 }
