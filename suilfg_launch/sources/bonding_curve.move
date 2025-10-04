@@ -97,7 +97,7 @@ module suilfg_launch::bonding_curve {
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {}; // E_DEADLINE_EXPIRED
 
         let gross_in = coin::value(&payment);
-        if (gross_in > max_sui_in) { abort 5 } // E_MAX_IN_EXCEEDED
+        if (gross_in > max_sui_in) { abort 5; } // E_MAX_IN_EXCEEDED
 
         // First buyer fee if first-ever buy
         if (curve.token_supply == 0) {
@@ -129,7 +129,7 @@ module suilfg_launch::bonding_curve {
         let s2_target = inverse_integral_buy(s1, trade_in, curve.m_num, curve.m_den);
         let s2_clamped = min_u64(s2_target, TOTAL_SUPPLY);
         let tokens_out = s2_clamped - s1;
-        if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6 } // E_MIN_OUT_NOT_MET
+        if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6; } // E_MIN_OUT_NOT_MET
 
         // Compute exact used amount for tokens_out and split refund
         let used = narrow_u128_to_u64(integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den));
