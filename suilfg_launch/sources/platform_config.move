@@ -13,6 +13,9 @@ module suilfg_launch::platform_config {
         default_platform_fee_bps: u64,
         default_creator_fee_bps: u64,
         graduation_reward_sui: u64,
+        // Default bonding curve scale m = m_num / m_den
+        default_m_num: u64,
+        default_m_den: u64,
     }
 
     /// Capability that authorizes admin-only operations
@@ -22,6 +25,8 @@ module suilfg_launch::platform_config {
     const DEFAULT_PLATFORM_FEE_BPS: u64 = 450; // 4.5%
     const DEFAULT_CREATOR_FEE_BPS: u64 = 50; // 0.5%
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
+    const DEFAULT_M_NUM: u64 = 1; // default m = 1/1
+    const DEFAULT_M_DEN: u64 = 1;
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -29,6 +34,8 @@ module suilfg_launch::platform_config {
     public fun get_default_platform_fee_bps(cfg: &PlatformConfig): u64 { cfg.default_platform_fee_bps }
     public fun get_default_creator_fee_bps(cfg: &PlatformConfig): u64 { cfg.default_creator_fee_bps }
     public fun get_graduation_reward_sui(cfg: &PlatformConfig): u64 { cfg.graduation_reward_sui }
+    public fun get_default_m_num(cfg: &PlatformConfig): u64 { cfg.default_m_num }
+    public fun get_default_m_den(cfg: &PlatformConfig): u64 { cfg.default_m_den }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -41,6 +48,8 @@ module suilfg_launch::platform_config {
             default_platform_fee_bps: DEFAULT_PLATFORM_FEE_BPS,
             default_creator_fee_bps: DEFAULT_CREATOR_FEE_BPS,
             graduation_reward_sui: DEFAULT_GRADUATION_REWARD_SUI,
+            default_m_num: DEFAULT_M_NUM,
+            default_m_den: DEFAULT_M_DEN,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -80,5 +89,12 @@ module suilfg_launch::platform_config {
 
     public entry fun set_graduation_reward(_admin: &AdminCap, cfg: &mut PlatformConfig, amount_sui: u64) {
         cfg.graduation_reward_sui = amount_sui;
+    }
+
+    public entry fun set_default_m(_admin: &AdminCap, cfg: &mut PlatformConfig, m_num: u64, m_den: u64) {
+        assert!(m_den > 0, 1001);
+        assert!(m_num > 0, 1002);
+        cfg.default_m_num = m_num;
+        cfg.default_m_den = m_den;
     }
 }

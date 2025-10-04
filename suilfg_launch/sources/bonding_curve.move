@@ -57,8 +57,25 @@ module suilfg_launch::bonding_curve {
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
             creator: creator,
             whitelist: vector::empty<address>(),
-            m_num: 1, // default m = 1/1; calibrate via admin later if needed
-            m_den: 1,
+            m_num: platform_config::get_default_m_num(cfg),
+            m_den: platform_config::get_default_m_den(cfg),
+        }
+    }
+
+    fun init_for_token_with_m<T: store>(cfg: &PlatformConfig, creator: address, m_num: u64, m_den: u64, ctx: &mut TxContext): BondingCurve<T> {
+        assert!(m_den > 0, 1101);
+        assert!(m_num > 0, 1102);
+        BondingCurve<T> {
+            id: object::new(ctx),
+            status: TradingStatus::Open,
+            sui_reserve: balance::zero<SUI>(),
+            token_supply: 0,
+            platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
+            creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
+            creator: creator,
+            whitelist: vector::empty<address>(),
+            m_num,
+            m_den,
         }
     }
 
@@ -72,6 +89,19 @@ module suilfg_launch::bonding_curve {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
         let creator_addr = sender(ctx);
         let mut curve = init_for_token<T>(cfg, creator_addr, ctx);
+        event::emit(Created { creator: creator_addr });
+        transfer::share_object(curve);
+    }
+
+    public entry fun create_new_meme_token_with_m<T: store>(
+        cfg: &PlatformConfig,
+        m_num: u64,
+        m_den: u64,
+        ctx: &mut TxContext
+    ) {
+        if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
+        let creator_addr = sender(ctx);
+        let mut curve = init_for_token_with_m<T>(cfg, creator_addr, m_num, m_den, ctx);
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);
     }
