@@ -169,6 +169,7 @@ Admin Functions:
   - `default_m = 1/1` placeholder (calibrate via `set_default_m`)
   - `default_graduation_target_mist = 10_000 SUI` (configurable)
   - `platform_cut_bps_on_graduation = 500` (5% platform share at graduation)
+  - `creator_graduation_payout_sui` example: 40 SUI (configurable)
 - `m_num/m_den` selection should be simulated to target desired reserve and price path at “graduation” supply; can be updated post-deploy via an admin function if added in future iteration
 
 ## 7. Upgrade & Governance Plan
