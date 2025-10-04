@@ -6,6 +6,7 @@ module suilfg_launch::ticker_registry {
     use sui::table::{Table};
     use sui::table as table;
     use std::string::String;
+    use std::string;
     use std::option::{Self as opt, Option};
     use sui::clock::Clock;
     use std::vector;
@@ -53,8 +54,9 @@ module suilfg_launch::ticker_registry {
     }
 
     public fun withdraw_reservation(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
-        if (table::contains<String, TickerInfo>(&registry.tickers, &ticker)) {
-            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, &ticker);
+        let key_for_contains = string::utf8(string::bytes(&ticker));
+        if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
+            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
             if (info_ref.status == TickerStatus::Reserved) { info_ref.status = TickerStatus::Available; }
         }
     }
@@ -68,8 +70,9 @@ module suilfg_launch::ticker_registry {
     }
 
     public fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
-        if (table::contains<String, TickerInfo>(&registry.tickers, &ticker)) {
-            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, &ticker);
+        let key_for_contains = string::utf8(string::bytes(&ticker));
+        if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
+            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
             vector::push_back(&mut info_ref.whitelist, user);
             info_ref.status = TickerStatus::Whitelisted;
         } else {
@@ -87,11 +90,12 @@ module suilfg_launch::ticker_registry {
         table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
     }
 
-    public fun contains(registry: &TickerRegistry, ticker: &String): bool { table::contains<String, TickerInfo>(&registry.tickers, ticker) }
+    public fun contains(registry: &TickerRegistry, ticker: String): bool { table::contains<String, TickerInfo>(&registry.tickers, ticker) }
 
     fun upsert_with_status(registry: &mut TickerRegistry, ticker: String, status: TickerStatus) {
-        if (table::contains<String, TickerInfo>(&registry.tickers, &ticker)) {
-            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, &ticker);
+        let key_for_contains = string::utf8(string::bytes(&ticker));
+        if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
+            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
             info_ref.status = status;
         } else {
             let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>() };

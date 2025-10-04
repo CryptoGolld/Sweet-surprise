@@ -244,19 +244,19 @@ module suilfg_launch::bonding_curve {
         let s1c = pow3_u128_from_u64(s1);
         let s2c = pow3_u128_from_u64(s2);
         let delta = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
-        (u128::from64(m_num) * delta) / (u128::from64(3) * u128::from64(m_den))
+        (u64::into_u128(m_num) * delta) / (u64::into_u128(3) * u64::into_u128(m_den))
     }
 
     // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
     fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u64, m_den: u64): u64 {
         let s1c = pow3_u128_from_u64(s1);
-        let add = (u128::from64(3) * u128::from64(amount_in) * u128::from64(m_den)) / u128::from64(m_num); // floor to keep cost <= amount_in
+        let add = (u64::into_u128(3) * u64::into_u128(amount_in) * u64::into_u128(m_den)) / u64::into_u128(m_num); // floor to keep cost <= amount_in
         let x = s1c + add;
         cbrt_floor_u64(x)
     }
 
     fun pow3_u128_from_u64(x: u64): u128 {
-        let x128 = u128::from64(x);
+        let x128 = u64::into_u128(x);
         x128 * x128 * x128
     }
 
@@ -276,8 +276,8 @@ module suilfg_launch::bonding_curve {
     }
 
     fun narrow_u128_to_u64(x: u128): u64 {
-        let max64 = u128::from64(u64::max_value!());
-        if (x > max64) { u64::max_value!() } else { u64::from128(x) }
+        let max64 = u64::into_u128(u64::max_value!());
+        if (x > max64) { u64::max_value!() } else { u128::into_u64(x) }
     }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
