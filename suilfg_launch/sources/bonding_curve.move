@@ -68,7 +68,7 @@ module suilfg_launch::bonding_curve {
         cfg: &PlatformConfig,
         ctx: &mut TxContext
     ) {
-        if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; }
+        if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {}
         let creator_addr = sender(ctx);
         let mut curve = init_for_token<T>(cfg, creator_addr, ctx);
         event::emit(Created { creator: creator_addr });
@@ -89,7 +89,7 @@ module suilfg_launch::bonding_curve {
         match (curve.status) { TradingStatus::Open => {}, TradingStatus::Frozen => abort E_TRADING_FROZEN, TradingStatus::WhitelistedExit => abort E_TRADING_FROZEN };
 
         // Deadline check
-        if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4 } // E_DEADLINE_EXPIRED
+        if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {} // E_DEADLINE_EXPIRED
 
         let gross_in = coin::value(&payment);
         if (gross_in > max_sui_in) { abort 5 } // E_MAX_IN_EXCEEDED
@@ -101,7 +101,7 @@ module suilfg_launch::bonding_curve {
                 let fee_coin = coin::split(&mut payment, fee, ctx);
                 transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
             }
-        }
+        } else {}
 
         // Platform and creator fees based on trade size (excluding first_fee)
         let platform_fee = coin::value(&payment) * curve.platform_fee_bps / 10_000;
@@ -110,11 +110,11 @@ module suilfg_launch::bonding_curve {
         if (platform_fee > 0) {
             let fee_coin = coin::split(&mut payment, platform_fee, ctx);
             transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
-        }
+        } else {}
         if (creator_fee > 0) {
             let fee_coin = coin::split(&mut payment, creator_fee, ctx);
             transfer::public_transfer(fee_coin, curve.creator);
-        }
+        } else {}
 
         // Remaining trade amount
         let trade_in = coin::value(&payment);
@@ -132,7 +132,7 @@ module suilfg_launch::bonding_curve {
         if (remaining > 0) {
             let refund = coin::split(&mut payment, remaining, ctx);
             transfer::public_transfer(refund, sender(ctx));
-        }
+        } else {}
 
         // Deposit used amount into reserve
         let deposit = coin::into_balance(payment);
@@ -165,14 +165,14 @@ module suilfg_launch::bonding_curve {
             }
         };
 
-        if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4 } // E_DEADLINE_EXPIRED
+        if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {} // E_DEADLINE_EXPIRED
 
         // Compute payout and fees
         let s1 = curve.token_supply;
         let s2 = s1 - amount_tokens;
         let gross = integrate_cost_u64(s2, s1, curve.m_num, curve.m_den);
 
-        if (gross < min_sui_out) { abort 7 } // E_MIN_SUI_OUT_NOT_MET
+        if (gross < min_sui_out) { abort 7; } else {} // E_MIN_SUI_OUT_NOT_MET
 
         let platform_fee = gross * curve.platform_fee_bps / 10_000;
         let creator_fee = gross * curve.creator_fee_bps / 10_000;
@@ -197,12 +197,12 @@ module suilfg_launch::bonding_curve {
             let fee_bal = balance::split(&mut curve.sui_reserve, platform_fee);
             let fee_coin = coin::from_balance(fee_bal, ctx);
             transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
-        }
+        } else {}
         if (creator_fee > 0) {
             let fee_bal = balance::split(&mut curve.sui_reserve, creator_fee);
             let fee_coin = coin::from_balance(fee_bal, ctx);
             transfer::public_transfer(fee_coin, curve.creator);
-        }
+        } else {}
 
         curve.token_supply = curve.token_supply - amount_tokens;
         event::emit(Sold { seller: sender(ctx), amount_sui: net });

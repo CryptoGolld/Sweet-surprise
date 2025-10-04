@@ -45,29 +45,29 @@ module suilfg_launch::ticker_registry {
     public struct TICKER_REGISTRY has drop {}
 
     // Admin controls
-    public entry fun start_auction(_admin: &AdminCap, _registry: &mut TickerRegistry, _ticker: String, _duration_ms: u64, _clock: &Clock, _ctx: &mut TxContext) {
+    public fun start_auction(_admin: &AdminCap, _registry: &mut TickerRegistry, _ticker: String, _duration_ms: u64, _clock: &Clock, _ctx: &mut TxContext) {
         // Stub: create Auction object and share it (no bidding yet)
         // let now = clock::timestamp_ms(_clock);
         // let auction = Auction { id: object::new(_ctx), ticker_symbol: _ticker, highest_bidder: @0x0, highest_bid: 0, end_ts_ms: now + _duration_ms };
         // transfer::share_object(auction);
     }
 
-    public entry fun withdraw_reservation(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
+    public fun withdraw_reservation(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
         if (table::contains(&registry.tickers, &ticker)) {
             let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
             if (info_ref.status == TickerStatus::Reserved) { info_ref.status = TickerStatus::Available; }
         }
     }
 
-    public entry fun ban_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
+    public fun ban_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
         upsert_with_status(registry, ticker, TickerStatus::Banned)
     }
 
-    public entry fun reserve_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
+    public fun reserve_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
         upsert_with_status(registry, ticker, TickerStatus::Reserved)
     }
 
-    public entry fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
+    public fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
         if (table::contains(&registry.tickers, &ticker)) {
             let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
             vector::push_back(&mut info_ref.whitelist, user);
@@ -80,7 +80,7 @@ module suilfg_launch::ticker_registry {
         }
     }
 
-    public entry fun set_cooldown_period(_admin: &AdminCap, registry: &mut TickerRegistry, cooldown_ms: u64) { registry.default_cooldown_ms = cooldown_ms; }
+    public fun set_cooldown_period(_admin: &AdminCap, registry: &mut TickerRegistry, cooldown_ms: u64) { registry.default_cooldown_ms = cooldown_ms; }
 
     public fun mark_active_with_lock(registry: &mut TickerRegistry, ticker: String, token_id: ID, cooldown_ends_ts_ms: u64) {
         let info = TickerInfo { status: TickerStatus::Active, token_id: opt::some<ID>(token_id), cooldown_ends_ts_ms, whitelist: vector::empty<address>() };
