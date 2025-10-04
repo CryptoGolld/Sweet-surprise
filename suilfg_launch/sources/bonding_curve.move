@@ -100,13 +100,15 @@ module suilfg_launch::bonding_curve {
         if (gross_in > max_sui_in) { abort 5; }; // E_MAX_IN_EXCEEDED
 
         // First buyer fee if first-ever buy
-        if (curve.token_supply == 0) {
-            let fee = platform_config::get_first_buyer_fee_mist(cfg);
-            if (fee > 0) {
-                let fee_coin = coin::split(&mut payment, fee, ctx);
-                transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
-            }
-        } else { };
+        {
+            if (curve.token_supply == 0) {
+                let fee = platform_config::get_first_buyer_fee_mist(cfg);
+                if (fee > 0) {
+                    let fee_coin = coin::split(&mut payment, fee, ctx);
+                    transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
+                };
+            };
+        }
 
         // Platform and creator fees based on trade size (excluding first_fee)
         let platform_fee = coin::value(&payment) * curve.platform_fee_bps / 10_000;
@@ -132,7 +134,8 @@ module suilfg_launch::bonding_curve {
         if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6; } // E_MIN_OUT_NOT_MET
 
         // Compute exact used amount for tokens_out and split refund
-        let used = narrow_u128_to_u64(integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den));
+        let used_u128 = integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den);
+        let used = narrow_u128_to_u64(used_u128);
         let remaining = coin::value(&payment) - used;
         if (remaining > 0) {
             let refund = coin::split(&mut payment, remaining, ctx);
