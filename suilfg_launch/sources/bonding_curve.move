@@ -9,7 +9,6 @@ module suilfg_launch::bonding_curve {
     use sui::event;
     use sui::clock::{Self as clock, Clock};
     use std::vector;
-    use std::option::{Self as opt, Option};
 
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
@@ -127,7 +126,7 @@ module suilfg_launch::bonding_curve {
         if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6 } // E_MIN_OUT_NOT_MET
 
         // Compute exact used amount for tokens_out and split refund
-        let used = integrate_cost_u64(s1, s2_clamped, curve.m_num, curve.m_den);
+        let used = narrow_u128_to_u64(integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den));
         let remaining = coin::value(&payment) - used;
         if (remaining > 0) {
             let refund = coin::split(&mut payment, remaining, ctx);
@@ -170,7 +169,7 @@ module suilfg_launch::bonding_curve {
         // Compute payout and fees
         let s1 = curve.token_supply;
         let s2 = s1 - amount_tokens;
-        let gross = integrate_cost_u64(s2, s1, curve.m_num, curve.m_den);
+        let gross = narrow_u128_to_u64(integrate_cost_u128(s2, s1, curve.m_num, curve.m_den));
 
         if (gross < min_sui_out) { abort 7; } else {}; // E_MIN_SUI_OUT_NOT_MET
 
@@ -232,10 +231,45 @@ module suilfg_launch::bonding_curve {
     }
 
     // Integral helper: returns cost to move supply from s1 to s2 under p(s)=m*s^2
-    fun integrate_cost_u64(s1: u64, s2: u64, _m_num: u64, _m_den: u64): u64 { s2 - s1 }
+    fun integrate_cost_u128(s1: u64, s2: u64, m_num: u64, m_den: u64): u128 {
+        let s1c = pow3_u128_from_u64(s1);
+        let s2c = pow3_u128_from_u64(s2);
+        let delta = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
+        (u128::from_u64!(m_num) * delta) / (u128::from_u64!(3) * u128::from_u64!(m_den))
+    }
 
     // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
-    fun inverse_integral_buy(s1: u64, amount_in: u64, _m_num: u64, _m_den: u64): u64 { s1 + amount_in }
+    fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u64, m_den: u64): u64 {
+        let s1c = pow3_u128_from_u64(s1);
+        let add = (u128::from_u64!(3) * u128::from_u64!(amount_in) * u128::from_u64!(m_den)) / u128::from_u64!(m_num); // floor to keep cost <= amount_in
+        let x = s1c + add;
+        cbrt_floor_u64(x)
+    }
+
+    fun pow3_u128_from_u64(x: u64): u128 {
+        let x128 = u128::from_u64!(x);
+        x128 * x128 * x128
+    }
+
+    fun cbrt_floor_u64(x: u128): u64 {
+        let mut lo: u64 = 0;
+        let mut hi: u64 = TOTAL_SUPPLY;
+        while (lo < hi) {
+            let mid = (lo + hi + 1) / 2;
+            let mid3 = pow3_u128_from_u64(mid);
+            if (mid3 <= x) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        };
+        lo
+    }
+
+    fun narrow_u128_to_u64(x: u128): u64 {
+        let max64 = u128::from_u64!(u64::max_value!());
+        if (x > max64) { u64::max_value!() } else { u64::from_u128!(x) }
+    }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
 
