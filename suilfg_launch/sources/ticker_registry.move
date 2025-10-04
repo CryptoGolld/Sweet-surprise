@@ -3,8 +3,8 @@ module suilfg_launch::ticker_registry {
     use sui::object;
     use sui::tx_context::TxContext;
     use sui::transfer;
-    use sui::table::{Table};
-    use sui::table as table;
+    use std::table::{Table};
+    use std::table as table;
     use std::string::String;
     use std::option::{Self as opt, Option};
     use sui::clock::Clock;
@@ -38,7 +38,7 @@ module suilfg_launch::ticker_registry {
 
     fun init(_witness: TICKER_REGISTRY, ctx: &mut TxContext) {
         let default_cooldown_ms: u64 = 30 * 24 * 60 * 60 * 1000; // 30 days default
-        let reg = TickerRegistry { id: object::new(ctx), tickers: table::new<String, TickerInfo>(ctx), default_cooldown_ms };
+        let reg = TickerRegistry { id: object::new(ctx), tickers: table::new<String, TickerInfo>(), default_cooldown_ms };
         transfer::share_object(reg);
     }
 
