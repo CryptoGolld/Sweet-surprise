@@ -1,0 +1,10 @@
+[package]
+name = "suilfg_launch"
+version = "0.0.1"
+published-at = ""
+edition = "2024"
+
+[dependencies]
+
+[addresses]
+suilfg_launch =  "0x0"
