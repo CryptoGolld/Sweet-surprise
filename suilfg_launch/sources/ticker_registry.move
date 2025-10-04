@@ -53,8 +53,8 @@ module suilfg_launch::ticker_registry {
     }
 
     public fun withdraw_reservation(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
-        if (table::contains(&registry.tickers, &ticker)) {
-            let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
+        if (table::contains(&registry.tickers, std::string::utf8(std::string::bytes(&ticker)))) {
+            let info_ref = table::borrow_mut(&mut registry.tickers, std::string::utf8(std::string::bytes(&ticker)));
             if (info_ref.status == TickerStatus::Reserved) { info_ref.status = TickerStatus::Available; }
         }
     }
@@ -68,8 +68,8 @@ module suilfg_launch::ticker_registry {
     }
 
     public fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
-        if (table::contains(&registry.tickers, &ticker)) {
-            let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
+        if (table::contains(&registry.tickers, std::string::utf8(std::string::bytes(&ticker)))) {
+            let info_ref = table::borrow_mut(&mut registry.tickers, std::string::utf8(std::string::bytes(&ticker)));
             vector::push_back(&mut info_ref.whitelist, user);
             info_ref.status = TickerStatus::Whitelisted;
         } else {
@@ -87,11 +87,11 @@ module suilfg_launch::ticker_registry {
         table::add(&mut registry.tickers, ticker, info);
     }
 
-    public fun contains(registry: &TickerRegistry, ticker: &String): bool { table::contains(&registry.tickers, ticker) }
+    public fun contains(registry: &TickerRegistry, ticker: &String): bool { table::contains(&registry.tickers, std::string::utf8(std::string::bytes(ticker))) }
 
     fun upsert_with_status(registry: &mut TickerRegistry, ticker: String, status: TickerStatus) {
-        if (table::contains(&registry.tickers, &ticker)) {
-            let info_ref = table::borrow_mut(&mut registry.tickers, &ticker);
+        if (table::contains(&registry.tickers, std::string::utf8(std::string::bytes(&ticker)))) {
+            let info_ref = table::borrow_mut(&mut registry.tickers, std::string::utf8(std::string::bytes(&ticker)));
             info_ref.status = status;
         } else {
             let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>() };
