@@ -108,7 +108,7 @@ module suilfg_launch::bonding_curve {
                     transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
                 };
             };
-        }
+        };
 
         // Platform and creator fees based on trade size (excluding first_fee)
         let platform_fee = coin::value(&payment) * curve.platform_fee_bps / 10_000;
@@ -131,7 +131,7 @@ module suilfg_launch::bonding_curve {
         let s2_target = inverse_integral_buy(s1, trade_in, curve.m_num, curve.m_den);
         let s2_clamped = min_u64(s2_target, TOTAL_SUPPLY);
         let tokens_out = s2_clamped - s1;
-        if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6; } // E_MIN_OUT_NOT_MET
+        if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6; }; // E_MIN_OUT_NOT_MET
 
         // Compute exact used amount for tokens_out and split refund
         let used_u128 = integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den);
@@ -244,19 +244,19 @@ module suilfg_launch::bonding_curve {
         let s1c = pow3_u128_from_u64(s1);
         let s2c = pow3_u128_from_u64(s2);
         let delta = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
-        (u128::from_u64(m_num) * delta) / (u128::from_u64(3) * u128::from_u64(m_den))
+        (u128::from64(m_num) * delta) / (u128::from64(3) * u128::from64(m_den))
     }
 
     // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
     fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u64, m_den: u64): u64 {
         let s1c = pow3_u128_from_u64(s1);
-        let add = (u128::from_u64(3) * u128::from_u64(amount_in) * u128::from_u64(m_den)) / u128::from_u64(m_num); // floor to keep cost <= amount_in
+        let add = (u128::from64(3) * u128::from64(amount_in) * u128::from64(m_den)) / u128::from64(m_num); // floor to keep cost <= amount_in
         let x = s1c + add;
         cbrt_floor_u64(x)
     }
 
     fun pow3_u128_from_u64(x: u64): u128 {
-        let x128 = u128::from_u64(x);
+        let x128 = u128::from64(x);
         x128 * x128 * x128
     }
 
@@ -276,8 +276,8 @@ module suilfg_launch::bonding_curve {
     }
 
     fun narrow_u128_to_u64(x: u128): u64 {
-        let max64 = u128::from_u64(u64::max_value());
-        if (x > max64) { u64::max_value() } else { u64::from_u128(x) }
+        let max64 = u128::from64(u64::max_value!());
+        if (x > max64) { u64::max_value!() } else { u64::from128(x) }
     }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
