@@ -9,6 +9,8 @@ module suilfg_launch::bonding_curve {
     use sui::event;
     use sui::clock::{Self as clock, Clock};
     use std::vector;
+    use std::u128;
+    use std::u64;
 
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
@@ -85,7 +87,11 @@ module suilfg_launch::bonding_curve {
         ctx: &mut TxContext
     ) {
         // Only allow when open
-        match (curve.status) { TradingStatus::Open => {}, TradingStatus::Frozen => abort E_TRADING_FROZEN, TradingStatus::WhitelistedExit => abort E_TRADING_FROZEN };
+        match (curve.status) {
+            TradingStatus::Open => { },
+            TradingStatus::Frozen => { abort E_TRADING_FROZEN; },
+            TradingStatus::WhitelistedExit => { abort E_TRADING_FROZEN; }
+        };
 
         // Deadline check
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {}; // E_DEADLINE_EXPIRED
@@ -156,8 +162,8 @@ module suilfg_launch::bonding_curve {
     ) {
         // Only allow when open or whitelisted exit; if WL, enforce allowlist
         match (curve.status) {
-            TradingStatus::Open => {},
-            TradingStatus::Frozen => abort E_TRADING_FROZEN,
+            TradingStatus::Open => { },
+            TradingStatus::Frozen => { abort E_TRADING_FROZEN; },
             TradingStatus::WhitelistedExit => {
                 let user = sender(ctx);
                 if (!is_whitelisted(&curve.whitelist, user)) { abort E_NOT_WHITELISTED; }
@@ -221,8 +227,8 @@ module suilfg_launch::bonding_curve {
     }
 
     fun is_whitelisted(list: &vector<address>, user: address): bool {
-        let len = vector::length<address>(list);
-        let mut i = 0;
+        let len: u64 = vector::length<address>(list);
+        let mut i: u64 = 0;
         while (i < len) {
             if (*vector::borrow<address>(list, i) == user) { return true }
             i = i + 1;
