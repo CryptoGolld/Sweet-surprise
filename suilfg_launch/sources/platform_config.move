@@ -16,6 +16,9 @@ module suilfg_launch::platform_config {
         // Default bonding curve scale m = m_num / m_den
         default_m_num: u64,
         default_m_den: u64,
+        // Permissionless graduation params
+        default_graduation_target_mist: u64,
+        platform_cut_bps_on_graduation: u64,
     }
 
     /// Capability that authorizes admin-only operations
@@ -27,6 +30,10 @@ module suilfg_launch::platform_config {
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
     const DEFAULT_M_NUM: u64 = 1; // default m = 1/1
     const DEFAULT_M_DEN: u64 = 1;
+    // Default graduation target: 10,000 SUI (in Mist)
+    const DEFAULT_GRADUATION_TARGET_MIST: u64 = 10_000 * 1_000_000_000;
+    // Platform cut at graduation: 5% (adjustable)
+    const DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION: u64 = 500;
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -36,6 +43,8 @@ module suilfg_launch::platform_config {
     public fun get_graduation_reward_sui(cfg: &PlatformConfig): u64 { cfg.graduation_reward_sui }
     public fun get_default_m_num(cfg: &PlatformConfig): u64 { cfg.default_m_num }
     public fun get_default_m_den(cfg: &PlatformConfig): u64 { cfg.default_m_den }
+    public fun get_default_graduation_target_mist(cfg: &PlatformConfig): u64 { cfg.default_graduation_target_mist }
+    public fun get_platform_cut_bps_on_graduation(cfg: &PlatformConfig): u64 { cfg.platform_cut_bps_on_graduation }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -50,6 +59,8 @@ module suilfg_launch::platform_config {
             graduation_reward_sui: DEFAULT_GRADUATION_REWARD_SUI,
             default_m_num: DEFAULT_M_NUM,
             default_m_den: DEFAULT_M_DEN,
+            default_graduation_target_mist: DEFAULT_GRADUATION_TARGET_MIST,
+            platform_cut_bps_on_graduation: DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));

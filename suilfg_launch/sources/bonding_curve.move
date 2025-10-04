@@ -19,7 +19,7 @@ module suilfg_launch::bonding_curve {
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
-    public struct BondingCurve<phantom T: store> has key, store {
+    public struct BondingCurve<phantom T: drop, store> has key, store {
         id: UID,
         status: TradingStatus,
         sui_reserve: Balance<SUI>,
@@ -30,7 +30,11 @@ module suilfg_launch::bonding_curve {
         whitelist: vector<address>,
         m_num: u64, // numerator for price coefficient m (placeholder)
         m_den: u64, // denominator for price coefficient m (placeholder)
-        // For simplicity in this stub, we don’t model the token type mint/burn
+        // Permissionless graduation parameters
+        graduation_target_mist: u64,
+        graduated: bool,
+        lp_seeded: bool,
+        reward_paid: bool,
     }
 
     public struct TokenCoin<phantom T: store> has key, store {
@@ -48,7 +52,7 @@ module suilfg_launch::bonding_curve {
     const E_TRADING_FROZEN: u64 = 2;
     const E_NOT_WHITELISTED: u64 = 3;
 
-    fun init_for_token<T: store>(cfg: &PlatformConfig, creator: address, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
@@ -60,10 +64,14 @@ module suilfg_launch::bonding_curve {
             whitelist: vector::empty<address>(),
             m_num: platform_config::get_default_m_num(cfg),
             m_den: platform_config::get_default_m_den(cfg),
+            graduation_target_mist: platform_config::get_default_graduation_target_mist(cfg),
+            graduated: false,
+            lp_seeded: false,
+            reward_paid: false,
         }
     }
 
-    fun init_for_token_with_m<T: store>(cfg: &PlatformConfig, creator: address, m_num: u64, m_den: u64, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token_with_m<T: drop + store>(cfg: &PlatformConfig, creator: address, m_num: u64, m_den: u64, ctx: &mut TxContext): BondingCurve<T> {
         assert!(m_den > 0, 1101);
         assert!(m_num > 0, 1102);
         BondingCurve<T> {
@@ -77,6 +85,10 @@ module suilfg_launch::bonding_curve {
             whitelist: vector::empty<address>(),
             m_num,
             m_den,
+            graduation_target_mist: platform_config::get_default_graduation_target_mist(cfg),
+            graduated: false,
+            lp_seeded: false,
+            reward_paid: false,
         }
     }
 
@@ -107,7 +119,7 @@ module suilfg_launch::bonding_curve {
         transfer::share_object(curve);
     }
 
-    public entry fun buy<T: store>(
+    public entry fun buy<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         mut payment: Coin<SUI>,
@@ -184,7 +196,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Bought { buyer: sender(ctx), amount_sui: used });
     }
 
-    public entry fun sell<T: store>(
+    public entry fun sell<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         mut tokens: TokenCoin<T>,
@@ -247,7 +259,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Sold { seller: sender(ctx), amount_sui: net });
     }
 
-    public fun graduate_to_cetus<T: store>(
+    public fun graduate_to_cetus<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         _ctx: &mut TxContext
@@ -260,16 +272,16 @@ module suilfg_launch::bonding_curve {
         event::emit(Graduated { creator: curve.creator, reward_sui: platform_config::get_graduation_reward_sui(cfg), treasury: platform_config::get_treasury_address(cfg) });
     }
 
-    public fun spot_price_u128<T: store>(curve: &BondingCurve<T>): u128 {
+    public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
         // p(s) = (m_num/m_den) * s^2
         let s = curve.token_supply;
         let s128 = u64::into_u128(s);
         (u64::into_u128(curve.m_num) * s128 * s128) / u64::into_u128(curve.m_den)
     }
 
-    public fun spot_price_u64<T: store>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
+    public fun spot_price_u64<T: drop + store>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
 
-    public fun minted_supply<T: store>(curve: &BondingCurve<T>): u64 { curve.token_supply }
+    public fun minted_supply<T: drop + store>(curve: &BondingCurve<T>): u64 { curve.token_supply }
 
     public entry fun withdraw_reserve_to_treasury<T: store>(
         _admin: &AdminCap,

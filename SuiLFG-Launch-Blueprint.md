@@ -13,7 +13,7 @@ Goals:
 - Modular Move package `suilfg_launch` containing:
   - `platform_config`: central configuration and admin control object
   - `ticker_registry`: ticker lifecycle, cooldowns, reservations, and auctions (future)
-  - `bonding_curve`: the trading engine with an exponential (quadratic) price curve
+- `bonding_curve`: the trading engine with an exponential (quadratic) price curve, permissionless graduation, and platform-configurable parameters
 - Upgradability: The package is upgradable via Sui’s `UpgradeCap`. Inits use one-time witness types per module, enabling safe initialization on publish and future upgrades without breaking invariants. The target governance plan transfers the `UpgradeCap` to a community DAO at maturity.
 
 ## 3. Smart Contract Modules
@@ -82,12 +82,12 @@ Future Work (Auctions):
 - Post-cooldown claim path for the winner to reserve/activate the ticker
 
 ### 3.3 bonding_curve
-Purpose: Main trading engine for a token with an exponential (quadratic) price curve and fixed total supply of 1,000,000,000.
+Purpose: Main trading engine for a token with an exponential (quadratic) price curve and fixed total supply of 1,000,000,000. Supports permissionless graduation sequence and platform-configurable defaults.
 
 Constants & Types:
 - `TOTAL_SUPPLY: u64 = 1_000_000_000`
 - `TradingStatus` (enum): `Open`, `Frozen`, `WhitelistedExit`
-- `BondingCurve<T: store>` (key, store):
+- `BondingCurve<T: drop + store>` (key, store):
   - `id: UID`
   - `status: TradingStatus`
   - `sui_reserve: Balance<SUI>` — protocol reserve of SUI backing the curve
@@ -96,12 +96,15 @@ Constants & Types:
   - `creator: address`
   - `whitelist: vector<address>` — used for whitelisted exit
   - `m_num: u64`, `m_den: u64` — price coefficient ratio (m = m_num/m_den)
+  - `graduation_target_mist: u64` — threshold for permissionless graduation
+  - `graduated: bool`, `lp_seeded: bool`, `reward_paid: bool` — step flags
 - `TokenCoin<T: store>` (key, store): minted/burned token coins representing the bonding curve token
 
 Events:
 - `Created { creator }`
 - `Bought { buyer, amount_sui }`
 - `Sold { seller, amount_sui }`
+- `GraduationReady { creator, token_supply, spot_price_sui_approx }`
 - `Graduated { creator, reward_sui, treasury }`
 
 Core Logic:
@@ -130,8 +133,9 @@ Bonding Curve Math (Quadratic/Exponential):
   - Rounds tokens_out down; clamps at `TOTAL_SUPPLY`; refunds residual SUI to caller
 
 Public Functions:
-- `create_new_meme_token<T>(cfg, ctx)` — creates the curve object
-- `buy<T>(cfg, &mut curve, payment: Coin<SUI>, max_sui_in, min_tokens_out, deadline_ts_ms, &Clock, &mut TxContext)`
+  - `create_new_meme_token<T>(cfg, ctx)` — creates the curve object using default m
+  - `create_new_meme_token_with_m<T>(cfg, m_num, m_den, ctx)` — per-token override for m
+  - `buy<T>(cfg, &mut curve, payment: Coin<SUI>, max_sui_in, min_tokens_out, deadline_ts_ms, &Clock, &mut TxContext)`
   - routes first-buyer/platform/creator fees, computes tokens_out via inverse and integral, mints `TokenCoin<T>` to buyer
 - `sell<T>(cfg, &mut curve, tokens: TokenCoin<T>, amount_tokens, min_sui_out, deadline_ts_ms, &Clock, &mut TxContext)`
   - burns token coins, pays out SUI from reserve minus fees
@@ -160,8 +164,11 @@ Admin Functions:
   - `first_buyer_fee_mist = 1_000_000_000` (1 SUI)
   - `default_platform_fee_bps = 450` (4.5%)
   - `default_creator_fee_bps = 50` (0.5%)
-  - `graduation_reward_sui` e.g. 100 SUI
+- `graduation_reward_sui` e.g. 100 SUI
   - `default_cooldown_ms` = 30 days
+  - `default_m = 1/1` placeholder (calibrate via `set_default_m`)
+  - `default_graduation_target_mist = 10_000 SUI` (configurable)
+  - `platform_cut_bps_on_graduation = 500` (5% platform share at graduation)
 - `m_num/m_den` selection should be simulated to target desired reserve and price path at “graduation” supply; can be updated post-deploy via an admin function if added in future iteration
 
 ## 7. Upgrade & Governance Plan
@@ -195,7 +202,7 @@ Admin Functions:
 - Math correctness: buy/sell integrals, inverse rounding, refunds/dust
 - Shared object invariants: curve reserve cannot be drained without token burn
 - Event coverage: ensure monitoring of all critical transitions
-- Upgrade safety: witness inits idempotency; avoid storage layout traps
+- Upgrade safety: witness inits idempotency; avoid storage layout traps. Graduation can be permissionless: any caller can trigger once the curve reserve ≥ `graduation_target_mist`. LP seeding and reward payment can be separate permissionless steps guarded by one-time flags.
 
 ## 12. Glossary
 - `UpgradeCap`: the capability that allows package upgrades
