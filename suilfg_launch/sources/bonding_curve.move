@@ -42,6 +42,7 @@ module suilfg_launch::bonding_curve {
     public struct Bought has copy, drop { buyer: address, amount_sui: u64 }
     public struct Sold has copy, drop { seller: address, amount_sui: u64 }
     public struct Graduated has copy, drop { creator: address, reward_sui: u64, treasury: address }
+    public struct GraduationReady has copy, drop { creator: address, token_supply: u64, spot_price_sui_approx: u64 }
 
     const E_CREATION_PAUSED: u64 = 1;
     const E_TRADING_FROZEN: u64 = 2;
@@ -251,8 +252,47 @@ module suilfg_launch::bonding_curve {
         curve: &mut BondingCurve<T>,
         _ctx: &mut TxContext
     ) {
-        // Emit Graduated event. Off-chain bot should transfer reward from treasury to creator upon seeing this event.
+        // Freeze trading and emit a readiness signal including current spot price and supply
+        curve.status = TradingStatus::Frozen;
+        let spot_u64 = spot_price_u64(curve);
+        event::emit(GraduationReady { creator: curve.creator, token_supply: curve.token_supply, spot_price_sui_approx: spot_u64 });
+        // Separate event to drive bot payout logic (optional):
         event::emit(Graduated { creator: curve.creator, reward_sui: platform_config::get_graduation_reward_sui(cfg), treasury: platform_config::get_treasury_address(cfg) });
+    }
+
+    public fun spot_price_u128<T: store>(curve: &BondingCurve<T>): u128 {
+        // p(s) = (m_num/m_den) * s^2
+        let s = curve.token_supply;
+        let s128 = u64::into_u128(s);
+        (u64::into_u128(curve.m_num) * s128 * s128) / u64::into_u128(curve.m_den)
+    }
+
+    public fun spot_price_u64<T: store>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
+
+    public fun minted_supply<T: store>(curve: &BondingCurve<T>): u64 { curve.token_supply }
+
+    public entry fun withdraw_reserve_to_treasury<T: store>(
+        _admin: &AdminCap,
+        cfg: &PlatformConfig,
+        curve: &mut BondingCurve<T>,
+        amount_sui: u64,
+        ctx: &mut TxContext
+    ) {
+        let bal = balance::split(&mut curve.sui_reserve, amount_sui);
+        let c = coin::from_balance(bal, ctx);
+        transfer::public_transfer(c, platform_config::get_treasury_address(cfg));
+    }
+
+    public entry fun withdraw_reserve_to<T: store>(
+        _admin: &AdminCap,
+        curve: &mut BondingCurve<T>,
+        to: address,
+        amount_sui: u64,
+        ctx: &mut TxContext
+    ) {
+        let bal = balance::split(&mut curve.sui_reserve, amount_sui);
+        let c = coin::from_balance(bal, ctx);
+        transfer::public_transfer(c, to);
     }
 
     public fun add_to_whitelist<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
