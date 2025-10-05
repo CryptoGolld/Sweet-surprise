@@ -45,6 +45,19 @@ module suilfg_launch::ticker_registry {
 
     public struct TICKER_REGISTRY has drop {}
 
+    fun clone_string(s: &String): String {
+        let bytes_ref = string::as_bytes(s);
+        let len = vector::length<u8>(bytes_ref);
+        let mut out = vector::empty<u8>();
+        let mut i: u64 = 0;
+        while (i < len) {
+            let b = *vector::borrow<u8>(bytes_ref, i);
+            vector::push_back(&mut out, b);
+            i = i + 1;
+        };
+        string::utf8(out)
+    }
+
     // Admin controls
     public fun start_auction(_admin: &AdminCap, _registry: &mut TickerRegistry, _ticker: String, _duration_ms: u64, _clock: &Clock, _ctx: &mut TxContext) {
         // Stub: create Auction object and share it (no bidding yet)
@@ -54,9 +67,9 @@ module suilfg_launch::ticker_registry {
     }
 
     public fun withdraw_reservation(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
-        let key_for_contains = string::utf8(string::bytes(&ticker));
+        let key_for_contains = clone_string(&ticker);
         if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
-            let key_for_borrow = string::utf8(string::bytes(&ticker));
+            let key_for_borrow = clone_string(&ticker);
             let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             if (info_ref.status == TickerStatus::Reserved) { info_ref.status = TickerStatus::Available; }
         }
@@ -71,9 +84,9 @@ module suilfg_launch::ticker_registry {
     }
 
     public fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
-        let key_for_contains = string::utf8(string::bytes(&ticker));
+        let key_for_contains = clone_string(&ticker);
         if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
-            let key_for_borrow = string::utf8(string::bytes(&ticker));
+            let key_for_borrow = clone_string(&ticker);
             let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             vector::push_back(&mut info_ref.whitelist, user);
             info_ref.status = TickerStatus::Whitelisted;
@@ -95,9 +108,9 @@ module suilfg_launch::ticker_registry {
     public fun contains(registry: &TickerRegistry, ticker: String): bool { table::contains<String, TickerInfo>(&registry.tickers, ticker) }
 
     fun upsert_with_status(registry: &mut TickerRegistry, ticker: String, status: TickerStatus) {
-        let key_for_contains = string::utf8(string::bytes(&ticker));
+        let key_for_contains = clone_string(&ticker);
         if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
-            let key_for_borrow = string::utf8(string::bytes(&ticker));
+            let key_for_borrow = clone_string(&ticker);
             let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             info_ref.status = status;
         } else {
