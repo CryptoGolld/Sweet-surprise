@@ -316,7 +316,7 @@ module suilfg_launch::bonding_curve {
         let reserve = balance::value<SUI>(&curve.sui_reserve);
         let use_bps = if (bump_bps == 0) { platform_config::get_default_cetus_bump_bps(cfg) } else { bump_bps };
         let p_curve_u128 = spot_price_u128(curve);
-        let p_target_u128 = (p_curve_u128 * u128::from_u64(10_000 + use_bps)) / u128::from_u64(10_000);
+        let p_target_u128 = (p_curve_u128 * ((10_000 + use_bps) as u128)) / (10_000 as u128);
         let p_target_u64 = narrow_u128_to_u64(p_target_u128);
         // Use all remaining reserve for LP deposit
         let sui_lp = reserve;
@@ -339,8 +339,8 @@ module suilfg_launch::bonding_curve {
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
         // p(s) = (m_num/m_den) * s^2
         let s = curve.token_supply;
-        let s128 = u128::from_u64(s);
-        (u128::from_u64(curve.m_num) * s128 * s128) / u128::from_u64(curve.m_den)
+        let s128 = (s as u128);
+        ((curve.m_num as u128) * s128 * s128) / (curve.m_den as u128)
     }
 
     public fun spot_price_u64<T: drop + store>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
@@ -390,19 +390,19 @@ module suilfg_launch::bonding_curve {
         let s1c = pow3_u128_from_u64(s1);
         let s2c = pow3_u128_from_u64(s2);
         let delta = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
-        (u128::from_u64(m_num) * delta) / (u128::from_u64(3) * u128::from_u64(m_den))
+        ((m_num as u128) * delta) / ((3 as u128) * (m_den as u128))
     }
 
     // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
     fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u64, m_den: u64): u64 {
         let s1c = pow3_u128_from_u64(s1);
-        let add = (u128::from_u64(3) * u128::from_u64(amount_in) * u128::from_u64(m_den)) / u128::from_u64(m_num); // floor to keep cost <= amount_in
+        let add = ((3 as u128) * (amount_in as u128) * (m_den as u128)) / (m_num as u128); // floor to keep cost <= amount_in
         let x = s1c + add;
         cbrt_floor_u64(x)
     }
 
     fun pow3_u128_from_u64(x: u64): u128 {
-        let x128 = u128::from_u64(x);
+        let x128 = (x as u128);
         x128 * x128 * x128
     }
 
@@ -422,8 +422,8 @@ module suilfg_launch::bonding_curve {
     }
 
     fun narrow_u128_to_u64(x: u128): u64 {
-        let max64 = u128::from_u64(u64::max_value!());
-        if (x > max64) { u64::max_value!() } else { u64::from_u128(x) }
+        let max64 = (u64::max_value!() as u128);
+        if (x > max64) { u64::max_value!() } else { (x as u64) }
     }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
