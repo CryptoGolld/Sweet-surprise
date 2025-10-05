@@ -56,7 +56,8 @@ module suilfg_launch::ticker_registry {
     public fun withdraw_reservation(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
         let key_for_contains = string::utf8(string::bytes(&ticker));
         if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
-            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
+            let key_for_borrow = string::utf8(string::bytes(&ticker));
+            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             if (info_ref.status == TickerStatus::Reserved) { info_ref.status = TickerStatus::Available; }
         }
     }
@@ -72,7 +73,8 @@ module suilfg_launch::ticker_registry {
     public fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
         let key_for_contains = string::utf8(string::bytes(&ticker));
         if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
-            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
+            let key_for_borrow = string::utf8(string::bytes(&ticker));
+            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             vector::push_back(&mut info_ref.whitelist, user);
             info_ref.status = TickerStatus::Whitelisted;
         } else {
@@ -95,7 +97,8 @@ module suilfg_launch::ticker_registry {
     fun upsert_with_status(registry: &mut TickerRegistry, ticker: String, status: TickerStatus) {
         let key_for_contains = string::utf8(string::bytes(&ticker));
         if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
-            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
+            let key_for_borrow = string::utf8(string::bytes(&ticker));
+            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             info_ref.status = status;
         } else {
             let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>() };
