@@ -19,6 +19,7 @@ module suilfg_launch::platform_config {
         // Permissionless graduation params
         default_graduation_target_mist: u64,
         platform_cut_bps_on_graduation: u64,
+        creator_graduation_payout_mist: u64,
     }
 
     /// Capability that authorizes admin-only operations
@@ -34,6 +35,8 @@ module suilfg_launch::platform_config {
     const DEFAULT_GRADUATION_TARGET_MIST: u64 = 10_000 * 1_000_000_000;
     // Platform cut at graduation: 5% (adjustable)
     const DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION: u64 = 500;
+    // Creator payout at graduation: 40 SUI (in Mist)
+    const DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST: u64 = 40 * 1_000_000_000;
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -45,6 +48,7 @@ module suilfg_launch::platform_config {
     public fun get_default_m_den(cfg: &PlatformConfig): u64 { cfg.default_m_den }
     public fun get_default_graduation_target_mist(cfg: &PlatformConfig): u64 { cfg.default_graduation_target_mist }
     public fun get_platform_cut_bps_on_graduation(cfg: &PlatformConfig): u64 { cfg.platform_cut_bps_on_graduation }
+    public fun get_creator_graduation_payout_mist(cfg: &PlatformConfig): u64 { cfg.creator_graduation_payout_mist }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -61,6 +65,7 @@ module suilfg_launch::platform_config {
             default_m_den: DEFAULT_M_DEN,
             default_graduation_target_mist: DEFAULT_GRADUATION_TARGET_MIST,
             platform_cut_bps_on_graduation: DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION,
+            creator_graduation_payout_mist: DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -107,5 +112,14 @@ module suilfg_launch::platform_config {
         assert!(m_num > 0, 1002);
         cfg.default_m_num = m_num;
         cfg.default_m_den = m_den;
+    }
+
+    public entry fun set_platform_cut_on_graduation(_admin: &AdminCap, cfg: &mut PlatformConfig, cut_bps: u64) {
+        assert!(cut_bps <= 10_000, 1003);
+        cfg.platform_cut_bps_on_graduation = cut_bps;
+    }
+
+    public entry fun set_creator_graduation_payout(_admin: &AdminCap, cfg: &mut PlatformConfig, payout_mist: u64) {
+        cfg.creator_graduation_payout_mist = payout_mist;
     }
 }
