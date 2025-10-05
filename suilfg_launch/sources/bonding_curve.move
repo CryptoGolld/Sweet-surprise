@@ -4,7 +4,7 @@ module suilfg_launch::bonding_curve {
     use sui::tx_context::{TxContext, sender};
     use sui::transfer;
     use sui::balance::{Self as balance, Balance};
-    use sui::coin::{Self as coin, Coin};
+    use sui::coin::{Self as coin, Coin, TreasuryCap};
     use sui::sui::SUI;
     use sui::event;
     use sui::clock::{Self as clock, Clock};
@@ -30,6 +30,7 @@ module suilfg_launch::bonding_curve {
         whitelist: vector<address>,
         m_num: u64, // numerator for price coefficient m (placeholder)
         m_den: u64, // denominator for price coefficient m (placeholder)
+        treasury: TreasuryCap<T>,
         // Permissionless graduation parameters
         graduation_target_mist: u64,
         graduated: bool,
@@ -37,10 +38,7 @@ module suilfg_launch::bonding_curve {
         reward_paid: bool,
     }
 
-    public struct TokenCoin<phantom T: store> has key, store {
-        id: UID,
-        amount: u64,
-    }
+    // TokenCoin removed; we mint/burn Coin<T> directly via TreasuryCap
 
     public struct Created has copy, drop { creator: address }
     public struct Bought has copy, drop { buyer: address, amount_sui: u64 }
@@ -52,7 +50,7 @@ module suilfg_launch::bonding_curve {
     const E_TRADING_FROZEN: u64 = 2;
     const E_NOT_WHITELISTED: u64 = 3;
 
-    fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
@@ -64,6 +62,7 @@ module suilfg_launch::bonding_curve {
             whitelist: vector::empty<address>(),
             m_num: platform_config::get_default_m_num(cfg),
             m_den: platform_config::get_default_m_den(cfg),
+            treasury: treasury,
             graduation_target_mist: platform_config::get_default_graduation_target_mist(cfg),
             graduated: false,
             lp_seeded: false,
@@ -71,7 +70,7 @@ module suilfg_launch::bonding_curve {
         }
     }
 
-    fun init_for_token_with_m<T: drop + store>(cfg: &PlatformConfig, creator: address, m_num: u64, m_den: u64, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token_with_m<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, m_num: u64, m_den: u64, ctx: &mut TxContext): BondingCurve<T> {
         assert!(m_den > 0, 1101);
         assert!(m_num > 0, 1102);
         BondingCurve<T> {
@@ -85,6 +84,7 @@ module suilfg_launch::bonding_curve {
             whitelist: vector::empty<address>(),
             m_num,
             m_den,
+            treasury: treasury,
             graduation_target_mist: platform_config::get_default_graduation_target_mist(cfg),
             graduated: false,
             lp_seeded: false,
@@ -95,26 +95,28 @@ module suilfg_launch::bonding_curve {
     public fun freeze_trading<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
     public fun initiate_whitelisted_exit<T: store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
 
-    public entry fun create_new_meme_token<T: store>(
+    public entry fun create_new_meme_token<T: drop + store>(
         cfg: &PlatformConfig,
+        treasury: TreasuryCap<T>,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
         let creator_addr = sender(ctx);
-        let mut curve = init_for_token<T>(cfg, creator_addr, ctx);
+        let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);
     }
 
-    public entry fun create_new_meme_token_with_m<T: store>(
+    public entry fun create_new_meme_token_with_m<T: drop + store>(
         cfg: &PlatformConfig,
+        treasury: TreasuryCap<T>,
         m_num: u64,
         m_den: u64,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
         let creator_addr = sender(ctx);
-        let mut curve = init_for_token_with_m<T>(cfg, creator_addr, m_num, m_den, ctx);
+        let mut curve = init_for_token_with_m<T>(cfg, creator_addr, treasury, m_num, m_den, ctx);
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);
     }
@@ -189,9 +191,9 @@ module suilfg_launch::bonding_curve {
         let deposit = coin::into_balance(payment);
         balance::join(&mut curve.sui_reserve, deposit);
 
-        // Mint token coins to buyer and update supply
+        // Mint tokens as Coin<T> to buyer and update supply
         curve.token_supply = s2_clamped;
-        let minted = TokenCoin<T> { id: object::new(ctx), amount: tokens_out };
+        let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_out, ctx);
         transfer::public_transfer(minted, sender(ctx));
         event::emit(Bought { buyer: sender(ctx), amount_sui: used });
     }
@@ -199,7 +201,7 @@ module suilfg_launch::bonding_curve {
     public entry fun sell<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
-        mut tokens: TokenCoin<T>,
+        mut tokens: Coin<T>,
         amount_tokens: u64,
         min_sui_out: u64,
         deadline_ts_ms: u64,
@@ -230,11 +232,12 @@ module suilfg_launch::bonding_curve {
         let net = gross - platform_fee - creator_fee;
 
         // Burn the tokens being sold; if needed, split first
-        if (tokens.amount == amount_tokens) {
-            let _burned = burn_tokens<T>(tokens);
+        let val = coin::value(&tokens);
+        if (val == amount_tokens) {
+            coin::burn<T>(&mut curve.treasury, tokens);
         } else {
-            let to_burn = split_tokens<T>(&mut tokens, amount_tokens, ctx);
-            let _burned = burn_tokens<T>(to_burn);
+            let to_burn = coin::split<T>(&mut tokens, amount_tokens, ctx);
+            coin::burn<T>(&mut curve.treasury, to_burn);
             // Return remaining tokens to sender
             transfer::public_transfer(tokens, sender(ctx));
         };
@@ -259,17 +262,78 @@ module suilfg_launch::bonding_curve {
         event::emit(Sold { seller: sender(ctx), amount_sui: net });
     }
 
-    public fun graduate_to_cetus<T: drop + store>(
+    public entry fun try_graduate<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         _ctx: &mut TxContext
     ) {
-        // Freeze trading and emit a readiness signal including current spot price and supply
+        if (curve.graduated) { return; } else {};
+        if (!(curve.status == TradingStatus::Open)) { abort E_TRADING_FROZEN; } else {};
+        let reserve = balance::value<SUI>(&curve.sui_reserve);
+        if (reserve < platform_config::get_default_graduation_target_mist(cfg)) { abort 9001; } else {};
         curve.status = TradingStatus::Frozen;
+        curve.graduated = true;
         let spot_u64 = spot_price_u64(curve);
         event::emit(GraduationReady { creator: curve.creator, token_supply: curve.token_supply, spot_price_sui_approx: spot_u64 });
-        // Separate event to drive bot payout logic (optional):
-        event::emit(Graduated { creator: curve.creator, reward_sui: platform_config::get_graduation_reward_sui(cfg), treasury: platform_config::get_treasury_address(cfg) });
+    }
+
+    public entry fun distribute_payouts<T: drop + store>(
+        cfg: &PlatformConfig,
+        curve: &mut BondingCurve<T>,
+        ctx: &mut TxContext
+    ) {
+        if (!curve.graduated || curve.reward_paid) { return; } else {};
+        let reserve = balance::value<SUI>(&curve.sui_reserve);
+        let platform_cut = (reserve * platform_config::get_platform_cut_bps_on_graduation(cfg)) / 10_000;
+        let creator_payout = platform_config::get_creator_graduation_payout_mist(cfg);
+        let mut remaining = reserve;
+        // Platform cut
+        if (platform_cut > 0) {
+            let bal = balance::split(&mut curve.sui_reserve, platform_cut);
+            let c = coin::from_balance(bal, ctx);
+            transfer::public_transfer(c, platform_config::get_treasury_address(cfg));
+            remaining = remaining - platform_cut;
+        };
+        // Creator payout (clamp to remaining)
+        let payout = if (creator_payout > remaining) { remaining } else { creator_payout };
+        if (payout > 0) {
+            let bal2 = balance::split(&mut curve.sui_reserve, payout);
+            let c2 = coin::from_balance(bal2, ctx);
+            transfer::public_transfer(c2, curve.creator);
+            remaining = remaining - payout;
+        };
+        curve.reward_paid = true;
+        // Note: remaining SUI stays in reserve for LP seeding
+    }
+
+    public entry fun seed_pool_prepare<T: drop + store>(
+        cfg: &PlatformConfig,
+        curve: &mut BondingCurve<T>,
+        bump_bps: u64,
+        ctx: &mut TxContext
+    ) {
+        if (!curve.graduated || curve.lp_seeded == true) { abort 9002; } else {};
+        let reserve = balance::value<SUI>(&curve.sui_reserve);
+        let use_bps = if (bump_bps == 0) { platform_config::get_default_cetus_bump_bps(cfg) } else { bump_bps };
+        let p_curve_u128 = spot_price_u128(curve);
+        let p_target_u128 = (p_curve_u128 * u64::into_u128(10_000 + use_bps)) / u64::into_u128(10_000);
+        let p_target_u64 = narrow_u128_to_u64(p_target_u128);
+        // Use all remaining reserve for LP deposit
+        let sui_lp = reserve;
+        // Tokens needed = sui_lp / p_target
+        let mut tokens_needed = sui_lp / p_target_u64;
+        let remaining_tokens = TOTAL_SUPPLY - curve.token_supply;
+        if (tokens_needed > remaining_tokens) { tokens_needed = remaining_tokens; } else {};
+        // Mint tokens for LP to treasury address custody
+        let token_lp: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_needed, ctx);
+        curve.token_supply = curve.token_supply + tokens_needed;
+        let bal_sui_lp = balance::split(&mut curve.sui_reserve, sui_lp);
+        let sui_lp_coin = coin::from_balance(bal_sui_lp, ctx);
+        // Transfer both to treasury custody; external bot can add liquidity from there
+        let treas = platform_config::get_treasury_address(cfg);
+        transfer::public_transfer(token_lp, treas);
+        transfer::public_transfer(sui_lp_coin, treas);
+        curve.lp_seeded = true;
     }
 
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
@@ -364,15 +428,5 @@ module suilfg_launch::bonding_curve {
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
 
-    public fun split_tokens<T: store>(tokens: &mut TokenCoin<T>, amount: u64, ctx: &mut TxContext): TokenCoin<T> {
-        assert!(amount <= tokens.amount, 8); // E_INSUFFICIENT_TOKENS
-        tokens.amount = tokens.amount - amount;
-        TokenCoin<T> { id: object::new(ctx), amount }
-    }
-
-    public fun burn_tokens<T: store>(tokens: TokenCoin<T>): u64 {
-        let TokenCoin { id, amount } = tokens;
-        object::delete(id);
-        amount
-    }
+    // split_tokens and burn_tokens removed; Coin<T> is used directly
 }

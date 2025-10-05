@@ -20,6 +20,7 @@ module suilfg_launch::platform_config {
         default_graduation_target_mist: u64,
         platform_cut_bps_on_graduation: u64,
         creator_graduation_payout_mist: u64,
+        default_cetus_bump_bps: u64,
     }
 
     /// Capability that authorizes admin-only operations
@@ -37,6 +38,8 @@ module suilfg_launch::platform_config {
     const DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION: u64 = 500;
     // Creator payout at graduation: 40 SUI (in Mist)
     const DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST: u64 = 40 * 1_000_000_000;
+    // Default AMM bump over curve spot price at seeding (10% = 1000 bps)
+    const DEFAULT_CETUS_BUMP_BPS: u64 = 1_000;
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -49,6 +52,7 @@ module suilfg_launch::platform_config {
     public fun get_default_graduation_target_mist(cfg: &PlatformConfig): u64 { cfg.default_graduation_target_mist }
     public fun get_platform_cut_bps_on_graduation(cfg: &PlatformConfig): u64 { cfg.platform_cut_bps_on_graduation }
     public fun get_creator_graduation_payout_mist(cfg: &PlatformConfig): u64 { cfg.creator_graduation_payout_mist }
+    public fun get_default_cetus_bump_bps(cfg: &PlatformConfig): u64 { cfg.default_cetus_bump_bps }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -66,6 +70,7 @@ module suilfg_launch::platform_config {
             default_graduation_target_mist: DEFAULT_GRADUATION_TARGET_MIST,
             platform_cut_bps_on_graduation: DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION,
             creator_graduation_payout_mist: DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST,
+            default_cetus_bump_bps: DEFAULT_CETUS_BUMP_BPS,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -121,5 +126,10 @@ module suilfg_launch::platform_config {
 
     public entry fun set_creator_graduation_payout(_admin: &AdminCap, cfg: &mut PlatformConfig, payout_mist: u64) {
         cfg.creator_graduation_payout_mist = payout_mist;
+    }
+
+    public entry fun set_default_cetus_bump_bps(_admin: &AdminCap, cfg: &mut PlatformConfig, bump_bps: u64) {
+        assert!(bump_bps <= 10_000, 1004);
+        cfg.default_cetus_bump_bps = bump_bps;
     }
 }
