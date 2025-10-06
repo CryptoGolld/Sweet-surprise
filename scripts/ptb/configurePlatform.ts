@@ -9,9 +9,21 @@ function kp(): Ed25519Keypair {
   return Ed25519Keypair.deriveKeypair(m);
 }
 
+type NetworkName = 'localnet' | 'devnet' | 'testnet' | 'mainnet';
+function getNetworkUrl(): string {
+  const explicitUrl = process.env.SUI_FULLNODE_URL;
+  if (explicitUrl && explicitUrl.length > 0) {
+    return explicitUrl;
+  }
+  const networkEnv = (process.env.SUI_NETWORK ?? 'devnet').toLowerCase();
+  const allowed: ReadonlyArray<NetworkName> = ['localnet', 'devnet', 'testnet', 'mainnet'];
+  const network = (allowed.includes(networkEnv as NetworkName) ? networkEnv : 'devnet') as NetworkName;
+  return getFullnodeUrl(network);
+}
+
 async function main() {
   const keypair = kp();
-  const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+  const client = new SuiClient({ url: getNetworkUrl() });
 
   const PKG = process.env.PACKAGE_ID!;
   const CFG = process.env.PLATFORM_CONFIG_ID!;
