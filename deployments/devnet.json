@@ -1,0 +1,18 @@
+{
+  "network": "devnet",
+  "publisherAddress": "0xbbec7691cbe5517fb78d39ae31aee0050cd720918f066db073e3114dad141193",
+  "publishTxDigest": "21ydE78FqPEoQNz85VtUaREf9bcAsvNYuPB93W9Mq7Mm",
+  "packageId": "0x25bf28b12125483b6a7d48821b0d804e11390e30fe86288630b145f2ebf84699",
+  "modules": [
+    "bonding_curve",
+    "platform_config",
+    "ticker_registry"
+  ],
+  "objects": {
+    "PlatformConfig": "0x4173a3ce2da4986319ca225e065232839b8a70af27731cb09c81ca377c44d220",
+    "AdminCap": "0xbb212ed564b87e64ad3c25e4847ce6ecc9bdd8d1e74ae787dd65c0a3a55ad8e8",
+    "TickerRegistry": "0xd5f8369d2b028dd672df6f9183b1a71b8fad11f1be896bde6b39875dbcdd015c",
+    "UpgradeCap": "0x45cc0aee34982b8b6e5e3d15bfd9e0ce7db9b51e781fd077787ae9ea7da20f70"
+  },
+  "version": 1
+}
