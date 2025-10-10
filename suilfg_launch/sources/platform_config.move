@@ -30,8 +30,8 @@ module suilfg_launch::platform_config {
     const DEFAULT_PLATFORM_FEE_BPS: u64 = 450; // 4.5%
     const DEFAULT_CREATOR_FEE_BPS: u64 = 50; // 0.5%
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
-    const DEFAULT_M_NUM: u64 = 1; // default m = 1/1
-    const DEFAULT_M_DEN: u64 = 1;
+    const DEFAULT_M_NUM: u64 = 1; // default m = 1/1000 for 1k starting MC
+    const DEFAULT_M_DEN: u64 = 1_000;
     // Default graduation target: 10,000 SUI (in Mist)
     const DEFAULT_GRADUATION_TARGET_MIST: u64 = 10_000 * 1_000_000_000;
     // Platform cut at graduation: 5% (adjustable)
