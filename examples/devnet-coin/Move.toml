@@ -1,0 +1,9 @@
+[package]
+name = "memecoin_demo"
+edition = "2024"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework" }
+
+[addresses]
+memecoin_demo = "0x0"
