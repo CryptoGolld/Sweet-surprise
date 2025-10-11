@@ -16,6 +16,7 @@ module suilfg_launch::platform_config {
         // Default bonding curve scale m = m_num / m_den
         default_m_num: u64,
         default_m_den: u64,
+        default_base_price_mist: u64,
         // Permissionless graduation params
         default_graduation_target_mist: u64,
         platform_cut_bps_on_graduation: u64,
@@ -32,6 +33,8 @@ module suilfg_launch::platform_config {
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
     const DEFAULT_M_NUM: u64 = 1; // default m = 1/10^16 for flatter quadratic curve
     const DEFAULT_M_DEN: u64 = 10_000_000_000_000_000; // 10^16
+    // Base price for 1k SUI starting market cap (0.000001 SUI in mist)
+    const DEFAULT_BASE_PRICE_MIST: u64 = 1_000; // 0.000001 SUI in mist
     // Default graduation target: 10,000 SUI (in Mist)
     const DEFAULT_GRADUATION_TARGET_MIST: u64 = 10_000 * 1_000_000_000;
     // Platform cut at graduation: 5% (adjustable)
@@ -49,6 +52,7 @@ module suilfg_launch::platform_config {
     public fun get_graduation_reward_sui(cfg: &PlatformConfig): u64 { cfg.graduation_reward_sui }
     public fun get_default_m_num(cfg: &PlatformConfig): u64 { cfg.default_m_num }
     public fun get_default_m_den(cfg: &PlatformConfig): u64 { cfg.default_m_den }
+    public fun get_default_base_price_mist(cfg: &PlatformConfig): u64 { cfg.default_base_price_mist }
     public fun get_default_graduation_target_mist(cfg: &PlatformConfig): u64 { cfg.default_graduation_target_mist }
     public fun get_platform_cut_bps_on_graduation(cfg: &PlatformConfig): u64 { cfg.platform_cut_bps_on_graduation }
     public fun get_creator_graduation_payout_mist(cfg: &PlatformConfig): u64 { cfg.creator_graduation_payout_mist }
@@ -67,6 +71,7 @@ module suilfg_launch::platform_config {
             graduation_reward_sui: DEFAULT_GRADUATION_REWARD_SUI,
             default_m_num: DEFAULT_M_NUM,
             default_m_den: DEFAULT_M_DEN,
+            default_base_price_mist: DEFAULT_BASE_PRICE_MIST,
             default_graduation_target_mist: DEFAULT_GRADUATION_TARGET_MIST,
             platform_cut_bps_on_graduation: DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION,
             creator_graduation_payout_mist: DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST,
