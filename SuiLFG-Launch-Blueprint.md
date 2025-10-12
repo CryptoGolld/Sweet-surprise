@@ -179,6 +179,195 @@ Admin Functions:
 - Graduation Bot: Monitors for `GraduationReady` events, orchestrates graduation sequence (payouts + pool seeding)
 - **NEW**: Team wallet management for receiving token allocations
 
+### 4.1 Market Cap Display & Metrics
+
+**Primary Metric: CIRCULATING MARKET CAP**
+```
+Circulating MC = minted_supply × spot_price
+```
+- Shows actual, tradeable value in the market
+- Creates organic FOMO as it grows
+- Industry standard (matches CEX/DEX displays)
+
+**Secondary Metric: FULLY DILUTED MC**
+```
+Fully Diluted MC = 1,000,000,000 × spot_price
+```
+- Shows maximum potential if all tokens existed
+- Provides transparency about tokenomics
+- Standard practice (CoinGecko, CoinMarketCap show both)
+
+#### Example Display at 300M Tokens Sold:
+```
+Current Price: 0.000009496 SUI
+Minted Supply: 300,000,000 tokens
+
+Circulating MC: 2,849 SUI (300M × 0.000009496)
+Fully Diluted MC: 9,496 SUI (1B × 0.000009496)
+Tokens Circulating: 300M / 1B (30%)
+```
+
+#### Recommended UI Layout:
+```
+┌────────────────────────────────────────────────────┐
+│  🚀 TOKEN NAME ($SYMBOL)                           │
+├────────────────────────────────────────────────────┤
+│                                                     │
+│  💰 Market Cap: 2,849 SUI  (~$9,687)              │ ← PRIMARY (large)
+│     300M / 1B tokens (30% circulating)             │
+│                                                     │
+│  📊 Fully Diluted: 9,496 SUI                       │ ← SECONDARY (smaller)
+│                                                     │
+│  💵 Current Price: 0.000009496 SUI                 │
+│  📈 24h Change: +45%                               │
+│  💧 Liquidity: 1,150 SUI raised                    │
+│  👥 Holders: 234                                   │
+│                                                     │
+│  Progress to Graduation:                           │
+│  [████████░░░░░░░░░░░░░░░] 8.6%                   │
+│  1,150 / 13,333 SUI                                │
+│                                                     │
+└────────────────────────────────────────────────────┘
+```
+
+#### Frontend Implementation:
+
+**Smart Contract Functions to Use:**
+```typescript
+// Available view functions from bonding_curve module
+minted_supply<T>(curve: &BondingCurve<T>) -> u64
+spot_price_u64<T>(curve: &BondingCurve<T>) -> u64
+// Access sui_reserve balance field for SUI raised
+```
+
+**TypeScript/JavaScript Implementation:**
+```typescript
+// 1. Fetch data from smart contract
+const curveObject = await suiClient.getObject({
+  id: curveId,
+  options: { showContent: true }
+});
+
+const curveData = curveObject.data.content.fields;
+
+// 2. Extract values
+const mintedSupply = BigInt(curveData.token_supply);
+const spotPriceMist = BigInt(curveData.spot_price); // from view function
+const suiReserveMist = BigInt(curveData.sui_reserve);
+
+// 3. Convert from mist to SUI (1 SUI = 10^9 mist)
+const MIST_PER_SUI = 1_000_000_000n;
+const priceInSui = Number(spotPriceMist) / Number(MIST_PER_SUI);
+const suiRaised = Number(suiReserveMist) / Number(MIST_PER_SUI);
+
+// 4. Calculate market caps
+const tokensInBillions = Number(mintedSupply) / 1_000_000_000;
+const circulatingMC = tokensInBillions * priceInSui;
+const fullyDilutedMC = priceInSui; // 1B tokens × price
+
+// 5. Calculate metrics
+const graduationTarget = 13_333; // SUI
+const progressPercent = (suiRaised / graduationTarget) * 100;
+const circulatingPercent = (Number(mintedSupply) / 1_000_000_000) * 100;
+
+// 6. Format for display
+const displayMetrics = {
+  // Primary metrics
+  circulatingMC: `${circulatingMC.toLocaleString()} SUI`,
+  circulatingMCUSD: `$${(circulatingMC * 3.40).toLocaleString()}`,
+  
+  // Secondary metrics
+  fullyDilutedMC: `${fullyDilutedMC.toLocaleString()} SUI`,
+  currentPrice: `${priceInSui.toFixed(9)} SUI`,
+  
+  // Progress metrics
+  suiRaised: `${suiRaised.toLocaleString()} SUI`,
+  progressPercent: `${progressPercent.toFixed(1)}%`,
+  progressBar: progressPercent, // 0-100 for UI bar
+  
+  // Supply metrics
+  mintedSupply: `${(Number(mintedSupply) / 1_000_000).toFixed(0)}M`,
+  totalSupply: '1B',
+  circulatingPercent: `${circulatingPercent.toFixed(1)}%`,
+};
+
+// 7. Display in UI
+return (
+  <div className="token-metrics">
+    <h2>{displayMetrics.circulatingMC}</h2>
+    <p className="text-sm text-gray-500">{displayMetrics.circulatingMCUSD}</p>
+    <p className="text-xs">
+      {displayMetrics.mintedSupply} / {displayMetrics.totalSupply} tokens 
+      ({displayMetrics.circulatingPercent} circulating)
+    </p>
+    
+    <div className="mt-4">
+      <p className="text-sm">Fully Diluted: {displayMetrics.fullyDilutedMC}</p>
+      <p className="text-sm">Current Price: {displayMetrics.currentPrice}</p>
+      <p className="text-sm">Liquidity: {displayMetrics.suiRaised}</p>
+    </div>
+    
+    <div className="mt-4">
+      <p className="text-xs">Progress to Graduation</p>
+      <ProgressBar value={displayMetrics.progressBar} />
+      <p className="text-xs">{displayMetrics.progressPercent}</p>
+    </div>
+  </div>
+);
+```
+
+#### Additional Metrics to Display:
+
+**Essential Metrics:**
+- SUI Raised: Total trading volume (creates FOMO)
+- Progress to Graduation: Visual bar + percentage
+- Current Price: Real-time spot price
+- Circulating %: Transparency about token distribution
+
+**Nice-to-Have Metrics:**
+- 24h Volume: Shows trading activity
+- 24h Price Change: Shows momentum (+/- %)
+- Holder Count: Shows community size
+- Buy/Sell Ratio: Shows sentiment
+- Recent Transactions: Shows activity
+- Time Since Launch: Shows age
+
+#### Market Cap Progression Examples:
+
+| Tokens Sold | Price (SUI) | Circulating MC | Fully Diluted MC | % to Grad |
+|-------------|-------------|----------------|------------------|-----------|
+| 0 | 0.000001 | 0 SUI | 1,000 SUI | 0% |
+| 100M | 0.000002 | 194 SUI | 1,944 SUI | 1.0% |
+| 300M | 0.000009 | 2,849 SUI | 9,496 SUI | 8.6% |
+| 500M | 0.000025 | 12,299 SUI | 24,599 SUI | 33.2% |
+| 737M | 0.000052 | 38,525 SUI | 52,273 SUI | 100% |
+| Post-Grad | 0.000058 | 54,719 SUI | 58,000 SUI | Graduated |
+
+**Key Insights:**
+- Early stage: Low MC creates entry opportunity
+- Mid stage: Growing MC shows traction
+- Late stage: High MC near graduation creates urgency
+- Post-graduation: Highest MC with DEX liquidity
+
+#### Why This Matters:
+
+**For Traders:**
+- See real value vs potential
+- Make informed entry decisions
+- Track progress to graduation
+- Understand tokenomics clearly
+
+**For Platform:**
+- Professional presentation
+- Industry-standard metrics
+- Transparent operations
+- Creates trust with users
+
+**Implementation Priority:**
+1. **Must Have**: Circulating MC, price, progress bar
+2. **Should Have**: Fully diluted MC, SUI raised, circulating %
+3. **Nice to Have**: 24h volume, holder count, recent trades
+
 ## 5. Security & Risk Controls
 - Global `creation_is_paused` big red button
 - Per-curve `freeze_trading` and `WhitelistedExit` for controlled unwind
