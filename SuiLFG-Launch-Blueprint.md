@@ -1,4 +1,4 @@
-# SuiLFG Launch — Final Master Blueprint (v4.0)
+# SuiLFG Launch — Final Master Blueprint (v5.0)
 
 ## 1. Vision & Mission
 SuiLFG Launch is the official memecoin launchpad for the SuiLFG ecosystem. It blends the FOMO-driven virality of Pump.fun with robust security, transparent fees, and a clear graduation path to AMMs (Cetus). The platform is designed for longevity, with upgradable smart contracts that can be entrusted to a community DAO over time.
@@ -8,12 +8,13 @@ Goals:
 - Ensure sane default security measures and emergency controls
 - Provide a fair fee model for platform and creators
 - Enable a path to community ownership via DAO-controlled `UpgradeCap`
+- **NEW**: Implement optimal bonding curve economics with 1k SUI starting market cap
 
 ## 2. Architecture & Upgradeability
 - Modular Move package `suilfg_launch` containing:
   - `platform_config`: central configuration and admin control object
   - `ticker_registry`: ticker lifecycle, cooldowns, reservations, and auctions (future)
-- `bonding_curve`: the trading engine with an exponential (quadratic) price curve, permissionless graduation, and platform-configurable parameters
+- `bonding_curve`: the trading engine with a **modified quadratic** price curve featuring immediate price discovery, permissionless graduation, and optimal Cetus pool seeding
 - Upgradability: The package is upgradable via Sui’s `UpgradeCap`. Inits use one-time witness types per module, enabling safe initialization on publish and future upgrades without breaking invariants. The target governance plan transfers the `UpgradeCap` to a community DAO at maturity.
 
 ## 3. Smart Contract Modules
@@ -40,6 +41,8 @@ Admin Functions (require `&AdminCap`):
 - `set_platform_fee(cfg, fee_bps)`
 - `set_creator_fee(cfg, fee_bps)`
 - `set_graduation_reward(cfg, amount_sui)`
+- **NEW**: `set_dev_allocation(cfg, tokens)`
+- **NEW**: `set_community_allocation(cfg, tokens)`
 
 Notes:
 - All getters are provided for off-chain apps/bots to read current parameters.
@@ -82,7 +85,7 @@ Future Work (Auctions):
 - Post-cooldown claim path for the winner to reserve/activate the ticker
 
 ### 3.3 bonding_curve
-Purpose: Main trading engine for a token with an exponential (quadratic) price curve and fixed total supply of 1,000,000,000. Supports permissionless graduation sequence and platform-configurable defaults.
+Purpose: Main trading engine for a token with a **modified quadratic** price curve featuring immediate price discovery (1k SUI starting market cap) and optimal Cetus pool seeding. Total supply is dynamic based on graduation economics (typically ~936M tokens after token burn).
 
 Constants & Types:
 - `TOTAL_SUPPLY: u64 = 1_000_000_000`
@@ -96,6 +99,7 @@ Constants & Types:
   - `creator: address`
   - `whitelist: vector<address>` — used for whitelisted exit
   - `m_num: u64`, `m_den: u64` — price coefficient ratio (m = m_num/m_den)
+  - **NEW**: `base_price_mist: u64` — base price component ensuring 1k SUI starting market cap
   - `graduation_target_mist: u64` — threshold for permissionless graduation
   - `graduated: bool`, `lp_seeded: bool`, `reward_paid: bool` — step flags
 - `TokenCoin<T: store>` (key, store): minted/burned token coins representing the bonding curve token
@@ -123,11 +127,18 @@ Core Logic:
   - Buy requires `max_sui_in`, `min_tokens_out`, `deadline_ts_ms`
   - Sell requires `min_sui_out`, `deadline_ts_ms`
 
-Bonding Curve Math (Quadratic/Exponential):
-- Price function: `p(s) = m * s^2` where `m = m_num/m_den`
-- Integral Cost for buy from s1 to s2: `cost = (m/3) * (s2^3 - s1^3)`
-- Inverse for buy: `s2 = floor_cuberoot(s1^3 + 3*cost/m)`
-- Sell payout: exact integral from `s2` to `s1`
+Bonding Curve Math (Modified Quadratic with Base Price):
+- **NEW Price function**: `p(s) = base_price + m * s^2` where `m = m_num/m_den` and `base_price = 0.000001 SUI`
+- **Starting Market Cap**: 1B tokens × 0.000001 SUI = **1,000 SUI** (~$3,400)
+- **Graduation Target**: ~13,333 SUI raised → ~55,000 SUI market cap
+- **Integral Cost** for buy from s1 to s2: `cost = base_price*(s2-s1) + (m/3)*(s2^3-s1^3)`
+- **Inverse calculation**: Binary search approach due to mixed linear/cubic equation
+- **Token Economics**: 
+  - Bonding curve sales: ~737M tokens
+  - Dev allocation: 1M tokens (0.1%)
+  - Community fund: 1M tokens (0.1%)
+  - Cetus pool: ~197M tokens (optimized for 10% price bump)
+  - Burned tokens: ~64M tokens never minted (deflationary)
 - Implementation Details:
   - Uses u128 intermediates for safety; converts to u64 as needed
   - Rounds tokens_out down; clamps at `TOTAL_SUPPLY`; refunds residual SUI to caller
@@ -137,10 +148,13 @@ Public Functions:
   - `create_new_meme_token_with_m<T>(cfg, m_num, m_den, ctx)` — per-token override for m
   - `buy<T>(cfg, &mut curve, payment: Coin<SUI>, max_sui_in, min_tokens_out, deadline_ts_ms, &Clock, &mut TxContext)`
   - routes first-buyer/platform/creator fees, computes tokens_out via inverse and integral, mints `TokenCoin<T>` to buyer
-- `sell<T>(cfg, &mut curve, tokens: TokenCoin<T>, amount_tokens, min_sui_out, deadline_ts_ms, &Clock, &mut TxContext)`
+- `sell<T>(cfg, &mut curve, tokens: Coin<T>, amount_tokens, min_sui_out, deadline_ts_ms, &Clock, &mut TxContext)`
   - burns token coins, pays out SUI from reserve minus fees
-- `graduate_to_cetus<T>(cfg, &mut curve, &mut TxContext)`
-  - Emits `Graduated` event. Off-chain bot should transfer `graduation_reward_sui` from `treasury_address` to creator
+- **UPDATED**: `seed_pool_prepare<T>(cfg, &mut curve, bump_bps, dev_address, community_fund_address, &mut TxContext)`
+  - Mints dev/community allocations first
+  - Calculates optimal tokens for Cetus pool with 10% price bump
+  - Burns excess tokens by not minting them (deflationary mechanism)
+  - Prepares SUI and tokens for Cetus pool seeding
 
 Admin Functions:
 - `freeze_trading<T>(&AdminCap, &mut curve)`
@@ -160,6 +174,25 @@ Admin Functions:
 - Clear events and status transitions for observability and recovery
 
 ## 6. Parameters & Calibration
+
+### 6.1 Updated Bonding Curve Economics (v5.0)
+- **Starting Market Cap**: 1,000 SUI (~$3,400) - immediate price discovery
+- **Graduation Target**: ~13,333 SUI raised → ~55,000 SUI market cap  
+- **Token Allocation**:
+  - Bonding curve sales: ~737M tokens (to reach graduation)
+  - Dev allocation: 1M tokens (0.1% - paid at graduation)
+  - Community fund: 1M tokens (0.1% - for campaigns/partnerships)
+  - Cetus pool: ~197M tokens (optimized for 10% price bump)
+  - Burned tokens: ~64M tokens never minted (deflationary)
+  - **Total circulating**: ~936M tokens (6.4% supply reduction)
+
+### 6.2 Technical Parameters
+- **Modified Quadratic Formula**: `p(s) = 0.000001 + (1/10^16) × s²`
+- **Base Price**: `default_base_price_mist = 1,000` (0.000001 SUI)
+- **Curve Coefficient**: `m_num = 1`, `m_den = 10^16`
+- **Cetus Integration**: `default_cetus_bump_bps = 1,000` (10% price bump)
+
+### 6.3 Legacy Parameters
 - Defaults:
   - `first_buyer_fee_mist = 1_000_000_000` (1 SUI)
   - `default_platform_fee_bps = 450` (4.5%)
@@ -183,6 +216,22 @@ Admin Functions:
 - Gas/size optimizations and event indexing for analytics
 - Comprehensive Move tests; fuzzing around slippage, rounding and supply edges
 - Tooling: SDK and TypeScript bindings; example PTBs and subgraph-like indexers
+- **NEW**: Frontend integration for dev/community allocation management
+- **NEW**: Analytics dashboard for bonding curve performance tracking
+
+## 8.1 Comparison with Pump.fun
+
+| Feature | SuiLFG Launch (v5.0) | Pump.fun |
+|---------|----------------------|----------|
+| **Curve Type** | Modified Quadratic with Base | Linear |
+| **Starting MC** | 1k SUI (~$3.4k) | ~$5-30k |
+| **Graduation** | 13.3k SUI (~$45k) | 85 SOL (~$15-20k) |
+| **Graduation MC** | ~55k SUI (~$187k) | ~$69k |
+| **Dev Allocation** | 0.1% + 0.1% community | 0% |
+| **Total Fees** | 5% + 1 SUI first buyer | ~1.5-2% |
+| **Token Burn** | Yes (6.4% supply reduction) | No |
+| **Pool Bump** | 10% (configurable) | Variable |
+| **Price Discovery** | Immediate (base price) | Starts near zero |
 
 ## 9. Testing Strategy
 - Unit tests: fee routing, first-buyer, slippage/deadline, freeze/whitelist
