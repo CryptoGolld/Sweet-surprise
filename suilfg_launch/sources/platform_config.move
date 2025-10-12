@@ -16,11 +16,15 @@ module suilfg_launch::platform_config {
         // Default bonding curve scale m = m_num / m_den
         default_m_num: u64,
         default_m_den: u64,
+        default_base_price_mist: u64,
         // Permissionless graduation params
         default_graduation_target_mist: u64,
         platform_cut_bps_on_graduation: u64,
         creator_graduation_payout_mist: u64,
         default_cetus_bump_bps: u64,
+        // Dev and community allocations
+        dev_allocation_tokens: u64,
+        community_allocation_tokens: u64,
     }
 
     /// Capability that authorizes admin-only operations
@@ -30,8 +34,10 @@ module suilfg_launch::platform_config {
     const DEFAULT_PLATFORM_FEE_BPS: u64 = 450; // 4.5%
     const DEFAULT_CREATOR_FEE_BPS: u64 = 50; // 0.5%
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
-    const DEFAULT_M_NUM: u64 = 1; // default m = 1/1
-    const DEFAULT_M_DEN: u64 = 1;
+    const DEFAULT_M_NUM: u64 = 1; // default m = 1/10^16 for flatter quadratic curve
+    const DEFAULT_M_DEN: u64 = 10_000_000_000_000_000; // 10^16
+    // Base price for 1k SUI starting market cap (0.000001 SUI in mist)
+    const DEFAULT_BASE_PRICE_MIST: u64 = 1_000; // 0.000001 SUI in mist
     // Default graduation target: 10,000 SUI (in Mist)
     const DEFAULT_GRADUATION_TARGET_MIST: u64 = 10_000 * 1_000_000_000;
     // Platform cut at graduation: 5% (adjustable)
@@ -40,6 +46,9 @@ module suilfg_launch::platform_config {
     const DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST: u64 = 40 * 1_000_000_000;
     // Default AMM bump over curve spot price at seeding (10% = 1000 bps)
     const DEFAULT_CETUS_BUMP_BPS: u64 = 1_000;
+    // Dev and community token allocations
+    const DEFAULT_DEV_ALLOCATION_TOKENS: u64 = 1_000_000;     // 1M tokens for dev
+    const DEFAULT_COMMUNITY_ALLOCATION_TOKENS: u64 = 1_000_000; // 1M tokens for community
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -49,10 +58,13 @@ module suilfg_launch::platform_config {
     public fun get_graduation_reward_sui(cfg: &PlatformConfig): u64 { cfg.graduation_reward_sui }
     public fun get_default_m_num(cfg: &PlatformConfig): u64 { cfg.default_m_num }
     public fun get_default_m_den(cfg: &PlatformConfig): u64 { cfg.default_m_den }
+    public fun get_default_base_price_mist(cfg: &PlatformConfig): u64 { cfg.default_base_price_mist }
     public fun get_default_graduation_target_mist(cfg: &PlatformConfig): u64 { cfg.default_graduation_target_mist }
     public fun get_platform_cut_bps_on_graduation(cfg: &PlatformConfig): u64 { cfg.platform_cut_bps_on_graduation }
     public fun get_creator_graduation_payout_mist(cfg: &PlatformConfig): u64 { cfg.creator_graduation_payout_mist }
     public fun get_default_cetus_bump_bps(cfg: &PlatformConfig): u64 { cfg.default_cetus_bump_bps }
+    public fun get_dev_allocation_tokens(cfg: &PlatformConfig): u64 { cfg.dev_allocation_tokens }
+    public fun get_community_allocation_tokens(cfg: &PlatformConfig): u64 { cfg.community_allocation_tokens }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -67,10 +79,13 @@ module suilfg_launch::platform_config {
             graduation_reward_sui: DEFAULT_GRADUATION_REWARD_SUI,
             default_m_num: DEFAULT_M_NUM,
             default_m_den: DEFAULT_M_DEN,
+            default_base_price_mist: DEFAULT_BASE_PRICE_MIST,
             default_graduation_target_mist: DEFAULT_GRADUATION_TARGET_MIST,
             platform_cut_bps_on_graduation: DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION,
             creator_graduation_payout_mist: DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST,
             default_cetus_bump_bps: DEFAULT_CETUS_BUMP_BPS,
+            dev_allocation_tokens: DEFAULT_DEV_ALLOCATION_TOKENS,
+            community_allocation_tokens: DEFAULT_COMMUNITY_ALLOCATION_TOKENS,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -131,5 +146,13 @@ module suilfg_launch::platform_config {
     public entry fun set_default_cetus_bump_bps(_admin: &AdminCap, cfg: &mut PlatformConfig, bump_bps: u64) {
         assert!(bump_bps <= 10_000, 1004);
         cfg.default_cetus_bump_bps = bump_bps;
+    }
+
+    public entry fun set_dev_allocation(_admin: &AdminCap, cfg: &mut PlatformConfig, tokens: u64) {
+        cfg.dev_allocation_tokens = tokens;
+    }
+
+    public entry fun set_community_allocation(_admin: &AdminCap, cfg: &mut PlatformConfig, tokens: u64) {
+        cfg.community_allocation_tokens = tokens;
     }
 }
