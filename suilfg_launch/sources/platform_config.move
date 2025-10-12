@@ -39,8 +39,8 @@ module suilfg_launch::platform_config {
     const DEFAULT_BASE_PRICE_MIST: u64 = 1_000; // 0.000001 SUI in mist
     // Default graduation target: 13,333 SUI (in Mist) - matches blueprint
     const DEFAULT_GRADUATION_TARGET_MIST: u64 = 13_333 * 1_000_000_000;
-    // Platform cut at graduation: 5% (adjustable)
-    const DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION: u64 = 500;
+    // Platform cut at graduation: 10% (includes creator payout)
+    const DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION: u64 = 1_000;
     // Creator payout at graduation: 40 SUI (in Mist)
     const DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST: u64 = 40 * 1_000_000_000;
     // Default AMM bump over curve spot price at seeding (10% = 1000 bps)

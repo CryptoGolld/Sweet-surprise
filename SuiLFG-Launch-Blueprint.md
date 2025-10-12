@@ -193,10 +193,10 @@ Admin Functions:
 - **Graduation Target**: 13,333 SUI raised → ~55,000 SUI market cap  
 - **Token Allocation**:
   - Bonding curve sales: 737M tokens (73.7% - to reach graduation)
-  - Team allocation: 2M tokens (0.2% - paid at graduation to team wallet)
-  - Cetus pool: ~218M tokens (21.8% - optimized for 10% price bump)
-  - Burned tokens: ~43M tokens never minted (deflationary - 4.3% supply reduction)
-  - **Total circulating**: ~957M tokens (95.7%)
+  - Dev + Community allocation: 2M tokens (0.2% - paid at graduation)
+  - Cetus pool: ~207M tokens (20.7% - optimized for 10% price bump)
+  - Burned tokens: ~54M tokens never minted (deflationary - 5.4% supply reduction)
+  - **Total circulating**: ~946M tokens (94.6%)
 
 ### 6.2 Technical Parameters
 - **Modified Quadratic Formula**: `p(s) = 0.000001 + (1/10,593,721,631,205,675,237,376) × s²`
