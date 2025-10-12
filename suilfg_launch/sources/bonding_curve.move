@@ -313,25 +313,48 @@ module suilfg_launch::bonding_curve {
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         bump_bps: u64,
+        dev_address: address,
+        community_fund_address: address,
         ctx: &mut TxContext
     ) {
         if (!curve.graduated || curve.lp_seeded == true) { abort 9002; } else {};
         let reserve = balance::value<SUI>(&curve.sui_reserve);
         let use_bps = if (bump_bps == 0) { platform_config::get_default_cetus_bump_bps(cfg) } else { bump_bps };
+        
+        // First, mint dev and community allocations
+        let dev_allocation = platform_config::get_dev_allocation_tokens(cfg);
+        let community_allocation = platform_config::get_community_allocation_tokens(cfg);
+        
+        let dev_tokens: Coin<T> = coin::mint<T>(&mut curve.treasury, dev_allocation, ctx);
+        let community_tokens: Coin<T> = coin::mint<T>(&mut curve.treasury, community_allocation, ctx);
+        
+        transfer::public_transfer(dev_tokens, dev_address);
+        transfer::public_transfer(community_tokens, community_fund_address);
+        
+        // Calculate optimal pool seeding with 10% bump
         let p_curve_u128 = spot_price_u128(curve);
         let p_target_u128 = (p_curve_u128 * ((10_000 + use_bps) as u128)) / (10_000 as u128);
         let p_target_u64 = narrow_u128_to_u64(p_target_u128);
+        
         // Use all remaining reserve for LP deposit
         let sui_lp = reserve;
-        // Tokens needed = sui_lp / p_target
-        let mut tokens_needed = sui_lp / p_target_u64;
-        let remaining_tokens = TOTAL_SUPPLY - curve.token_supply;
-        if (tokens_needed > remaining_tokens) { tokens_needed = remaining_tokens; } else {};
+        // Calculate optimal tokens for pool to maintain target price
+        let optimal_tokens_for_pool = sui_lp / p_target_u64;
+        
+        // Calculate remaining unminted tokens (excluding dev/community allocations)
+        let total_allocated = curve.token_supply + dev_allocation + community_allocation;
+        let remaining_tokens = TOTAL_SUPPLY - total_allocated;
+        
+        // Only mint what's optimal for the pool (burn the rest by not minting)
+        let tokens_to_mint = min_u64(optimal_tokens_for_pool, remaining_tokens);
+        
         // Mint tokens for LP to treasury address custody
-        let token_lp: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_needed, ctx);
-        curve.token_supply = curve.token_supply + tokens_needed;
+        let token_lp: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_to_mint, ctx);
+        curve.token_supply = curve.token_supply + tokens_to_mint;
+        
         let bal_sui_lp = balance::split(&mut curve.sui_reserve, sui_lp);
         let sui_lp_coin = coin::from_balance(bal_sui_lp, ctx);
+        
         // Transfer both to treasury custody; external bot can add liquidity from there
         let treas = platform_config::get_treasury_address(cfg);
         transfer::public_transfer(token_lp, treas);

@@ -22,6 +22,9 @@ module suilfg_launch::platform_config {
         platform_cut_bps_on_graduation: u64,
         creator_graduation_payout_mist: u64,
         default_cetus_bump_bps: u64,
+        // Dev and community allocations
+        dev_allocation_tokens: u64,
+        community_allocation_tokens: u64,
     }
 
     /// Capability that authorizes admin-only operations
@@ -43,6 +46,9 @@ module suilfg_launch::platform_config {
     const DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST: u64 = 40 * 1_000_000_000;
     // Default AMM bump over curve spot price at seeding (10% = 1000 bps)
     const DEFAULT_CETUS_BUMP_BPS: u64 = 1_000;
+    // Dev and community token allocations
+    const DEFAULT_DEV_ALLOCATION_TOKENS: u64 = 1_000_000;     // 1M tokens for dev
+    const DEFAULT_COMMUNITY_ALLOCATION_TOKENS: u64 = 1_000_000; // 1M tokens for community
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -57,6 +63,8 @@ module suilfg_launch::platform_config {
     public fun get_platform_cut_bps_on_graduation(cfg: &PlatformConfig): u64 { cfg.platform_cut_bps_on_graduation }
     public fun get_creator_graduation_payout_mist(cfg: &PlatformConfig): u64 { cfg.creator_graduation_payout_mist }
     public fun get_default_cetus_bump_bps(cfg: &PlatformConfig): u64 { cfg.default_cetus_bump_bps }
+    public fun get_dev_allocation_tokens(cfg: &PlatformConfig): u64 { cfg.dev_allocation_tokens }
+    public fun get_community_allocation_tokens(cfg: &PlatformConfig): u64 { cfg.community_allocation_tokens }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -76,6 +84,8 @@ module suilfg_launch::platform_config {
             platform_cut_bps_on_graduation: DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION,
             creator_graduation_payout_mist: DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST,
             default_cetus_bump_bps: DEFAULT_CETUS_BUMP_BPS,
+            dev_allocation_tokens: DEFAULT_DEV_ALLOCATION_TOKENS,
+            community_allocation_tokens: DEFAULT_COMMUNITY_ALLOCATION_TOKENS,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -136,5 +146,13 @@ module suilfg_launch::platform_config {
     public entry fun set_default_cetus_bump_bps(_admin: &AdminCap, cfg: &mut PlatformConfig, bump_bps: u64) {
         assert!(bump_bps <= 10_000, 1004);
         cfg.default_cetus_bump_bps = bump_bps;
+    }
+
+    public entry fun set_dev_allocation(_admin: &AdminCap, cfg: &mut PlatformConfig, tokens: u64) {
+        cfg.dev_allocation_tokens = tokens;
+    }
+
+    public entry fun set_community_allocation(_admin: &AdminCap, cfg: &mut PlatformConfig, tokens: u64) {
+        cfg.community_allocation_tokens = tokens;
     }
 }
