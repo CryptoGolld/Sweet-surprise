@@ -31,7 +31,7 @@ Shared Objects and Caps:
   - `default_platform_fee_bps: u64` — platform fee on trades (default: 450 = 4.5%)
   - `default_creator_fee_bps: u64` — creator fee on trades (default: 50 = 0.5%)
   - `graduation_reward_sui: u64` — reward paid to a token's creator on graduation
-  - `default_m_num: u64`, `default_m_den: u64` — bonding curve coefficient (m = m_num/m_den)
+  - `default_m_num: u64`, `default_m_den: u128` — bonding curve coefficient (m = m_num/m_den, uses u128 for precision)
   - **NEW**: `default_base_price_mist: u64` — base price for 1k SUI starting market cap
   - **NEW**: `team_allocation_tokens: u64` — team allocation at graduation (default: 2M tokens = 0.2%)
 - `AdminCap` (key, store): unique capability authorizing all admin updates
@@ -102,7 +102,7 @@ Constants & Types:
   - `platform_fee_bps: u64`, `creator_fee_bps: u64` — seeded from `PlatformConfig`
   - `creator: address`
   - `whitelist: vector<address>` — used for whitelisted exit
-  - `m_num: u64`, `m_den: u64` — price coefficient ratio (m = m_num/m_den)
+  - `m_num: u64`, `m_den: u128` — price coefficient ratio (m = m_num/m_den, u128 for high precision)
   - **NEW**: `base_price_mist: u64` — base price component ensuring 1k SUI starting market cap
   - `graduation_target_mist: u64` — threshold for permissionless graduation
   - `graduated: bool`, `lp_seeded: bool`, `reward_paid: bool` — step flags
@@ -192,16 +192,19 @@ Admin Functions:
 - **Starting Market Cap**: 1,000 SUI (~$3,400) - immediate price discovery
 - **Graduation Target**: 13,333 SUI raised → ~55,000 SUI market cap  
 - **Token Allocation**:
-  - Bonding curve sales: ~737M tokens (to reach graduation)
+  - Bonding curve sales: 737M tokens (73.7% - to reach graduation)
   - Team allocation: 2M tokens (0.2% - paid at graduation to team wallet)
-  - Cetus pool: ~197M tokens (optimized for 10% price bump)
-  - Burned tokens: ~64M tokens never minted (deflationary - 6.4% supply reduction)
-  - **Total circulating**: ~936M tokens
+  - Cetus pool: ~218M tokens (21.8% - optimized for 10% price bump)
+  - Burned tokens: ~43M tokens never minted (deflationary - 4.3% supply reduction)
+  - **Total circulating**: ~957M tokens (95.7%)
 
 ### 6.2 Technical Parameters
-- **Modified Quadratic Formula**: `p(s) = 0.000001 + (1/10¹⁶) × s²`
+- **Modified Quadratic Formula**: `p(s) = 0.000001 + (1/10,593,721,631,205,675,237,376) × s²`
 - **Base Price**: `default_base_price_mist = 1,000` (0.000001 SUI)
-- **Curve Coefficient**: `m_num = 1`, `m_den = 10¹⁶` (very flat quadratic for smooth price progression)
+- **Curve Coefficient**: 
+  - `m_num = 1` (u64)
+  - `m_den = 10,593,721,631,205,675,237,376` (u128) - calculated to achieve 737M tokens @ 13,333 SUI
+  - Note: m_den requires u128 as the value exceeds u64 maximum
 - **Graduation Target**: `default_graduation_target_mist = 13,333 * 10⁹` (13,333 SUI in mist)
 - **Cetus Integration**: `default_cetus_bump_bps = 1,000` (10% price bump)
 - **Team Allocation**: `team_allocation_tokens = 2,000,000` (2M tokens = 0.2%)

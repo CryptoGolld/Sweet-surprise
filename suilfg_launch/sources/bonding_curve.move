@@ -29,7 +29,7 @@ module suilfg_launch::bonding_curve {
         creator: address,
         whitelist: vector<address>,
         m_num: u64, // numerator for price coefficient m
-        m_den: u64, // denominator for price coefficient m
+        m_den: u128, // denominator for price coefficient m
         base_price_mist: u64, // base price in mist for starting market cap
         treasury: TreasuryCap<T>,
         // Permissionless graduation parameters
@@ -72,7 +72,7 @@ module suilfg_launch::bonding_curve {
         }
     }
 
-    fun init_for_token_with_m<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, m_num: u64, m_den: u64, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token_with_m<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, m_num: u64, m_den: u128, ctx: &mut TxContext): BondingCurve<T> {
         assert!(m_den > 0, 1101);
         assert!(m_num > 0, 1102);
         BondingCurve<T> {
@@ -114,7 +114,7 @@ module suilfg_launch::bonding_curve {
         cfg: &PlatformConfig,
         treasury: TreasuryCap<T>,
         m_num: u64,
-        m_den: u64,
+        m_den: u128,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
@@ -362,7 +362,7 @@ module suilfg_launch::bonding_curve {
         // p(s) = base_price + (m_num/m_den) * s^2
         let s = curve.token_supply;
         let s128 = (s as u128);
-        let quadratic_part = ((curve.m_num as u128) * s128 * s128) / (curve.m_den as u128);
+        let quadratic_part = ((curve.m_num as u128) * s128 * s128) / curve.m_den;
         (curve.base_price_mist as u128) + quadratic_part
     }
 
@@ -409,13 +409,13 @@ module suilfg_launch::bonding_curve {
     }
 
     // Integral helper: returns cost to move supply from s1 to s2 under p(s)=base+m*s^2
-    fun integrate_cost_u128(s1: u64, s2: u64, m_num: u64, m_den: u64, base_price_mist: u64): u128 {
+    fun integrate_cost_u128(s1: u64, s2: u64, m_num: u64, m_den: u128, base_price_mist: u64): u128 {
         let s1c = pow3_u128_from_u64(s1);
         let s2c = pow3_u128_from_u64(s2);
         let delta_cubic = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
         let delta_linear = (s2 as u128) - (s1 as u128);
         
-        let quadratic_cost = ((m_num as u128) * delta_cubic) / ((3 as u128) * (m_den as u128));
+        let quadratic_cost = ((m_num as u128) * delta_cubic) / ((3 as u128) * m_den);
         let linear_cost = (base_price_mist as u128) * delta_linear;
         
         quadratic_cost + linear_cost
@@ -424,7 +424,7 @@ module suilfg_launch::bonding_curve {
     // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
     // For p(s) = base + m*s^2, we need to solve: base*(s2-s1) + (m/3)*(s2^3-s1^3) = amount_in
     // This requires binary search as there's no closed-form solution
-    fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u64, m_den: u64, base_price_mist: u64): u64 {
+    fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u64, m_den: u128, base_price_mist: u64): u64 {
         // Binary search approach
         let mut lo: u64 = s1;
         let mut hi: u64 = TOTAL_SUPPLY;

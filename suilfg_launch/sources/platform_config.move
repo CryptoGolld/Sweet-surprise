@@ -15,7 +15,7 @@ module suilfg_launch::platform_config {
         graduation_reward_sui: u64,
         // Default bonding curve scale m = m_num / m_den
         default_m_num: u64,
-        default_m_den: u64,
+        default_m_den: u128,
         default_base_price_mist: u64,
         // Permissionless graduation params
         default_graduation_target_mist: u64,
@@ -33,11 +33,11 @@ module suilfg_launch::platform_config {
     const DEFAULT_PLATFORM_FEE_BPS: u64 = 450; // 4.5%
     const DEFAULT_CREATOR_FEE_BPS: u64 = 50; // 0.5%
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
-    const DEFAULT_M_NUM: u64 = 1; // default m = 1/10^16 for flatter quadratic curve
-    const DEFAULT_M_DEN: u64 = 10_000_000_000_000_000; // 10^16
+    const DEFAULT_M_NUM: u64 = 1; // default m for blueprint economics
+    const DEFAULT_M_DEN: u128 = 10593721631205675237376; // Calculated for 737M tokens @ 13,333 SUI
     // Base price for 1k SUI starting market cap (0.000001 SUI in mist)
     const DEFAULT_BASE_PRICE_MIST: u64 = 1_000; // 0.000001 SUI in mist
-    // Default graduation target: 13,333 SUI (in Mist) for ~55k SUI market cap
+    // Default graduation target: 13,333 SUI (in Mist) - matches blueprint
     const DEFAULT_GRADUATION_TARGET_MIST: u64 = 13_333 * 1_000_000_000;
     // Platform cut at graduation: 5% (adjustable)
     const DEFAULT_PLATFORM_CUT_BPS_ON_GRADUATION: u64 = 500;
@@ -55,7 +55,7 @@ module suilfg_launch::platform_config {
     public fun get_default_creator_fee_bps(cfg: &PlatformConfig): u64 { cfg.default_creator_fee_bps }
     public fun get_graduation_reward_sui(cfg: &PlatformConfig): u64 { cfg.graduation_reward_sui }
     public fun get_default_m_num(cfg: &PlatformConfig): u64 { cfg.default_m_num }
-    public fun get_default_m_den(cfg: &PlatformConfig): u64 { cfg.default_m_den }
+    public fun get_default_m_den(cfg: &PlatformConfig): u128 { cfg.default_m_den }
     public fun get_default_base_price_mist(cfg: &PlatformConfig): u64 { cfg.default_base_price_mist }
     public fun get_default_graduation_target_mist(cfg: &PlatformConfig): u64 { cfg.default_graduation_target_mist }
     public fun get_platform_cut_bps_on_graduation(cfg: &PlatformConfig): u64 { cfg.platform_cut_bps_on_graduation }
@@ -123,7 +123,7 @@ module suilfg_launch::platform_config {
         cfg.graduation_reward_sui = amount_sui;
     }
 
-    public entry fun set_default_m(_admin: &AdminCap, cfg: &mut PlatformConfig, m_num: u64, m_den: u64) {
+    public entry fun set_default_m(_admin: &AdminCap, cfg: &mut PlatformConfig, m_num: u64, m_den: u128) {
         assert!(m_den > 0, 1001);
         assert!(m_num > 0, 1002);
         cfg.default_m_num = m_num;
