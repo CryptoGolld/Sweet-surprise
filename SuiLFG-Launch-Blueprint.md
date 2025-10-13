@@ -546,6 +546,9 @@ When users search for tickers, results split into:
 │ │ [View] [Quick Buy]                               │   │
 │ └──────────────────────────────────────────────────┘   │
 │                                                          │
+│ 📜 OLD (Ticker Revoked) [Show 1 old version ▼]         │
+│ ^ Collapsed - sits ABOVE graduated for visibility       │
+│                                                          │
 │ ✅ GRADUATED (On Cetus DEX) - EXPANDED                  │
 │ ┌──────────────────────────────────────────────────┐   │
 │ │ 🐕 DOGE 2.0      $DOGE      ✅ Graduated         │   │
@@ -556,22 +559,18 @@ When users search for tickers, results split into:
 │ │ 🐶 DOGE 1.0      $DOGE      ✅ Graduated         │   │
 │ │ MC: 48,234 SUI  •  Graduated 1 week ago         │   │
 │ │ [View] [Trade via Cetus]                         │   │
+│ ├──────────────────────────────────────────────────┤   │
+│ │ [More graduated tokens if exist...]              │   │
 │ └──────────────────────────────────────────────────┘   │
-│                                                          │
-│ 📜 OLD (Ticker Revoked) [Show 1 old version ▼]         │
-│ ┌──────────────────────────────────────────────────┐   │
-│ │ ⚠️ Unnamed Token  Was: $DOGE  ❌ Revoked         │   │
-│ │ MC: 234 SUI  •  Failed  •  Ticker reassigned     │   │
-│ │ Exit liquidity only  •  [View for Exit]          │   │
-│ └──────────────────────────────────────────────────┘   │
+│ ^ Expanded - showcases success but below OLD for UX     │
 └─────────────────────────────────────────────────────────┘
 ```
 
 **Display Rules:**
-- **ACTIVE**: Always visible, primary result
-- **GRADUATED**: Always expanded - showcase success! ✅
-- **OLD**: Collapsed by default - only for exits
-- Non-search browsing: Only show ACTIVE and GRADUATED
+- **ACTIVE**: Always visible first - current opportunity
+- **OLD**: Second, collapsed - visible but minimal space
+- **GRADUATED**: Third, expanded - showcase success with full details
+- Non-search browsing: Only show ACTIVE and GRADUATED (hide OLD entirely)
 
 ## 5. Security & Risk Controls
 - Global `creation_is_paused` big red button
