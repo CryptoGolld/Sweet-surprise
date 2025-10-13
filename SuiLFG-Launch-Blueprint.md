@@ -220,11 +220,28 @@ Admin Functions:
 - `withdraw_reserve_to<T>(&AdminCap, &mut curve, to, amount_sui, ctx)` — emergency withdrawal to specific address
 
 ## 4. Off-Chain & Frontend
+
+### Bot Infrastructure
+
+**Graduation Bot (Highly Recommended):**
+- Monitors tokens reaching graduation target (13,333 SUI)
+- Automatically calls: `try_graduate()` → `distribute_payouts()` → `seed_pool_prepare()`
+- Ensures smooth, instant graduation experience
+- Cost: ~$5/month hosting + ~0.01 SUI gas per graduation
+- **Note**: Functions are permissionless - bot not technically required, but essential for good UX
+
+**Compilation Bot (NOT NEEDED):**
+- No 24/7 compilation service required
+- Sui uses generic type parameters `<T>` - one contract handles all tokens
+- Users publish small coin modules via wallet (browser-based)
+- Optional: Provide web compilation service for convenience
+- Template packages can simplify user flow
+
+### Other Infrastructure
 - IPFS Integration: Image upload and pinning for token icons/metadata
 - Admin PTB Scripts: Full coverage for all admin functions and periodic tasks
 - Creator UI: Token creation form with optional "Initial Creator Buy (SUI Amount)" and a clear note about the 1 SUI first-buyer fee
-- Graduation Bot: Monitors for `GraduationReady` events, orchestrates graduation sequence (payouts + pool seeding)
-- **NEW**: Team wallet management for receiving token allocations
+- **NEW**: Team wallet management for receiving dev (1M) + community (1M) token allocations
 
 ### 4.1 Market Cap Display & Metrics
 
@@ -501,38 +518,60 @@ When users search for tickers, results split into:
 - Sort: Newest first (creation time descending)
 - Shows: Progress bar, time ago, quick buy
 - These are current opportunities for early entry
+- Always visible when searching
 
-**Category 2: 📜 OLD (Previous Ticker Versions)**
+**Category 2: ✅ GRADUATED (Successfully Graduated Tokens)**
+- Sort: Market cap (highest first)
+- Shows: Market cap, 24h volume, liquidity
+- Successfully graduated tokens still trading on Cetus
+- **Expanded by default** - showcase success stories!
+- Integrated Cetus trading via platform (1% interface fee)
+
+**Category 3: 📜 OLD (Ticker Revoked/Lost)**
 - Shows ONLY when searching specific ticker
-- Displays tokens that previously used this ticker
-- Allows bag holders to access old tokens for exit
-- Hidden from normal browsing (only in search)
+- Displays tokens that lost their ticker (failed/exceeded max lock)
+- **Collapsed by default** - only for bag holder exits
+- Marked as "Was: $DOGE" with warning badge
+- Exit liquidity only (deprecated)
 
 **Example Search for "$DOGE":**
 ```
-┌─────────────────────────────────────┐
-│ 🔍 Search: "DOGE"                   │
-├─────────────────────────────────────┤
-│ 🎯 ACTIVE                           │
-│ ┌─────────────────────────────────┐ │
-│ │ 🐕 DOGE 2.0    $DOGE  🆕 2h     │ │
-│ │ MC: 15k  [████░] 65% to grad   │ │
-│ └─────────────────────────────────┘ │
-│                                     │
-│ 📜 OLD (Click to expand)            │
-│ ┌─────────────────────────────────┐ │
-│ │ 🐕 Original   Was: $DOGE  ✅    │ │
-│ │ MC: 54k  Graduated 3d ago       │ │
-│ │ ⚠️ Ticker reassigned            │ │
-│ └─────────────────────────────────┘ │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ 🔍 Search: "DOGE"                                       │
+├─────────────────────────────────────────────────────────┤
+│ 🎯 ACTIVE (Bonding Curve)                               │
+│ ┌──────────────────────────────────────────────────┐   │
+│ │ 🐕 DOGE 3.0      $DOGE      🆕 2h ago            │   │
+│ │ MC: 15,234 SUI  •  [████░] 65% to graduation    │   │
+│ │ [View] [Quick Buy]                               │   │
+│ └──────────────────────────────────────────────────┘   │
+│                                                          │
+│ ✅ GRADUATED (On Cetus DEX) - EXPANDED                  │
+│ ┌──────────────────────────────────────────────────┐   │
+│ │ 🐕 DOGE 2.0      $DOGE      ✅ Graduated         │   │
+│ │ MC: 54,719 SUI  •  24h Vol: 3,456 SUI           │   │
+│ │ Liquidity: 12k SUI  •  Graduated 3 days ago     │   │
+│ │ [View] [Trade via Cetus]                         │   │
+│ ├──────────────────────────────────────────────────┤   │
+│ │ 🐶 DOGE 1.0      $DOGE      ✅ Graduated         │   │
+│ │ MC: 48,234 SUI  •  Graduated 1 week ago         │   │
+│ │ [View] [Trade via Cetus]                         │   │
+│ └──────────────────────────────────────────────────┘   │
+│                                                          │
+│ 📜 OLD (Ticker Revoked) [Show 1 old version ▼]         │
+│ ┌──────────────────────────────────────────────────┐   │
+│ │ ⚠️ Unnamed Token  Was: $DOGE  ❌ Revoked         │   │
+│ │ MC: 234 SUI  •  Failed  •  Ticker reassigned     │   │
+│ │ Exit liquidity only  •  [View for Exit]          │   │
+│ └──────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**Implementation:**
-- Active tokens: Normal display
-- Old tokens: Collapsed by default, "Was: $DOGE" label
-- Exit liquidity: Old tokens allow sells but marked as deprecated
-- Only shown in ticker-specific searches, hidden from main listings
+**Display Rules:**
+- **ACTIVE**: Always visible, primary result
+- **GRADUATED**: Always expanded - showcase success! ✅
+- **OLD**: Collapsed by default - only for exits
+- Non-search browsing: Only show ACTIVE and GRADUATED
 
 ## 5. Security & Risk Controls
 - Global `creation_is_paused` big red button
