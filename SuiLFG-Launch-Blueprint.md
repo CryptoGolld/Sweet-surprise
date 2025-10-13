@@ -237,6 +237,78 @@ Admin Functions:
 - Optional: Provide web compilation service for convenience
 - Template packages can simplify user flow
 
+### Backend Infrastructure & Deployment
+
+**Complete Infrastructure Stack:**
+
+**Backend Server (Ubuntu EC2):**
+- **Recommendation**: Start with t2.micro (FREE tier, 1GB RAM) or t3.small (2GB RAM, $15/month)
+- **Hosts all backend services:**
+  - Compilation API (Node.js/Express) - Compiles user coin modules on-demand
+  - Indexer (Node.js) - Listens to blockchain events, updates Supabase
+  - Graduation Bot (Node.js) - Monitors and triggers graduations
+- **Management**: PM2 process manager for auto-restart and monitoring
+- **Requirements**: Sui CLI installed for compilation
+
+**Database (Supabase):**
+- **Tier**: FREE tier (500 MB) sufficient for launch
+- **Purpose**: Store token metadata, user data, analytics
+- **Tables**: tokens, users, transactions, comments, referrals, moon_race_rankings
+- **Cost**: $0/month initially, $25/month if exceed free tier
+
+**IPFS Storage (Images):**
+- **Recommendation**: NFT.Storage (unlimited, FREE forever) or Pinata free tier (1GB, 100GB bandwidth)
+- **Purpose**: Store token images/logos
+- **Cost**: $0/month initially, $20/month Pinata paid if need reliability
+
+**Frontend Hosting:**
+- **Recommendation**: Vercel or Netlify (FREE tier)
+- **Framework**: Next.js 14
+- **Cost**: $0/month
+
+**Total Launch Cost: $0/month** (all free tiers!) 🎉
+
+**Growth Cost (after 12 months):**
+- EC2: $15/month (t3.small)
+- Supabase: $0-25/month
+- IPFS: $0-20/month
+- **Total: $15-60/month** (covered by 1-2 graduations!)
+
+### Token Creation Flow
+
+**Technical Implementation:**
+
+Sui uses generic type parameters - users must publish a coin module to get `TreasuryCap<T>`, then pass it to the bonding curve contract.
+
+**User Flow:**
+1. User fills creation form (name, ticker, description, image, socials)
+2. Frontend calls Compilation API: `POST /api/compile-token`
+3. API generates Move code from template and compiles using Sui CLI
+4. Returns compiled bytecode to frontend
+5. User approves wallet transaction #1: Publish coin package → receives TreasuryCap
+6. User approves wallet transaction #2: Create bonding curve with TreasuryCap
+7. Metadata saved to Supabase (name, ticker, image, socials, description)
+8. Token is live and tradeable!
+
+**Compilation API Example:**
+```javascript
+// Generates and compiles coin module on-demand
+POST /api/compile-token
+Body: { name, ticker, symbol, description }
+
+// API creates Move package structure
+// Calls: sui move build --path /tmp/package
+// Returns: Compiled bytecode
+
+Response: { 
+  success: true, 
+  modules: [...], 
+  dependencies: ['0x1', '0x2'] 
+}
+```
+
+**Note**: This is a web service API (on-demand), NOT a 24/7 background bot. The API only runs when users request compilation.
+
 ### Other Infrastructure
 - IPFS Integration: Image upload and pinning for token icons/metadata
 - Admin PTB Scripts: Full coverage for all admin functions and periodic tasks
