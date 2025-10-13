@@ -53,40 +53,87 @@ Notes:
 - Init flow: internal `init(PLATFORM_CONFIG, &mut TxContext)` shares config and transfers `AdminCap` to publisher.
 
 ### 3.2 ticker_registry
-Purpose: Track ticker status across the platform. Enforce cooldowns, support reservations, whitelisting, bans, and auctions (future), and provide a path for the auction winner to claim a ticker after cooldown expires.
+Purpose: Track ticker status across the platform with advanced ticker economy featuring cooldowns, fee-based early reuse, anti-squatting protection, and reservations.
+
+#### Ticker Economy Overview
+- **7-day maximum lock period** - prevents permanent ticker squatting
+- **Graduated tokens** enter reusable state with exponential fee system
+- **Fee doubling** - 33 → 66 → 132 → 264 → 528 → 666 SUI (capped)
+- **Fee resets** after 7 days or when period expires
+- **Lazy revocation** - automatic cleanup when ticker is claimed
+- **Reserved tickers** for partners/brands with one-time use protection
 
 Key Types:
 - `TickerStatus` (enum): `Available`, `Active`, `OnCooldown`, `Banned`, `Reserved`, `Whitelisted`
 - `TickerInfo` (store):
   - `status: TickerStatus`
-  - `token_id: Option<ID>` — associated token object id (or analogous identifier)
-  - `cooldown_ends_ts_ms: u64`
-  - `whitelist: vector<address>`
+  - `token_id: Option<ID>` — associated token object id
+  - `cooldown_ends_ts_ms: u64` — when ticker becomes free
+  - `whitelist: vector<address>` — whitelisted addresses
+  - **NEW**: `creation_ts_ms: u64` — when current token was created
+  - **NEW**: `graduated_ts_ms: u64` — when token graduated (0 if not)
+  - **NEW**: `current_reuse_fee_mist: u64` — current fee to bypass cooldown
+  - **NEW**: `reserved_for: Option<address>` — owner of reservation
 - `TickerRegistry` (shared):
   - `id: UID`
   - `tickers: Table<String, TickerInfo>` — String keys
-  - `default_cooldown_ms: u64` — default 30 days
+  - `default_cooldown_ms: u64` — default 7 days
 - `Auction` (key, store) [stub for future iteration]:
   - `id: UID`, `ticker_symbol: String`, `highest_bidder: address`, `highest_bid: u64`, `end_ts_ms: u64`
 
+#### Ticker Economy Flow
+
+**Normal Flow:**
+```
+Day 0: Token created with $DOGE
+Day 7: Token not graduated → Ticker FREE for anyone
+```
+
+**Fast Graduation Flow (Fee System):**
+```
+Day 0: Token 1 created, graduates → Fee: 33 SUI
+Day 1: Token 2 created (paid 33), graduates → Fee: 66 SUI
+Day 2: Token 3 created (paid 66), graduates → Fee: 132 SUI
+Day 7: Period ends → Ticker FREE, fee resets to 33 SUI
+```
+
+**Hot Ticker Revenue:**
+- Single ticker can generate: 33+66+132+264+528+666 = **1,689 SUI** per 7-day cycle
+- Fee caps at 666 SUI to prevent absurdity
+- All configurable by admin
+
 Init:
-- `init(TICKER_REGISTRY, &mut TxContext)` creates and shares `TickerRegistry` with default cooldown (30 days).
+- `init(TICKER_REGISTRY, &mut TxContext)` creates and shares `TickerRegistry` with default cooldown (7 days).
 
 Admin Functions (require `&AdminCap`):
 - `start_auction(registry, ticker, duration_ms, clock, ctx)` — stub for now
 - `withdraw_reservation(registry, ticker)` — Reserved → Available
 - `ban_ticker(registry, ticker)` — status → Banned
-- `reserve_ticker(registry, ticker)` — status → Reserved
+- `reserve_ticker(registry, ticker)` — status → Reserved (generic)
+- **NEW**: `reserve_ticker_for(registry, ticker, address)` — Reserve for specific user
 - `whitelist_ticker(registry, ticker, user)` — push to whitelist and mark Whitelisted
 - `set_cooldown_period(registry, cooldown_ms)`
+- **NEW**: `force_unlock_ticker(registry, ticker)` — Emergency ticker unlock
 
 Public Helpers:
-- `mark_active_with_lock(registry, ticker, token_id, cooldown_ends_ts_ms)` — set Active and store lock metadata
+- `mark_active_with_lock(registry, ticker, token_id, creation_ts, cooldown_ends_ts)` — set Active and store lock metadata
+- **NEW**: `mark_graduated(registry, ticker, graduated_ts, base_fee)` — Mark token as graduated, set up fee cooldown
+- **NEW**: `is_ticker_claimable(registry, ticker, max_lock_ms, clock)` — Check if ticker can be claimed (lazy revocation)
+- **NEW**: `get_current_reuse_fee(registry, ticker)` — Get current fee amount
 - `contains(registry, &String) -> bool`
 
-Future Work (Auctions):
-- Bidding process, outbid refunds (escrow), finalization at `end_ts_ms`
-- Post-cooldown claim path for the winner to reserve/activate the ticker
+#### Anti-Squatting Protection
+- **Maximum Lock**: 7 days - ticker auto-unlocks even if token still trading
+- **Lazy Revocation**: When someone tries to claim ticker, contract checks if old token exceeded max lock
+- **Admin Override**: Force unlock any ticker for scam/bundle situations
+- **Reserved Protection**: Reserved tickers can only be used once by assigned address
+
+#### Fee Economics
+- **Base Fee**: 33 SUI (configurable)
+- **Doubling Window**: 7 days (matches max lock period)
+- **Fee Cap**: 666 SUI maximum (configurable)
+- **Reset Triggers**: 7 days pass OR ticker becomes free
+- **Revenue Potential**: Up to 1,689 SUI per hot ticker per cycle
 
 ### 3.3 bonding_curve
 Purpose: Main trading engine for a token with a **modified quadratic** price curve featuring immediate price discovery (1k SUI starting market cap) and optimal Cetus pool seeding. Total supply is dynamic based on graduation economics with deflationary token burn (typically ~936M circulating tokens after graduation).
@@ -368,6 +415,125 @@ return (
 2. **Should Have**: Fully diluted MC, SUI raised, circulating %
 3. **Nice to Have**: 24h volume, holder count, recent trades
 
+### 4.2 Ticker Availability & Suggestions
+
+**Real-time Ticker Check During Creation**
+
+As users type ticker symbols, show instant availability and alternatives:
+
+**Visual Experience:**
+```
+User types: "DOG"
+
+┌────────────────────────────────────┐
+│ Ticker Symbol:                     │
+│ [DOG_____]                         │
+│                                    │
+│ 💡 Suggestions:                    │
+│ ✅ DOGGY (Available - Free!)       │
+│ ✅ DOGS (Available - Free!)        │
+│ ✅ DOG2 (Available - Free!)        │
+│ ❌ DOGE (Locked for 6d 12h)       │
+│ ⚠️ DOGX (Claimable for 66 SUI)   │
+└────────────────────────────────────┘
+
+User types exact: "DOGE"
+
+┌────────────────────────────────────┐
+│ Ticker Symbol: [DOGE] ❌           │
+│                                    │
+│ ❌ DOGE is currently locked        │
+│ Token: "Doge Killer"               │
+│ Available in: 6 days 12 hours      │
+│                                    │
+│ 💡 Try these free alternatives:    │
+│ ✅ DOGE2 → [Create Now]           │
+│ ✅ DOGES → [Create Now]           │
+│ ✅ DOGEX → [Create Now]           │
+│                                    │
+│ ⚠️ Or claim similar:               │
+│ DOGY (66 SUI) → [Claim & Create]  │
+└────────────────────────────────────┘
+```
+
+**Status Indicators:**
+- ✅ **Green** = Available (free to use)
+- ⚠️ **Orange** = Claimable (pay fee to use)
+- ❌ **Red** = Locked (wait X days)
+- 🔒 **Purple** = Reserved (admin only)
+- ⛔ **Gray** = Banned (never usable)
+
+**Implementation:**
+```typescript
+// Debounced API call as user types
+const checkTicker = async (input: string) => {
+  if (input.length < 2) return;
+  
+  const result = await fetch(`/api/ticker/check/${input}`);
+  const data = await result.json();
+  
+  // data.exact = { status, available_in, claim_fee }
+  // data.similar = [{ symbol, status, available_in }]
+  
+  return {
+    exact: data.exact,
+    available: data.similar.filter(t => t.status === 'Available'),
+    claimable: data.similar.filter(t => t.status === 'Claimable'),
+    locked: data.similar.filter(t => t.status === 'Locked'),
+  };
+};
+```
+
+**Benefits:**
+- Prevents frustration (no trial-and-error)
+- Shows alternatives instantly
+- Displays claim fees upfront
+- Professional UX
+- Reduces support tickets
+
+### 4.3 Search Categories & Token Display
+
+**Two-Category Search Results:**
+
+When users search for tickers, results split into:
+
+**Category 1: 🎯 ACTIVE (Bonding Curve Tokens)**
+- Sort: Newest first (creation time descending)
+- Shows: Progress bar, time ago, quick buy
+- These are current opportunities for early entry
+
+**Category 2: 📜 OLD (Previous Ticker Versions)**
+- Shows ONLY when searching specific ticker
+- Displays tokens that previously used this ticker
+- Allows bag holders to access old tokens for exit
+- Hidden from normal browsing (only in search)
+
+**Example Search for "$DOGE":**
+```
+┌─────────────────────────────────────┐
+│ 🔍 Search: "DOGE"                   │
+├─────────────────────────────────────┤
+│ 🎯 ACTIVE                           │
+│ ┌─────────────────────────────────┐ │
+│ │ 🐕 DOGE 2.0    $DOGE  🆕 2h     │ │
+│ │ MC: 15k  [████░] 65% to grad   │ │
+│ └─────────────────────────────────┘ │
+│                                     │
+│ 📜 OLD (Click to expand)            │
+│ ┌─────────────────────────────────┐ │
+│ │ 🐕 Original   Was: $DOGE  ✅    │ │
+│ │ MC: 54k  Graduated 3d ago       │ │
+│ │ ⚠️ Ticker reassigned            │ │
+│ └─────────────────────────────────┘ │
+└─────────────────────────────────────┘
+```
+
+**Implementation:**
+- Active tokens: Normal display
+- Old tokens: Collapsed by default, "Was: $DOGE" label
+- Exit liquidity: Old tokens allow sells but marked as deprecated
+- Only shown in ticker-specific searches, hidden from main listings
+
 ## 5. Security & Risk Controls
 - Global `creation_is_paused` big red button
 - Per-curve `freeze_trading` and `WhitelistedExit` for controlled unwind
@@ -397,6 +563,10 @@ return (
 - **Graduation Target**: `default_graduation_target_mist = 13,333 * 10⁹` (13,333 SUI in mist)
 - **Cetus Integration**: `default_cetus_bump_bps = 1,000` (10% price bump)
 - **Team Allocation**: `team_allocation_tokens = 2,000,000` (2M tokens = 0.2%)
+- **Ticker Economy**:
+  - `ticker_max_lock_ms = 7 days` (maximum ticker lock period)
+  - `ticker_early_reuse_base_fee_mist = 33 SUI` (starting reuse fee)
+  - `ticker_early_reuse_max_fee_mist = 666 SUI` (maximum fee cap)
 
 ### 6.3 Fee Parameters
 - Defaults:
@@ -404,9 +574,13 @@ return (
   - `default_platform_fee_bps = 450` (4.5%)
   - `default_creator_fee_bps = 50` (0.5%)
   - `graduation_reward_sui = 100 SUI` (unused, legacy parameter)
-  - `default_cooldown_ms` = 30 days
-  - `platform_cut_bps_on_graduation = 500` (5% platform share at graduation)
-  - `creator_graduation_payout_mist = 40 * 10⁹` (40 SUI to creator at graduation)
+  - `default_cooldown_ms` = 7 days
+  - `platform_cut_bps_on_graduation = 1000` (10% platform share at graduation)
+  - `creator_graduation_payout_mist = 40 * 10⁹` (40 SUI paid from platform cut)
+  - **Ticker Economy**:
+    - `ticker_max_lock_ms = 7 days` (maximum ticker lock period)
+    - `ticker_early_reuse_base_fee = 33 SUI` (starting reuse fee)
+    - `ticker_early_reuse_max_fee = 666 SUI` (maximum fee cap)
 
 ## 7. Upgrade & Governance Plan
 - Short-term: Team controls `UpgradeCap` and can deliver fixes/updates rapidly

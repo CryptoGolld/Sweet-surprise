@@ -24,6 +24,10 @@ module suilfg_launch::platform_config {
         default_cetus_bump_bps: u64,
         // Team allocation
         team_allocation_tokens: u64,
+        // Ticker economy
+        ticker_max_lock_ms: u64,
+        ticker_early_reuse_base_fee_mist: u64,
+        ticker_early_reuse_max_fee_mist: u64,
     }
 
     /// Capability that authorizes admin-only operations
@@ -47,6 +51,10 @@ module suilfg_launch::platform_config {
     const DEFAULT_CETUS_BUMP_BPS: u64 = 1_000;
     // Team token allocation (2M tokens total - 0.2%)
     const DEFAULT_TEAM_ALLOCATION_TOKENS: u64 = 2_000_000;
+    // Ticker economy parameters
+    const DEFAULT_TICKER_MAX_LOCK_MS: u64 = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const DEFAULT_TICKER_EARLY_REUSE_BASE_FEE_MIST: u64 = 33 * 1_000_000_000; // 33 SUI
+    const DEFAULT_TICKER_EARLY_REUSE_MAX_FEE_MIST: u64 = 666 * 1_000_000_000; // 666 SUI cap
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -62,6 +70,9 @@ module suilfg_launch::platform_config {
     public fun get_creator_graduation_payout_mist(cfg: &PlatformConfig): u64 { cfg.creator_graduation_payout_mist }
     public fun get_default_cetus_bump_bps(cfg: &PlatformConfig): u64 { cfg.default_cetus_bump_bps }
     public fun get_team_allocation_tokens(cfg: &PlatformConfig): u64 { cfg.team_allocation_tokens }
+    public fun get_ticker_max_lock_ms(cfg: &PlatformConfig): u64 { cfg.ticker_max_lock_ms }
+    public fun get_ticker_early_reuse_base_fee_mist(cfg: &PlatformConfig): u64 { cfg.ticker_early_reuse_base_fee_mist }
+    public fun get_ticker_early_reuse_max_fee_mist(cfg: &PlatformConfig): u64 { cfg.ticker_early_reuse_max_fee_mist }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -82,6 +93,9 @@ module suilfg_launch::platform_config {
             creator_graduation_payout_mist: DEFAULT_CREATOR_GRADUATION_PAYOUT_MIST,
             default_cetus_bump_bps: DEFAULT_CETUS_BUMP_BPS,
             team_allocation_tokens: DEFAULT_TEAM_ALLOCATION_TOKENS,
+            ticker_max_lock_ms: DEFAULT_TICKER_MAX_LOCK_MS,
+            ticker_early_reuse_base_fee_mist: DEFAULT_TICKER_EARLY_REUSE_BASE_FEE_MIST,
+            ticker_early_reuse_max_fee_mist: DEFAULT_TICKER_EARLY_REUSE_MAX_FEE_MIST,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -146,5 +160,17 @@ module suilfg_launch::platform_config {
 
     public entry fun set_team_allocation(_admin: &AdminCap, cfg: &mut PlatformConfig, tokens: u64) {
         cfg.team_allocation_tokens = tokens;
+    }
+
+    public entry fun set_ticker_max_lock_ms(_admin: &AdminCap, cfg: &mut PlatformConfig, ms: u64) {
+        cfg.ticker_max_lock_ms = ms;
+    }
+
+    public entry fun set_ticker_early_reuse_base_fee(_admin: &AdminCap, cfg: &mut PlatformConfig, fee_mist: u64) {
+        cfg.ticker_early_reuse_base_fee_mist = fee_mist;
+    }
+
+    public entry fun set_ticker_early_reuse_max_fee(_admin: &AdminCap, cfg: &mut PlatformConfig, fee_mist: u64) {
+        cfg.ticker_early_reuse_max_fee_mist = fee_mist;
     }
 }
