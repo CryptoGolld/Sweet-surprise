@@ -188,10 +188,10 @@ Bonding Curve Math (Modified Quadratic with Base Price):
   - Gas cost is predictable and acceptable on Sui
 - **Token Economics at Graduation**: 
   - Bonding curve sales: ~737M tokens (sold to reach graduation target)
-  - Team allocation: 2M tokens (0.2% - goes to team wallet)
-  - Cetus pool: ~197M tokens (optimized for 10% price bump above final curve price)
-  - **Burned tokens**: ~64M tokens never minted (6.4% supply reduction - deflationary!)
-  - **Total circulating**: ~936M tokens
+  - Team allocation: 2M tokens (0.2% - 1M dev + 1M community, paid at graduation)
+  - Cetus pool: ~207M tokens (20.7% - optimized for 10% price bump above final curve price)
+  - **Burned tokens**: ~54M tokens never minted (5.4% supply reduction - deflationary!)
+  - **Total circulating**: ~946M tokens (94.6%)
 - Implementation Details:
   - Uses u128 intermediates for safety; converts to u64 as needed
   - Rounds tokens_out down; clamps at `TOTAL_SUPPLY`; refunds residual SUI to caller
@@ -348,7 +348,8 @@ Sui uses generic type parameters - users must publish a coin module to get `Trea
 POST /api/compile-token
 Body: { name, ticker, symbol, description }
 
-// API creates Move package structure
+// API creates Move package structure with SuiLFG signature
+// Description automatically appended with: " | Launched on SuiLFG.com"
 // Calls: sui move build --path /tmp/package
 // Returns: Compiled bytecode
 
@@ -358,6 +359,15 @@ Response: {
   dependencies: ['0x1', '0x2'] 
 }
 ```
+
+**Platform Signature:**
+All tokens launched through SuiLFG automatically include platform signature in coin metadata:
+- Description format: `{user_description} | Launched on SuiLFG.com`
+- Icon URL includes SuiLFG watermark (optional)
+- Coin metadata frozen with platform attribution
+- Similar to Pump.fun's "@pump" identifier
+- Builds brand recognition across ecosystem
+- Users can verify token launched via official platform
 
 **Note**: This is a web service API (on-demand), NOT a 24/7 background bot. The API only runs when users request compilation.
 
@@ -709,8 +719,8 @@ When users search for tickers, results split into:
 - **Starting Market Cap**: 1,000 SUI (~$3,400) - immediate price discovery
 - **Graduation Target**: 13,333 SUI raised → ~55,000 SUI market cap  
 - **Token Allocation**:
-  - Bonding curve sales: 737M tokens (73.7% - to reach graduation)
-  - Dev + Community allocation: 2M tokens (0.2% - paid at graduation)
+  - Bonding curve sales: 737M tokens (73.7% - sold to reach graduation)
+  - Team allocation: 2M tokens (0.2% - 1M dev + 1M community, paid at graduation)
   - Cetus pool: ~207M tokens (20.7% - optimized for 10% price bump)
   - Burned tokens: ~54M tokens never minted (deflationary - 5.4% supply reduction)
   - **Total circulating**: ~946M tokens (94.6%)
@@ -761,8 +771,8 @@ When users search for tickers, results split into:
 | **Graduation Target** | 13.3k SUI (~$45k) | 85 SOL (~$15-20k) |
 | **Graduation MC** | ~55k SUI (~$187k) | ~$69k |
 | **Team Allocation** | 0.2% (2M tokens) | 0% |
-| **Total Fees** | 5% + 1 SUI first buyer | ~1.5-2% |
-| **Token Burn** | Yes (6.4% supply reduction) | No |
+| **Total Fees** | 3% + 1 SUI first buyer | ~1.5-2% |
+| **Token Burn** | Yes (5.4% supply reduction) | No |
 | **Pool Bump** | 10% (configurable) | Variable |
 | **Price Discovery** | Immediate (base price) | Starts near zero |
 | **Price Calculation** | Binary search | Direct formula |
