@@ -34,7 +34,7 @@ module suilfg_launch::platform_config {
     public struct AdminCap has key, store { id: UID }
 
     const DEFAULT_FIRST_BUYER_FEE_MIST: u64 = 1_000_000_000; // 1 SUI
-    const DEFAULT_PLATFORM_FEE_BPS: u64 = 450; // 4.5%
+    const DEFAULT_PLATFORM_FEE_BPS: u64 = 250; // 2.5%
     const DEFAULT_CREATOR_FEE_BPS: u64 = 50; // 0.5%
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
     const DEFAULT_M_NUM: u64 = 1; // default m for blueprint economics

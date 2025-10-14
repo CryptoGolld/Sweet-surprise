@@ -735,8 +735,9 @@ When users search for tickers, results split into:
 ### 6.3 Fee Parameters
 - Defaults:
   - `first_buyer_fee_mist = 1_000_000_000` (1 SUI)
-  - `default_platform_fee_bps = 450` (4.5%)
+  - `default_platform_fee_bps = 250` (2.5%)
   - `default_creator_fee_bps = 50` (0.5%)
+  - **Total trading fee: 3%** (competitive with major platforms)
   - `graduation_reward_sui = 100 SUI` (unused, legacy parameter)
   - `default_cooldown_ms` = 7 days
   - `platform_cut_bps_on_graduation = 1000` (10% platform share at graduation)
