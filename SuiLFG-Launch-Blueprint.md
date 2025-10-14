@@ -274,6 +274,58 @@ Admin Functions:
 - IPFS: $0-20/month
 - **Total: $15-60/month** (covered by 1-2 graduations!)
 
+### Cetus Integration & LP Management
+
+**Phase 1 (Current Implementation):**
+- `seed_pool_prepare()` mints team tokens and prepares pool assets
+- Assets sent to `lp_recipient_address` (configurable wallet)
+- LP recipient manually creates Cetus pool
+- Simple, works immediately
+
+**Phase 2 (Planned - Direct Integration):**
+- Implement `seed_pool_and_create_cetus_with_lock<T>()`
+- Contract directly calls Cetus to create pool
+- Adds liquidity with **100-year lock** (permanent!)
+- LP Position NFT sent to `lp_recipient_address`
+- Fully on-chain, permissionless graduation
+
+**100-Year LP Lock Benefits:**
+```
+✅ Liquidity locked forever (can't rug pull)
+✅ Platform still earns 0.3% LP fees (both SUI + tokens)
+✅ Maximum user trust ("locked in code")
+✅ Fees collectible anytime via permissionless function
+✅ Same revenue, more trust
+```
+
+**LP Fee Collection:**
+```move
+public entry fun collect_lp_fees<T>(
+    lp_position: &mut Position,
+    pool: &mut CetusPool,
+    ctx: &mut TxContext
+) {
+    // Collect accumulated fees (0.3% of all trades)
+    let (sui_fees, token_fees) = cetus::collect_fees(pool, lp_position);
+    
+    // Send to platform (anyone can trigger this!)
+    let recipient = get_lp_recipient_address(cfg);
+    transfer::public_transfer(sui_fees, recipient);
+    transfer::public_transfer(token_fees, recipient);
+}
+```
+
+**Revenue from LP Fees:**
+- Token doing 10k SUI/day volume → 30 SUI/day in LP fees
+- 20 graduated tokens → 600 SUI/day (~$2,040/day)
+- Passive income forever, even with locked LP!
+
+**LP Recipient Configuration:**
+- Configurable via `set_lp_recipient_address(admin, cfg, address)`
+- Can be: Main treasury, separate vault, multi-sig, or DAO
+- Receives LP Position NFT and can collect fees
+- Cannot withdraw liquidity if using 100-year lock (builds trust)
+
 ### Token Creation Flow
 
 **Technical Implementation:**
@@ -677,6 +729,8 @@ When users search for tickers, results split into:
   - `ticker_max_lock_ms = 7 days` (maximum ticker lock period)
   - `ticker_early_reuse_base_fee_mist = 33 SUI` (starting reuse fee)
   - `ticker_early_reuse_max_fee_mist = 666 SUI` (maximum fee cap)
+- **LP Management**:
+  - `lp_recipient_address` - wallet that receives LP Position NFTs (configurable)
 
 ### 6.3 Fee Parameters
 - Defaults:
@@ -719,7 +773,146 @@ When users search for tickers, results split into:
 - Immediate price discovery prevents "penny stock" perception
 - Slightly higher fees justified by superior economics
 
-## 9. Roadmap — Next Iterations
+## 9. Phase 2: Direct Cetus Integration Implementation Guide
+
+### Overview
+Phase 2 upgrades graduation to be fully on-chain by having the smart contract directly create Cetus pools with 100-year locks.
+
+### Implementation Steps
+
+**1. Add Cetus Dependency**
+```toml
+# Move.toml
+[dependencies]
+Cetus = { git = "https://github.com/CetusProtocol/cetus-clmm-sui.git", subdir = "sui", rev = "main" }
+```
+
+**2. Import Cetus Modules**
+```move
+// bonding_curve.move
+use cetus_clmm::pool;
+use cetus_clmm::config::GlobalConfig as CetusGlobalConfig;
+use cetus_clmm::factory::Pools as CetusPools;
+use cetus_clmm::position::Position;
+```
+
+**3. Implement seed_pool_and_create_cetus_with_lock**
+```move
+public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
+    cfg: &PlatformConfig,
+    curve: &mut BondingCurve<T>,
+    cetus_config: &CetusGlobalConfig,
+    cetus_pools: &mut CetusPools,
+    bump_bps: u64,
+    team_address: address,
+    clock: &Clock,
+    ctx: &mut TxContext
+) {
+    // Same team allocation logic as seed_pool_prepare...
+    
+    // Calculate 100-year lock timestamp
+    let lock_until = clock::timestamp_ms(clock) + (100 * 365 * 24 * 60 * 60 * 1000);
+    
+    // Create pool and add liquidity with lock
+    let (locked_lp_position, leftover_sui, leftover_tokens) = cetus_clmm::pool::add_liquidity_with_lock<T, SUI>(
+        cetus_config,
+        cetus_pools,
+        pool_tokens,
+        pool_sui,
+        tick_lower,
+        tick_upper,
+        lock_until, // 100-year lock!
+        clock,
+        ctx
+    );
+    
+    // Send locked LP to configured recipient
+    let lp_recipient = platform_config::get_lp_recipient_address(cfg);
+    transfer::public_transfer(locked_lp_position, lp_recipient);
+    
+    // Handle leftovers
+    if (coin::value(&leftover_sui) > 0) {
+        transfer::public_transfer(leftover_sui, lp_recipient);
+    } else { coin::destroy_zero(leftover_sui); };
+    
+    if (coin::value(&leftover_tokens) > 0) {
+        transfer::public_transfer(leftover_tokens, lp_recipient);
+    } else { coin::destroy_zero(leftover_tokens); };
+    
+    curve.lp_seeded = true;
+}
+```
+
+**4. Add Permissionless Fee Collection**
+```move
+public entry fun collect_lp_fees<T: drop + store>(
+    cfg: &PlatformConfig,
+    lp_position: &mut Position,
+    pool: &mut Pool<T, SUI>,
+    ctx: &mut TxContext
+) {
+    // Collect accumulated fees (works even with locked LP!)
+    let (sui_fees, token_fees) = cetus_clmm::position::collect_fee<T, SUI>(
+        cfg,
+        pool,
+        lp_position,
+        ctx
+    );
+    
+    // Send to LP recipient
+    let recipient = platform_config::get_lp_recipient_address(cfg);
+    transfer::public_transfer(sui_fees, recipient);
+    transfer::public_transfer(token_fees, recipient);
+}
+```
+
+**5. Update Graduation Bot**
+- Call `seed_pool_and_create_cetus_with_lock()` instead of `seed_pool_prepare()`
+- Periodically call `collect_lp_fees()` (weekly) to claim accumulated fees
+- Fully automated end-to-end!
+
+### Benefits of Phase 2
+
+**For Platform:**
+- ✅ Fully decentralized (no manual pool creation)
+- ✅ Permissionless (anyone can graduate tokens)
+- ✅ Simpler operations (no manual work)
+- ✅ Ongoing LP fee revenue (0.3% of volume forever)
+- ✅ Professional infrastructure
+
+**For Users:**
+- ✅ Maximum trust (liquidity locked 100 years)
+- ✅ Transparent (lock verifiable on-chain)
+- ✅ Permanent liquidity guaranteed
+- ✅ No rug pull risk
+- ✅ Higher confidence in platform
+
+**Revenue Impact:**
+- Graduation fees: 1,293 SUI per token (unchanged)
+- Interface fees: 1% of post-grad volume (unchanged)
+- **NEW**: LP fees: 0.3% of post-grad volume (passive income!)
+- **Total**: 1.3% of all Cetus volume forever
+
+### LP Position Management
+
+**What LP Recipient Gets:**
+1. **One Position NFT per graduated token** - proof of liquidity ownership
+2. **Locked for 100 years** - can't withdraw, builds trust
+3. **Can collect fees anytime** - 0.3% of all trades in SUI + tokens
+4. **Fees in both assets** - proportional to buy/sell direction
+
+**Example Fee Collection:**
+- Pool does 10k SUI volume/day
+- Fees: 30 SUI + ~$DOGE tokens daily
+- Weekly collection: ~210 SUI + tokens
+- Annual from one token: ~10,950 SUI (~$37k)
+
+**Fee Collection Strategy:**
+- Manual: Call collect_lp_fees() weekly via admin
+- Automated: Bot calls it daily
+- Permissionless: Any user can trigger, fees still go to LP recipient
+
+## 10. Roadmap — Next Iterations
 - Complete Auction mechanics for tickers (bid, outbid, finalize, claim)
 - Strengthen math using thoroughly tested u128 helpers across the codebase
 - Gas/size optimizations and event indexing for analytics

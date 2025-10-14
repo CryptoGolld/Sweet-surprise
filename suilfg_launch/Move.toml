@@ -5,6 +5,9 @@ published-at = ""
 edition = "2024"
 
 [dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+# Cetus = { git = "https://github.com/CetusProtocol/cetus-clmm-sui.git", subdir = "sui", rev = "main" }
+# ^ Uncomment for Phase 2 when implementing direct Cetus pool creation with 100-year lock
 
 [addresses]
 suilfg_launch =  "0x0"

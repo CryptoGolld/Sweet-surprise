@@ -351,12 +351,28 @@ module suilfg_launch::bonding_curve {
         let bal_sui_lp = balance::split(&mut curve.sui_reserve, sui_lp);
         let sui_lp_coin = coin::from_balance(bal_sui_lp, ctx);
         
-        // Transfer both to treasury custody; external bot can add liquidity from there
-        let treas = platform_config::get_treasury_address(cfg);
-        transfer::public_transfer(token_lp, treas);
-        transfer::public_transfer(sui_lp_coin, treas);
+        // Transfer both to LP recipient (configurable wallet for liquidity management)
+        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
+        transfer::public_transfer(token_lp, lp_recipient);
+        transfer::public_transfer(sui_lp_coin, lp_recipient);
         curve.lp_seeded = true;
     }
+
+    // TODO: Phase 2 - Cetus Direct Integration
+    // Implement seed_pool_and_create_cetus_with_lock() that:
+    // 1. Mints team allocation
+    // 2. Creates Cetus pool using cetus_clmm::pool::create_pool
+    // 3. Adds liquidity with 100-year lock using add_liquidity_with_lock
+    // 4. LP Position NFT sent to lp_recipient_address
+    // 5. Permissionless fee collection via collect_lp_fees function
+    // 
+    // Benefits:
+    // - Fully on-chain, no off-chain coordination
+    // - 100-year lock builds maximum trust
+    // - Platform still earns 0.3% LP fees
+    // - Anyone can trigger graduation + pool creation
+    //
+    // See blueprint Section 4 for full implementation details
 
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
         // p(s) = base_price + (m_num/m_den) * s^2
