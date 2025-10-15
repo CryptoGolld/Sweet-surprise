@@ -371,6 +371,82 @@ All tokens launched through SuiLFG automatically include platform signature in c
 
 **Note**: This is a web service API (on-demand), NOT a 24/7 background bot. The API only runs when users request compilation.
 
+### Price API for Wallet Integration
+
+**Purpose**: Enable wallets (Suish, Sui Wallet, Suiet) to display token prices and values for bonding curve tokens
+
+**Problem**: Wallets can't automatically read prices from custom bonding curve contracts - tokens show with no value
+
+**Solution**: Public Price API that wallets can integrate
+
+**API Endpoints:**
+```
+GET /api/v1/token/{coin_type}/price
+GET /api/v1/token/{coin_type}/metadata
+GET /api/v1/tokens/list (all tokens with prices)
+```
+
+**Example Response:**
+```json
+{
+  "symbol": "DOGE",
+  "name": "Doge Killer",
+  "coin_type": "0x123::doge::DOGE",
+  "price_sui": 0.000052,
+  "price_usd": 0.000177,
+  "market_cap_sui": 38525,
+  "volume_24h_sui": 2345,
+  "status": "bonding",
+  "platform": "suilfg",
+  "logo_url": "ipfs://...",
+  "launched_at": "2024-10-12T00:00:00Z"
+}
+```
+
+**Implementation:**
+```javascript
+// Add to EC2 backend
+app.get('/api/v1/token/:coinType/price', async (req, res) => {
+  const token = await supabase
+    .from('tokens')
+    .select('*')
+    .eq('coin_type', req.params.coinType)
+    .single();
+  
+  // Get real-time price
+  const price = token.status === 'bonding' 
+    ? await getBondingCurvePrice(token.curve_id)
+    : await getCetusPrice(token.pool_id);
+  
+  res.json({
+    symbol: token.ticker,
+    price_sui: price,
+    price_usd: price * getCurrentSuiPrice(),
+    // ... other fields
+  });
+});
+```
+
+**Wallet Integration Process:**
+1. Build and document public API
+2. Contact wallet teams (Suish, Sui Wallet, Suiet, Ethos)
+3. Provide API documentation and examples
+4. Wallets integrate and display prices
+5. Users see token values in their wallets
+
+**Timeline:**
+- Launch: Prices on your website only
+- Week 2-4: First wallet integrations
+- Month 2+: Full wallet support
+
+**Benefits:**
+- ✅ Better UX (users see value in wallet)
+- ✅ More professional
+- ✅ Increased legitimacy
+- ✅ Standard practice (Pump.fun does this)
+
+**Note**: Post-graduation tokens automatically show prices (Cetus API, DEXScreener). This API is primarily for bonding curve phase.
+
 ### Other Infrastructure
 - IPFS Integration: Image upload and pinning for token icons/metadata
 - Admin PTB Scripts: Full coverage for all admin functions and periodic tasks
