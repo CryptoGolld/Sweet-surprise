@@ -323,11 +323,14 @@ module suilfg_launch::bonding_curve {
         // Note: remaining SUI stays in reserve for LP seeding
     }
 
+    /// Legacy function for manual pool creation (kept for backwards compatibility)
+    /// DEPRECATED: Use seed_pool_and_create_cetus_with_lock() instead
+    /// 
+    /// SECURITY: Team allocation sent to treasury_address (from config)
     public entry fun seed_pool_prepare<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         bump_bps: u64,
-        team_address: address,
         ctx: &mut TxContext
     ) {
         if (!curve.graduated || curve.lp_seeded == true) { abort 9002; } else {};
@@ -335,8 +338,10 @@ module suilfg_launch::bonding_curve {
         let use_bps = if (bump_bps == 0) { platform_config::get_default_cetus_bump_bps(cfg) } else { bump_bps };
         
         // First, mint and transfer team allocation
+        // SECURITY: Always sent to treasury_address from config (admin controlled)
         let team_allocation = platform_config::get_team_allocation_tokens(cfg);
         let team_tokens: Coin<T> = coin::mint<T>(&mut curve.treasury, team_allocation, ctx);
+        let team_address = platform_config::get_treasury_address(cfg);
         transfer::public_transfer(team_tokens, team_address);
         
         // Update token supply to include team allocation (FIX: was missing!)
@@ -385,14 +390,15 @@ module suilfg_launch::bonding_curve {
     /// Parameters:
     /// - cetus_global_config: Cetus protocol config object
     /// - bump_bps: Optional price bump (0-1000 bps), usually 0
-    /// - team_recipient: Where to send team allocation tokens
     /// - tick_lower/tick_upper: Liquidity range (typically full range)
+    /// 
+    /// SECURITY: Team allocation sent to treasury_address (from config)
+    /// This prevents attackers from stealing team tokens by passing their own address
     public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         cetus_global_config: &GlobalConfig,
         bump_bps: u64,
-        team_recipient: address,
         tick_lower: u32,
         tick_upper: u32,
         clock: &Clock,
@@ -402,8 +408,10 @@ module suilfg_launch::bonding_curve {
         assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
         
         // 1. Mint team allocation (1M dev + 1M community = 2M total)
+        // SECURITY: Always sent to treasury_address from config (admin controlled)
         let team_allocation = platform_config::get_team_allocation(cfg);
         let team_tokens = coin::mint(&mut curve.treasury, team_allocation, ctx);
+        let team_recipient = platform_config::get_treasury_address(cfg);
         transfer::public_transfer(team_tokens, team_recipient);
         
         // Update token supply to reflect minted tokens
