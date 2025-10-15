@@ -223,12 +223,16 @@ Admin Functions:
 
 ### Bot Infrastructure
 
-**Graduation Bot (Highly Recommended):**
+**Graduation Bot (Essential for UX):**
 - Monitors tokens reaching graduation target (13,333 SUI)
-- Automatically calls: `try_graduate()` → `distribute_payouts()` → `seed_pool_prepare()`
-- Ensures smooth, instant graduation experience
-- Cost: ~$5/month hosting + ~0.01 SUI gas per graduation
-- **Note**: Functions are permissionless - bot not technically required, but essential for good UX
+- Automatically calls: `try_graduate()` → `distribute_payouts()` → `seed_pool_and_create_cetus_with_lock()`
+- **Everything is automatic and on-chain:**
+  - Creates Cetus pool directly from smart contract
+  - Adds liquidity with 100-year lock (maximum trust!)
+  - LP Position NFT sent to configured wallet
+  - Platform earns 0.3% LP fees forever
+- Cost: ~$5/month hosting + ~0.03 SUI gas per graduation
+- **Note**: Functions are permissionless - anyone can trigger, but bot ensures instant UX
 
 **Compilation Bot (NOT NEEDED):**
 - No 24/7 compilation service required
@@ -860,110 +864,59 @@ When users search for tickers, results split into:
 - Immediate price discovery prevents "penny stock" perception
 - Slightly higher fees justified by superior economics
 
-## 9. Phase 2: Direct Cetus Integration Implementation Guide
+## 9. Cetus Integration - Automatic Pool Creation with 100-Year Lock
 
 ### Overview
-Phase 2 upgrades graduation to be fully on-chain by having the smart contract directly create Cetus pools with 100-year locks.
+✅ **FULLY IMPLEMENTED** - The smart contract directly creates Cetus pools with 100-year locks upon graduation.
 
-### Implementation Steps
+### What's Implemented
 
-**1. Add Cetus Dependency**
+**1. Cetus Dependency Added** ✅
 ```toml
 # Move.toml
 [dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 Cetus = { git = "https://github.com/CetusProtocol/cetus-clmm-sui.git", subdir = "sui", rev = "main" }
 ```
 
-**2. Import Cetus Modules**
+**2. Cetus Imports Added** ✅
 ```move
 // bonding_curve.move
-use cetus_clmm::pool;
-use cetus_clmm::config::GlobalConfig as CetusGlobalConfig;
-use cetus_clmm::factory::Pools as CetusPools;
-use cetus_clmm::position::Position;
+use cetus_clmm::config::GlobalConfig;
+use cetus_clmm::pool::{Self as cetus_pool, Pool};
+use cetus_clmm::position::{Self as cetus_position, Position};
 ```
 
-**3. Implement seed_pool_and_create_cetus_with_lock**
+**3. Full Implementation** ✅
+See `bonding_curve.move` for full implementation. Key features:
+
+- **Automatic pool creation**: Creates Cetus CLMM pool directly from contract
+- **100-year lock**: Lock duration = 3,153,600,000,000 ms (100 years!)
+- **Configurable recipient**: LP Position NFT sent to `lp_recipient_address`
+- **Fee collection**: Platform earns 0.3% LP fees forever via `collect_lp_fees()`
+- **Permissionless**: Anyone can trigger graduation and pool creation
+- **Full range liquidity**: Typically uses full price range for maximum liquidity
+
+**Key Functions:**
 ```move
-public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
-    cfg: &PlatformConfig,
-    curve: &mut BondingCurve<T>,
-    cetus_config: &CetusGlobalConfig,
-    cetus_pools: &mut CetusPools,
-    bump_bps: u64,
-    team_address: address,
-    clock: &Clock,
-    ctx: &mut TxContext
-) {
-    // Same team allocation logic as seed_pool_prepare...
-    
-    // Calculate 100-year lock timestamp
-    let lock_until = clock::timestamp_ms(clock) + (100 * 365 * 24 * 60 * 60 * 1000);
-    
-    // Create pool and add liquidity with lock
-    let (locked_lp_position, leftover_sui, leftover_tokens) = cetus_clmm::pool::add_liquidity_with_lock<T, SUI>(
-        cetus_config,
-        cetus_pools,
-        pool_tokens,
-        pool_sui,
-        tick_lower,
-        tick_upper,
-        lock_until, // 100-year lock!
-        clock,
-        ctx
-    );
-    
-    // Send locked LP to configured recipient
-    let lp_recipient = platform_config::get_lp_recipient_address(cfg);
-    transfer::public_transfer(locked_lp_position, lp_recipient);
-    
-    // Handle leftovers
-    if (coin::value(&leftover_sui) > 0) {
-        transfer::public_transfer(leftover_sui, lp_recipient);
-    } else { coin::destroy_zero(leftover_sui); };
-    
-    if (coin::value(&leftover_tokens) > 0) {
-        transfer::public_transfer(leftover_tokens, lp_recipient);
-    } else { coin::destroy_zero(leftover_tokens); };
-    
-    curve.lp_seeded = true;
-}
+// Main graduation function - creates pool with 100-year lock
+public entry fun seed_pool_and_create_cetus_with_lock<T>(...)
+
+// Permissionless fee collection - anyone can trigger
+public entry fun collect_lp_fees<T>(...)
 ```
 
-**4. Add Permissionless Fee Collection**
-```move
-public entry fun collect_lp_fees<T: drop + store>(
-    cfg: &PlatformConfig,
-    lp_position: &mut Position,
-    pool: &mut Pool<T, SUI>,
-    ctx: &mut TxContext
-) {
-    // Collect accumulated fees (works even with locked LP!)
-    let (sui_fees, token_fees) = cetus_clmm::position::collect_fee<T, SUI>(
-        cfg,
-        pool,
-        lp_position,
-        ctx
-    );
-    
-    // Send to LP recipient
-    let recipient = platform_config::get_lp_recipient_address(cfg);
-    transfer::public_transfer(sui_fees, recipient);
-    transfer::public_transfer(token_fees, recipient);
-}
-```
-
-**5. Update Graduation Bot**
-- Call `seed_pool_and_create_cetus_with_lock()` instead of `seed_pool_prepare()`
-- Periodically call `collect_lp_fees()` (weekly) to claim accumulated fees
+**5. Graduation Bot Updated** ✅
+- Calls `seed_pool_and_create_cetus_with_lock()` for full automation
+- Optionally calls `collect_lp_fees()` periodically (weekly) to claim accumulated 0.3% LP fees
 - Fully automated end-to-end!
 
-### Benefits of Phase 2
+### Benefits of This Implementation
 
 **For Platform:**
-- ✅ Fully decentralized (no manual pool creation)
-- ✅ Permissionless (anyone can graduate tokens)
-- ✅ Simpler operations (no manual work)
+- ✅ Fully decentralized (no manual pool creation) 
+- ✅ Permissionless (anyone can call graduation functions)
+- ✅ Zero manual operations (everything on-chain)
 - ✅ Ongoing LP fee revenue (0.3% of volume forever)
 - ✅ Professional infrastructure
 
@@ -1024,7 +977,8 @@ public entry fun collect_lp_fees<T: drop + store>(
 - Initialize `PLATFORM_CONFIG` and `TICKER_REGISTRY`
 - Set initial parameters in `PlatformConfig` (verify graduation target = 13,333 SUI)
 - Smoke test: Create a token, buy/sell, freeze, whitelist exit, graduate, seed pool
-- Configure Graduation Bot with treasury signer
+- Configure Graduation Bot to monitor and trigger graduations
+- Set up LP recipient wallet to receive Position NFT and fees
 - Verify team wallet address for allocations
 - Test complete graduation flow including team allocation and token burn
 
