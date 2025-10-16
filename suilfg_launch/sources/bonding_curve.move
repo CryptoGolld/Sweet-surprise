@@ -378,12 +378,25 @@ module suilfg_launch::bonding_curve {
         curve.lp_seeded = true;
     }
 
-    /// TODO: CETUS INTEGRATION
-    /// Waiting for public Cetus repo or correct dependency
-    /// For now, use seed_pool_prepare() and create pools manually
-    /// This can be added later via contract upgrade
-    
-    /*
+    /// Creates Cetus pool with 100-year liquidity lock
+    /// This is the PRIMARY graduation function - fully automatic, on-chain
+    /// 
+    /// Steps:
+    /// 1. Mints team allocation (1M dev + 1M community)
+    /// 2. Creates Cetus CLMM pool
+    /// 3. Adds liquidity with 100-year lock (maximum trust)
+    /// 4. LP Position NFT sent to lp_recipient_address
+    /// 5. Platform earns 0.3% LP fees (permissionless collection)
+    ///
+    /// Parameters:
+    /// - cetus_global_config: Cetus protocol config object (validated against config!)
+    /// - bump_bps: Optional price bump (0-1000 bps), usually 0
+    /// - tick_lower/tick_upper: Liquidity range (typically full range)
+    /// 
+    /// SECURITY FEATURES:
+    /// 1. Team allocation sent to treasury_address (from config)
+    /// 2. Cetus config validated against admin-set address
+    /// This prevents ALL fund theft attacks!
     public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
