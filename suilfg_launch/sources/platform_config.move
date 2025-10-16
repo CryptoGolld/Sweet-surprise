@@ -101,6 +101,7 @@ module suilfg_launch::platform_config {
             ticker_early_reuse_base_fee_mist: DEFAULT_TICKER_EARLY_REUSE_BASE_FEE_MIST,
             ticker_early_reuse_max_fee_mist: DEFAULT_TICKER_EARLY_REUSE_MAX_FEE_MIST,
             lp_recipient_address: sender(ctx), // Default to deployer, can be changed
+            cetus_global_config_id: @0x0, // MUST be set after deployment!
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
