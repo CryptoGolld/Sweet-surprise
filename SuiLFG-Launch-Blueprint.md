@@ -223,16 +223,105 @@ Admin Functions:
 
 ### Bot Infrastructure
 
-**Graduation Bot (Essential for UX):**
-- Monitors tokens reaching graduation target (13,333 SUI)
-- Automatically calls: `try_graduate()` → `distribute_payouts()` → `seed_pool_and_create_cetus_with_lock()`
-- **Everything is automatic and on-chain:**
-  - Creates Cetus pool directly from smart contract
-  - Adds liquidity with 100-year lock (maximum trust!)
-  - LP Position NFT sent to configured wallet
-  - Platform earns 0.3% LP fees forever
-- Cost: ~$5/month hosting + ~0.03 SUI gas per graduation
-- **Note**: Functions are permissionless - anyone can trigger, but bot ensures instant UX
+**Graduation Bot (Optional for Better UX):**
+
+**What it does:** Monitors blockchain and calls graduation functions automatically
+
+**Bot Code Example:**
+```javascript
+// Simple graduation bot (runs on EC2 with your backend)
+const { SuiClient } = require('@mysten/sui.js');
+
+const CETUS_GLOBAL_CONFIG = '0xCETUS_CONFIG_ID'; // Get from Cetus docs
+const PLATFORM_CONFIG = '0xYOUR_PLATFORM_CONFIG_ID';
+const GRADUATION_TARGET = 13_333_000_000_000; // 13,333 SUI in mist
+
+async function graduationBot() {
+  const client = new SuiClient({ url: 'https://fullnode.testnet.sui.io' });
+  
+  while (true) {
+    // Get tokens near graduation from your Supabase
+    const tokens = await supabase
+      .from('tokens')
+      .select('*')
+      .gte('sui_reserve', GRADUATION_TARGET)
+      .eq('graduated', false);
+    
+    for (const token of tokens) {
+      try {
+        // Step 1: Mark as graduated
+        await wallet.signAndExecuteTransactionBlock({
+          transactionBlock: {
+            moveCall: {
+              target: `${PACKAGE_ID}::bonding_curve::try_graduate`,
+              typeArguments: [token.coin_type],
+              arguments: [PLATFORM_CONFIG, token.curve_id]
+            }
+          }
+        });
+        
+        // Step 2: Distribute payouts
+        await wallet.signAndExecuteTransactionBlock({
+          transactionBlock: {
+            moveCall: {
+              target: `${PACKAGE_ID}::bonding_curve::distribute_payouts`,
+              typeArguments: [token.coin_type],
+              arguments: [PLATFORM_CONFIG, token.curve_id]
+            }
+          }
+        });
+        
+        // Step 3: Create Cetus pool with 100-year lock (AUTOMATIC!)
+        await wallet.signAndExecuteTransactionBlock({
+          transactionBlock: {
+            moveCall: {
+              target: `${PACKAGE_ID}::bonding_curve::seed_pool_and_create_cetus_with_lock`,
+              typeArguments: [token.coin_type],
+              arguments: [
+                PLATFORM_CONFIG,
+                token.curve_id,
+                CETUS_GLOBAL_CONFIG,  // Cetus protocol config
+                0,                     // bump_bps (0 = no price bump)
+                -443636,              // tick_lower (full range)
+                443636,               // tick_upper (full range)
+                '0x6'                 // Clock object (shared)
+              ]
+            }
+          }
+        });
+        
+        console.log(`✅ Token ${token.ticker} graduated!`);
+      } catch (err) {
+        console.error(`Failed to graduate ${token.ticker}:`, err);
+      }
+    }
+    
+    await sleep(10000); // Check every 10 seconds
+  }
+}
+```
+
+**What is CETUS_GLOBAL_CONFIG?**
+- It's Cetus protocol's shared configuration object
+- Contains pool factory, fee tiers, protocol settings
+- It's a **shared object on Sui** (not hardcoded because it's not ours!)
+- Get the object ID from [Cetus docs](https://cetus-1.gitbook.io/cetus-docs)
+  - Testnet: Check Cetus documentation
+  - Mainnet: Check Cetus documentation
+- You pass it when calling `seed_pool_and_create_cetus_with_lock()`
+
+**Why not hardcoded?**
+- It's Cetus's object, not ours (we don't control the ID)
+- Different on testnet vs mainnet
+- Cetus might upgrade it
+- Better to pass as parameter (flexibility)
+
+**Alternative to Bot:**
+- Add "Graduate" button in UI (users click it manually)
+- Functions are permissionless - anyone can call them
+- Bot just provides instant UX
+
+**Cost:** $0 (runs with your backend) + ~0.03 SUI gas per graduation
 
 **Compilation Bot (NOT NEEDED):**
 - No 24/7 compilation service required
@@ -952,7 +1041,7 @@ public entry fun collect_lp_fees<T>(...)
 - Automated: Bot calls it daily
 - Permissionless: Any user can trigger, fees still go to LP recipient
 
-## 10. Roadmap — Next Iterations
+## 14. Roadmap — Next Iterations
 - Complete Auction mechanics for tickers (bid, outbid, finalize, claim)
 - Strengthen math using thoroughly tested u128 helpers across the codebase
 - Gas/size optimizations and event indexing for analytics
@@ -971,18 +1060,47 @@ public entry fun collect_lp_fees<T>(...)
 - Off-chain tests: PTB scripts through a localnet/devnet with event assertions
 - **NEW**: Deflationary burn verification (check unminted tokens match expected)
 
-## 11. Deployment Checklist
+## 11. Security Notes
+
+**Critical Security Design:**
+All graduation functions are **permissionless** (anyone can call), but **all fund destinations come from config**:
+
+```move
+// ✅ SECURE: Team allocation
+let team_recipient = platform_config::get_treasury_address(cfg);
+transfer::public_transfer(team_tokens, team_recipient);
+
+// ✅ SECURE: LP Position NFT
+let lp_recipient = platform_config::get_lp_recipient_address(cfg);
+transfer::public_transfer(position_nft, lp_recipient);
+```
+
+**Why this is secure:**
+- All recipients read from `PlatformConfig`
+- `PlatformConfig` controlled by `AdminCap`
+- Only you have `AdminCap`
+- Attackers can trigger functions, but **cannot steal funds**
+
+**Why permissionless is good:**
+- Decentralized (no single point of failure)
+- Resilient (even if your bot fails, community can help)
+- Trustless (anyone can verify and trigger)
+- Simple (no complex access control)
+
+## 12. Deployment Checklist
 - Confirm package edition = 2024 and compile against pinned Sui framework
 - Publish and capture `UpgradeCap` securely
 - Initialize `PLATFORM_CONFIG` and `TICKER_REGISTRY`
+- **CRITICAL**: Set `treasury_address` (receives team allocations)
+- **CRITICAL**: Set `lp_recipient_address` (receives LP NFT and fees)
 - Set initial parameters in `PlatformConfig` (verify graduation target = 13,333 SUI)
+- Get Cetus GlobalConfig object ID from Cetus documentation
 - Smoke test: Create a token, buy/sell, freeze, whitelist exit, graduate, seed pool
-- Configure Graduation Bot to monitor and trigger graduations
-- Set up LP recipient wallet to receive Position NFT and fees
-- Verify team wallet address for allocations
 - Test complete graduation flow including team allocation and token burn
+- Verify team tokens go to treasury_address (not attacker address!)
+- Verify LP NFT goes to lp_recipient_address
 
-## 12. Audit Pointers
+## 13. Audit Pointers
 - Access control: ensure all admin paths require `&AdminCap`
 - Math correctness: buy/sell integrals, inverse rounding, refunds/dust
 - **NEW**: Binary search convergence and termination guarantees
