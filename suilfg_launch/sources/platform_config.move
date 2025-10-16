@@ -8,6 +8,7 @@ module suilfg_launch::platform_config {
     public struct PlatformConfig has key {
         id: UID,
         treasury_address: address,
+        lp_recipient_address: address,
         creation_is_paused: bool,
         first_buyer_fee_mist: u64,
         default_platform_fee_bps: u64,
@@ -28,6 +29,8 @@ module suilfg_launch::platform_config {
         ticker_max_lock_ms: u64,
         ticker_early_reuse_base_fee_mist: u64,
         ticker_early_reuse_max_fee_mist: u64,
+        // SECURITY: Hardcoded Cetus config (admin controlled)
+        cetus_global_config_id: address,
     }
 
     /// Capability that authorizes admin-only operations
@@ -73,6 +76,7 @@ module suilfg_launch::platform_config {
     public fun get_ticker_max_lock_ms(cfg: &PlatformConfig): u64 { cfg.ticker_max_lock_ms }
     public fun get_ticker_early_reuse_base_fee_mist(cfg: &PlatformConfig): u64 { cfg.ticker_early_reuse_base_fee_mist }
     public fun get_ticker_early_reuse_max_fee_mist(cfg: &PlatformConfig): u64 { cfg.ticker_early_reuse_max_fee_mist }
+    public fun get_cetus_global_config_id(cfg: &PlatformConfig): address { cfg.cetus_global_config_id }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -177,5 +181,12 @@ module suilfg_launch::platform_config {
 
     public entry fun set_lp_recipient_address(_admin: &AdminCap, cfg: &mut PlatformConfig, addr: address) {
         cfg.lp_recipient_address = addr;
+    }
+
+    /// CRITICAL SECURITY: Set the official Cetus GlobalConfig address
+    /// This prevents attackers from passing malicious pool factories
+    /// Get the correct address from Cetus documentation for your network
+    public entry fun set_cetus_global_config_id(_admin: &AdminCap, cfg: &mut PlatformConfig, cetus_config_addr: address) {
+        cfg.cetus_global_config_id = cetus_config_addr;
     }
 }

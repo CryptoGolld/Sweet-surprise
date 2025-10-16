@@ -1,6 +1,5 @@
 module suilfg_launch::bonding_curve {
-    use sui::object::{UID};
-    use sui::object;
+    use sui::object::{Self as object, UID, id_address};
     use sui::tx_context::{TxContext, sender};
     use sui::transfer;
     use sui::balance::{Self as balance, Balance};
@@ -11,6 +10,7 @@ module suilfg_launch::bonding_curve {
     use std::vector;
     use std::u128;
     use std::u64;
+    use std::type_name::{Self, TypeName};
 
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
@@ -64,6 +64,7 @@ module suilfg_launch::bonding_curve {
     const E_NOT_WHITELISTED: u64 = 3;
     const E_NOT_GRADUATED: u64 = 4;
     const E_LP_ALREADY_SEEDED: u64 = 5;
+    const E_INVALID_CETUS_CONFIG: u64 = 6;
 
     fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
@@ -388,12 +389,14 @@ module suilfg_launch::bonding_curve {
     /// 5. Platform earns 0.3% LP fees (permissionless collection)
     ///
     /// Parameters:
-    /// - cetus_global_config: Cetus protocol config object
+    /// - cetus_global_config: Cetus protocol config object (validated against config!)
     /// - bump_bps: Optional price bump (0-1000 bps), usually 0
     /// - tick_lower/tick_upper: Liquidity range (typically full range)
     /// 
-    /// SECURITY: Team allocation sent to treasury_address (from config)
-    /// This prevents attackers from stealing team tokens by passing their own address
+    /// SECURITY FEATURES:
+    /// 1. Team allocation sent to treasury_address (from config)
+    /// 2. Cetus config validated against admin-set address
+    /// This prevents ALL fund theft attacks!
     public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
@@ -404,6 +407,13 @@ module suilfg_launch::bonding_curve {
         clock: &Clock,
         ctx: &mut TxContext
     ) {
+        assert!(curve.graduated, E_NOT_GRADUATED);
+        assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
+        
+        // SECURITY: Validate Cetus config matches admin-approved address
+        let expected_cetus_config = platform_config::get_cetus_global_config_id(cfg);
+        let actual_cetus_config = object::id_address(cetus_global_config);
+        assert!(actual_cetus_config == expected_cetus_config, E_INVALID_CETUS_CONFIG);
         assert!(curve.graduated, E_NOT_GRADUATED);
         assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
         
