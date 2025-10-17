@@ -51,14 +51,13 @@ module suilfg_launch::bonding_curve {
     public struct Sold has copy, drop { seller: address, amount_sui: u64 }
     public struct Graduated has copy, drop { creator: address, reward_sui: u64, treasury: address }
     public struct GraduationReady has copy, drop { creator: address, token_supply: u64, spot_price_sui_approx: u64 }
-    // PoolCreated event - commented until Cetus is working
-    // public struct PoolCreated has copy, drop { 
-    //     token_type: TypeName,
-    //     sui_amount: u64,
-    //     token_amount: u64,
-    //     lock_until: u64,
-    //     lp_recipient: address
-    // }
+    public struct PoolCreated has copy, drop { 
+        token_type: TypeName,
+        sui_amount: u64,
+        token_amount: u64,
+        lock_until: u64,
+        lp_recipient: address
+    }
 
     const E_CREATION_PAUSED: u64 = 1;
     const E_TRADING_FROZEN: u64 = 2;
@@ -381,6 +380,139 @@ module suilfg_launch::bonding_curve {
 
     // TODO: Cetus integration functions - will be implemented after resolving Cetus package dependency
     // For now, use seed_pool_prepare() for manual pool creation
+
+    public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
+        // p(s) = base_price + (m_num/m_den) * s^2
+        let s = curve.token_supply;
+        let s128 = (s as u128);
+        let quadratic_part = ((curve.m_num as u128) * s128 * s128) / curve.m_den;
+        (curve.base_price_mist as u128) + quadratic_part
+    }
+
+    public fun spot_price_u64<T: drop + store>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
+
+    public fun minted_supply<T: drop + store>(curve: &BondingCurve<T>): u64 { curve.token_supply }
+
+    public entry fun withdraw_reserve_to_treasury<T: drop + store>(
+        _admin: &AdminCap,
+        cfg: &PlatformConfig,
+        curve: &mut BondingCurve<T>,
+        amount_sui: u64,
+        ctx: &mut TxContext
+    ) {
+        let bal = balance::split(&mut curve.sui_reserve, amount_sui);
+        let c = coin::from_balance(bal, ctx);
+        transfer::public_transfer(c, platform_config::get_treasury_address(cfg));
+    }
+
+    public entry fun withdraw_reserve_to<T: drop + store>(
+        _admin: &AdminCap,
+        curve: &mut BondingCurve<T>,
+        to: address,
+        amount_sui: u64,
+        ctx: &mut TxContext
+    ) {
+        let bal = balance::split(&mut curve.sui_reserve, amount_sui);
+        let c = coin::from_balance(bal, ctx);
+        transfer::public_transfer(c, to);
+    }
+
+    public fun add_to_whitelist<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
+        vector::push_back(&mut curve.whitelist, user);
+    }
+
+    fun is_whitelisted(list: &vector<address>, user: address): bool {
+        let len: u64 = vector::length<address>(list);
+        let mut i: u64 = 0;
+        while (i < len) {
+            if (*vector::borrow<address>(list, i) == user) { return true; };
+            i = i + 1;
+        };
+        false
+    }
+
+    // Integral helper: returns cost to move supply from s1 to s2 under p(s)=base+m*s^2
+    fun integrate_cost_u128(s1: u64, s2: u64, m_num: u64, m_den: u128, base_price_mist: u64): u128 {
+        let s1c = pow3_u128_from_u64(s1);
+        let s2c = pow3_u128_from_u64(s2);
+        let delta_cubic = s2c - s1c; // s2 >= s1 in buy; in sell we pass (s2,s1)
+        let delta_linear = (s2 as u128) - (s1 as u128);
+        
+        let quadratic_cost = ((m_num as u128) * delta_cubic) / ((3 as u128) * m_den);
+        let linear_cost = (base_price_mist as u128) * delta_linear;
+        
+        quadratic_cost + linear_cost
+    }
+
+    // Inverse: given s1 and amount_in, compute maximal s2 such that cost <= amount_in
+    // For p(s) = base + m*s^2, we need to solve: base*(s2-s1) + (m/3)*(s2^3-s1^3) = amount_in
+    // This requires binary search as there's no closed-form solution
+    fun inverse_integral_buy(s1: u64, amount_in: u64, m_num: u64, m_den: u128, base_price_mist: u64): u64 {
+        // Binary search approach
+        let mut lo: u64 = s1;
+        let mut hi: u64 = TOTAL_SUPPLY;
+        
+        while (lo < hi) {
+            let mid = (lo + hi + 1) / 2;
+            let cost = narrow_u128_to_u64(integrate_cost_u128(s1, mid, m_num, m_den, base_price_mist));
+            if (cost <= amount_in) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        };
+        lo
+    }
+
+    fun pow3_u128_from_u64(x: u64): u128 {
+        let x128 = (x as u128);
+        x128 * x128 * x128
+    }
+
+    fun cbrt_floor_u64(x: u128): u64 {
+        let mut lo: u64 = 0;
+        let mut hi: u64 = TOTAL_SUPPLY;
+        while (lo < hi) {
+            let mid = (lo + hi + 1) / 2;
+            let mid3 = pow3_u128_from_u64(mid);
+            if (mid3 <= x) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        };
+        lo
+    }
+
+    fun narrow_u128_to_u64(x: u128): u64 {
+        let max64 = (u64::max_value!() as u128);
+        if (x > max64) { u64::max_value!() } else { (x as u64) }
+    }
+
+    fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
+}
+pient
+        });
+    }
+    
+    /// Collect LP fees from Cetus position (permissionless!)
+    /// Anyone can call this to send accumulated fees to lp_recipient
+    public entry fun collect_lp_fees<T: drop + store>(
+        cfg: &PlatformConfig,
+        pool: &mut Pool<SUI, T>,
+        position: &mut Position,
+        ctx: &mut TxContext
+    ) {
+        let (fee_sui, fee_token) = cetus_position::collect_fee<SUI, T>(
+            pool,
+            position,
+            ctx
+        );
+        
+        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
+        transfer::public_transfer(fee_sui, lp_recipient);
+        transfer::public_transfer(fee_token, lp_recipient);
+    }
 
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
         // p(s) = base_price + (m_num/m_den) * s^2
