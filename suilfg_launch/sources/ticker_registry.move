@@ -20,6 +20,11 @@ module suilfg_launch::ticker_registry {
         token_id: Option<ID>,
         cooldown_ends_ts_ms: u64,
         whitelist: vector<address>,
+        // Ticker economy fields
+        last_use_ts_ms: u64,           // When ticker was LAST used (resets every reuse!)
+        graduated_ts_ms: u64,          // When token graduated (0 if not graduated)
+        current_reuse_fee_mist: u64,   // Current fee to bypass cooldown
+        reserved_for: Option<address>, // Who ticker is reserved for (if Reserved status)
     }
 
     public struct TickerRegistry has key, store {
@@ -83,6 +88,28 @@ module suilfg_launch::ticker_registry {
         upsert_with_status(registry, ticker, TickerStatus::Reserved)
     }
 
+    public fun reserve_ticker_for(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, reserved_for: address) {
+        let key_for_contains = clone_string(&ticker);
+        if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
+            let key_for_borrow = clone_string(&ticker);
+            let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
+            info_ref.status = TickerStatus::Reserved;
+            info_ref.reserved_for = opt::some<address>(reserved_for);
+        } else {
+            let info = TickerInfo { 
+                status: TickerStatus::Reserved, 
+                token_id: opt::none<ID>(), 
+                cooldown_ends_ts_ms: 0, 
+                whitelist: vector::empty<address>(),
+                last_use_ts_ms: 0,
+                graduated_ts_ms: 0,
+                current_reuse_fee_mist: 0,
+                reserved_for: opt::some<address>(reserved_for),
+            };
+            table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
+        }
+    }
+
     public fun whitelist_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String, user: address) {
         let key_for_contains = clone_string(&ticker);
         if (table::contains<String, TickerInfo>(&registry.tickers, key_for_contains)) {
@@ -93,19 +120,87 @@ module suilfg_launch::ticker_registry {
         } else {
             let mut wl = vector::empty<address>();
             vector::push_back(&mut wl, user);
-            let info = TickerInfo { status: TickerStatus::Whitelisted, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: wl };
+            let info = TickerInfo { status: TickerStatus::Whitelisted, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: wl, creation_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
             table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
         }
     }
 
     public fun set_cooldown_period(_admin: &AdminCap, registry: &mut TickerRegistry, cooldown_ms: u64) { registry.default_cooldown_ms = cooldown_ms; }
 
-    public fun mark_active_with_lock(registry: &mut TickerRegistry, ticker: String, token_id: ID, cooldown_ends_ts_ms: u64) {
-        let info = TickerInfo { status: TickerStatus::Active, token_id: opt::some<ID>(token_id), cooldown_ends_ts_ms, whitelist: vector::empty<address>() };
+    public fun mark_active_with_lock(registry: &mut TickerRegistry, ticker: String, token_id: ID, last_use_ts_ms: u64, cooldown_ends_ts_ms: u64) {
+        let info = TickerInfo { 
+            status: TickerStatus::Active, 
+            token_id: opt::some<ID>(token_id), 
+            cooldown_ends_ts_ms, 
+            whitelist: vector::empty<address>(),
+            last_use_ts_ms,  // Timer resets every time ticker is reused!
+            graduated_ts_ms: 0,
+            current_reuse_fee_mist: 0,
+            reserved_for: opt::none<address>(),
+        };
         table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
     }
 
     public fun contains(registry: &TickerRegistry, ticker: String): bool { table::contains<String, TickerInfo>(&registry.tickers, ticker) }
+
+    // Mark token as graduated and set up cooldown with fee
+    public fun mark_graduated(registry: &mut TickerRegistry, ticker: String, graduated_ts_ms: u64, base_fee_mist: u64) {
+        let key = clone_string(&ticker);
+        if (table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            let info = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
+            info.graduated_ts_ms = graduated_ts_ms;
+            info.current_reuse_fee_mist = base_fee_mist;
+            info.status = TickerStatus::OnCooldown;
+        }
+    }
+
+    // Check if ticker can be claimed (lazy revocation check)
+    public fun is_ticker_claimable(registry: &TickerRegistry, ticker: String, max_lock_ms: u64, clock: &Clock): bool {
+        use sui::clock;
+        let key = clone_string(&ticker);
+        if (!table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            return true // Available
+        };
+        
+        let info = table::borrow<String, TickerInfo>(&registry.tickers, ticker);
+        let now = clock::timestamp_ms(clock);
+        
+        // Check if max lock period exceeded (from LAST use, not first!)
+        if (info.last_use_ts_ms > 0) {
+            let elapsed = now - info.last_use_ts_ms;
+            if (elapsed >= max_lock_ms) {
+                return true // 7 days since LAST use exceeded
+            }
+        };
+        
+        // Check if graduated and cooldown expired
+        if (info.graduated_ts_ms > 0 && now >= info.cooldown_ends_ts_ms) {
+            return true // Cooldown expired
+        };
+        
+        false
+    }
+
+    // Get current reuse fee for ticker
+    public fun get_current_reuse_fee(registry: &TickerRegistry, ticker: String): u64 {
+        let key = clone_string(&ticker);
+        if (!table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            return 0 // Free
+        };
+        let info = table::borrow<String, TickerInfo>(&registry.tickers, ticker);
+        info.current_reuse_fee_mist
+    }
+
+    // Admin force unlock
+    public fun force_unlock_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
+        let key = clone_string(&ticker);
+        if (table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            let info = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
+            info.status = TickerStatus::Available;
+            info.current_reuse_fee_mist = 0;
+            info.graduated_ts_ms = 0;
+        }
+    }
 
     fun upsert_with_status(registry: &mut TickerRegistry, ticker: String, status: TickerStatus) {
         let key_for_contains = clone_string(&ticker);
@@ -114,7 +209,7 @@ module suilfg_launch::ticker_registry {
             let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             info_ref.status = status;
         } else {
-            let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>() };
+            let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>(), creation_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
             table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
         }
     }

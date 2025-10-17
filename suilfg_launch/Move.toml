@@ -5,6 +5,9 @@ published-at = ""
 edition = "2024"
 
 [dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
+CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0", override = true }
 
 [addresses]
-suilfg_launch =  "0x0"
+suilfg_launch = "0x0"
+# Don't need to define cetus_clmm duplicate - provided by CetusClmm dependency
