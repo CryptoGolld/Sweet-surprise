@@ -7,6 +7,7 @@ edition = "2024"
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
 CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0", override = true }
+CetusLpBurn = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/lp_burn", rev = "testnet-v1.26.0", override = true }
 
 [addresses]
 suilfg_launch = "0x0"

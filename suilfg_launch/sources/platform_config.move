@@ -31,6 +31,7 @@ module suilfg_launch::platform_config {
         ticker_early_reuse_max_fee_mist: u64,
         // SECURITY: Hardcoded Cetus config (admin controlled)
         cetus_global_config_id: address,
+        cetus_burn_manager_id: address,
     }
 
     /// Capability that authorizes admin-only operations
@@ -77,6 +78,7 @@ module suilfg_launch::platform_config {
     public fun get_ticker_early_reuse_base_fee_mist(cfg: &PlatformConfig): u64 { cfg.ticker_early_reuse_base_fee_mist }
     public fun get_ticker_early_reuse_max_fee_mist(cfg: &PlatformConfig): u64 { cfg.ticker_early_reuse_max_fee_mist }
     public fun get_cetus_global_config_id(cfg: &PlatformConfig): address { cfg.cetus_global_config_id }
+    public fun get_cetus_burn_manager_id(cfg: &PlatformConfig): address { cfg.cetus_burn_manager_id }
     public fun get_lp_recipient_address(cfg: &PlatformConfig): address { cfg.lp_recipient_address }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
@@ -103,6 +105,7 @@ module suilfg_launch::platform_config {
             ticker_early_reuse_max_fee_mist: DEFAULT_TICKER_EARLY_REUSE_MAX_FEE_MIST,
             lp_recipient_address: sender(ctx),
             cetus_global_config_id: @0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e, // Testnet Global Config
+            cetus_burn_manager_id: @0x0, // Must be set after deployment
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -190,5 +193,12 @@ module suilfg_launch::platform_config {
     /// Get the correct address from Cetus documentation for your network
     public entry fun set_cetus_global_config_id(_admin: &AdminCap, cfg: &mut PlatformConfig, cetus_config_addr: address) {
         cfg.cetus_global_config_id = cetus_config_addr;
+    }
+    
+    /// CRITICAL SECURITY: Set the official Cetus BurnManager address
+    /// This prevents attackers from passing malicious burn managers
+    /// Get the correct address from Cetus LP burn deployment for your network
+    public entry fun set_cetus_burn_manager_id(_admin: &AdminCap, cfg: &mut PlatformConfig, burn_manager_addr: address) {
+        cfg.cetus_burn_manager_id = burn_manager_addr;
     }
 }

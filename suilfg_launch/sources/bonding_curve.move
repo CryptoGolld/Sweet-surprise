@@ -10,15 +10,19 @@ module suilfg_launch::bonding_curve {
     use std::vector;
     use std::u128;
     use std::u64;
+    use std::string;
     use std::type_name::{Self, TypeName};
 
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     
-    // Cetus CLMM imports for automatic pool creation with 100-year lock
+    // Cetus CLMM imports for automatic pool creation with PERMANENT LP burn
     use cetus_clmm::config::GlobalConfig;
     use cetus_clmm::pool::{Self as cetus_pool, Pool};
-    use cetus_clmm::position::{Self as cetus_position, Position};
+    use cetus_clmm::position::Position;
+    use cetus_clmm::pool_creator;
+    use cetus_clmm::factory::Pools;
+    use lpburn::lp_burn::{Self, BurnManager, CetusLPBurnProof};
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
 
@@ -42,6 +46,8 @@ module suilfg_launch::bonding_curve {
         graduated: bool,
         lp_seeded: bool,
         reward_paid: bool,
+        // LP fee recipient (changeable by admin)
+        lp_fee_recipient: address,
     }
 
     // TokenCoin removed; we mint/burn Coin<T> directly via TreasuryCap
@@ -55,8 +61,9 @@ module suilfg_launch::bonding_curve {
         token_type: TypeName,
         sui_amount: u64,
         token_amount: u64,
-        lock_until: u64,
-        lp_recipient: address
+        pool_id: address,
+        burned_position_id: address,
+        lp_fee_recipient: address
     }
 
     const E_CREATION_PAUSED: u64 = 1;
@@ -65,6 +72,7 @@ module suilfg_launch::bonding_curve {
     const E_NOT_GRADUATED: u64 = 4;
     const E_LP_ALREADY_SEEDED: u64 = 5;
     const E_INVALID_CETUS_CONFIG: u64 = 6;
+    const E_INVALID_BURN_MANAGER: u64 = 7;
 
     fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
@@ -84,6 +92,7 @@ module suilfg_launch::bonding_curve {
             graduated: false,
             lp_seeded: false,
             reward_paid: false,
+            lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
         }
     }
 
@@ -107,6 +116,7 @@ module suilfg_launch::bonding_curve {
             graduated: false,
             lp_seeded: false,
             reward_paid: false,
+            lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
         }
     }
 
@@ -378,32 +388,38 @@ module suilfg_launch::bonding_curve {
         curve.lp_seeded = true;
     }
 
-    /// Creates Cetus pool with 100-year liquidity lock
+    /// Creates Cetus pool with PERMANENT LP burn (cannot be removed!)
     /// This is the PRIMARY graduation function - fully automatic, on-chain
     /// 
     /// Steps:
     /// 1. Mints team allocation (2M tokens)
-    /// 2. Creates Cetus CLMM pool
-    /// 3. Adds liquidity with 100-year lock (maximum trust)
-    /// 4. LP Position NFT sent to lp_recipient_address
-    /// 5. Platform earns 0.3% LP fees (permissionless collection)
+    /// 2. Creates Cetus CLMM pool with initial liquidity
+    /// 3. BURNS the LP position permanently (maximum trust!)
+    /// 4. Stores CetusLPBurnProof for fee collection
+    /// 5. Platform earns LP fees forever (changeable recipient)
     ///
     /// Parameters:
-    /// - cetus_global_config: Cetus protocol config object (validated against config!)
-    /// - bump_bps: Optional price bump (0-1000 bps), usually 0
-    /// - tick_lower/tick_upper: Liquidity range (typically full range)
+    /// - cetus_global_config: Cetus protocol config object (validated!)
+    /// - burn_manager: Cetus LP burn manager (validated!)
+    /// - pools: Cetus pools registry
+    /// - tick_spacing: Pool tick spacing (60 for 0.3% fee tier)
+    /// - coin_metadata: Token metadata for pool creation
     /// 
     /// SECURITY FEATURES:
-    /// 1. Team allocation sent to treasury_address (from config)
+    /// 1. Team allocation sent to treasury_address (admin controlled)
     /// 2. Cetus config validated against admin-set address
-    /// This prevents ALL fund theft attacks!
-    public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
+    /// 3. LP position PERMANENTLY BURNED - cannot rug!
+    /// 4. Fee recipient changeable for flexibility
+    public entry fun seed_pool_and_create_cetus_with_burn<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         cetus_global_config: &GlobalConfig,
-        bump_bps: u64,
-        tick_lower: u32,
-        tick_upper: u32,
+        burn_manager: &mut BurnManager,
+        pools: &mut Pools,
+        tick_spacing: u32,
+        initialize_sqrt_price: u128,
+        coin_metadata_sui: &coin::CoinMetadata<SUI>,
+        coin_metadata_token: &coin::CoinMetadata<T>,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
@@ -414,6 +430,11 @@ module suilfg_launch::bonding_curve {
         let expected_cetus_config = platform_config::get_cetus_global_config_id(cfg);
         let actual_cetus_config = object::id_address(cetus_global_config);
         assert!(actual_cetus_config == expected_cetus_config, E_INVALID_CETUS_CONFIG);
+        
+        // Validate burn manager (could add validation against config if needed)
+        let expected_burn_manager = platform_config::get_cetus_burn_manager_id(cfg);
+        let actual_burn_manager = object::id_address(burn_manager);
+        assert!(actual_burn_manager == expected_burn_manager, E_INVALID_BURN_MANAGER);
         
         // 1. Mint team allocation (2M tokens)
         // SECURITY: Always sent to treasury_address from config (admin controlled)
@@ -427,8 +448,7 @@ module suilfg_launch::bonding_curve {
         
         // 2. Calculate pool amounts
         let total_sui_mist = balance::value(&curve.sui_reserve);
-        let bump_amount = (total_sui_mist * bump_bps) / 10000;
-        let sui_for_lp = total_sui_mist - bump_amount;
+        let sui_for_lp = total_sui_mist; // Use all remaining reserve
         
         let remaining_supply = TOTAL_SUPPLY - curve.token_supply;
         let token_for_lp = remaining_supply;
@@ -438,68 +458,107 @@ module suilfg_launch::bonding_curve {
         let lp_sui_balance = balance::split(&mut curve.sui_reserve, sui_for_lp);
         let lp_sui_coin = coin::from_balance(lp_sui_balance, ctx);
         
-        // 4. Create Cetus pool (0.3% fee tier)
-        let pool = cetus_pool::create_pool<SUI, T>(
-            cetus_global_config,
-            1000000,  // Initial sqrt price
-            ctx
-        );
+        // 4. Create Cetus pool with initial liquidity using pool_creator
+        // This automatically creates pool + adds liquidity in one transaction
+        let (tick_lower, tick_upper) = pool_creator::full_range_tick_range(tick_spacing);
         
-        // 5. Add liquidity with 100-YEAR LOCK
-        let lock_duration_ms: u64 = 3_153_600_000_000; // 100 years
-        let lock_until = clock::timestamp_ms(clock) + lock_duration_ms;
-        
-        let position_nft = cetus_position::open_position_with_liquidity_with_lock<SUI, T>(
+        let (position_nft, refund_sui, refund_token) = pool_creator::create_pool_v2<SUI, T>(
             cetus_global_config,
-            &mut pool,
+            pools,
+            tick_spacing,
+            initialize_sqrt_price,
+            std::string::utf8(b"SuiLFG Pool"),
             tick_lower,
             tick_upper,
             lp_sui_coin,
             lp_tokens,
-            lock_until,
+            coin_metadata_sui,
+            coin_metadata_token,
+            true, // fix_amount_a (use all SUI)
+            clock,
             ctx
         );
         
-        // 6. Send LP Position NFT to configured recipient
-        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
-        transfer::public_transfer(position_nft, lp_recipient);
+        // Handle refunds (should be minimal/zero for full range)
+        if (coin::value(&refund_sui) > 0) {
+            let refund_balance = coin::into_balance(refund_sui);
+            balance::join(&mut curve.sui_reserve, refund_balance);
+        } else {
+            coin::destroy_zero(refund_sui);
+        };
+        if (coin::value(&refund_token) > 0) {
+            coin::burn(&mut curve.treasury, refund_token);
+        } else {
+            coin::destroy_zero(refund_token);
+        };
         
-        // 7. Share the pool object publicly
-        transfer::public_share_object(pool);
+        // 5. PERMANENTLY BURN the LP position!
+        // This wraps it in CetusLPBurnProof and makes liquidity removal IMPOSSIBLE
+        let position_id = object::id(&position_nft);
+        let burn_proof = lp_burn::burn_lp_v2(
+            burn_manager,
+            position_nft,
+            ctx
+        );
+        
+        let burn_proof_id = object::id(&burn_proof);
+        
+        // 6. Transfer burn proof to treasury for permanent custody
+        // Fees can still be collected via collect_lp_fees_from_burned_position
+        transfer::public_transfer(burn_proof, platform_config::get_treasury_address(cfg));
         
         curve.lp_seeded = true;
+        curve.token_supply = curve.token_supply + token_for_lp;
         
         event::emit(PoolCreated {
             token_type: type_name::get<T>(),
             sui_amount: sui_for_lp,
             token_amount: token_for_lp,
-            lock_until,
-            lp_recipient
+            pool_id: @0x0, // Pool is shared, can be found via events
+            burned_position_id: object::id_address(&burn_proof_id),
+            lp_fee_recipient: curve.lp_fee_recipient
         });
     }
     
-    /// Collect LP fees from Cetus position (permissionless!)
-    /// Anyone can call this to send accumulated fees to lp_recipient
-    public entry fun collect_lp_fees<T: drop + store>(
-        cfg: &PlatformConfig,
+    /// Collect LP fees from BURNED Cetus position (permissionless!)
+    /// Anyone can call this to send accumulated fees to the changeable lp_fee_recipient
+    /// 
+    /// This works even though liquidity is permanently locked!
+    public entry fun collect_lp_fees_from_burned_position<T: drop + store>(
+        curve: &BondingCurve<T>,
+        burn_manager: &BurnManager,
         cetus_config: &GlobalConfig,
         pool: &mut Pool<SUI, T>,
-        position: &Position,
+        burn_proof: &mut CetusLPBurnProof,
         ctx: &mut TxContext
     ) {
-        let (fee_sui_balance, fee_token_balance) = cetus_pool::collect_fee<SUI, T>(
+        // Collect fees from the burned position
+        let (fee_sui, fee_token) = lp_burn::collect_fee<SUI, T>(
+            burn_manager,
             cetus_config,
             pool,
-            position,
-            true  // recalculate fees
+            burn_proof,
+            ctx
         );
         
-        let fee_sui = coin::from_balance(fee_sui_balance, ctx);
-        let fee_token = coin::from_balance(fee_token_balance, ctx);
-        
-        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
-        transfer::public_transfer(fee_sui, lp_recipient);
-        transfer::public_transfer(fee_token, lp_recipient);
+        // Send to the changeable fee recipient address
+        transfer::public_transfer(fee_sui, curve.lp_fee_recipient);
+        transfer::public_transfer(fee_token, curve.lp_fee_recipient);
+    }
+    
+    /// Change the LP fee recipient address (admin only)
+    /// This allows flexibility while keeping liquidity permanently locked
+    public entry fun set_lp_fee_recipient<T: drop + store>(
+        _admin: &AdminCap,
+        curve: &mut BondingCurve<T>,
+        new_recipient: address
+    ) {
+        curve.lp_fee_recipient = new_recipient;
+    }
+    
+    /// View current LP fee recipient
+    public fun get_lp_fee_recipient<T: drop + store>(curve: &BondingCurve<T>): address {
+        curve.lp_fee_recipient
     }
 
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
