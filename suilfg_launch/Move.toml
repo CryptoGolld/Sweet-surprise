@@ -6,9 +6,8 @@ edition = "2024"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
-CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-sui.git", subdir = "sui", rev = "main" }
+CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0", override = true }
 
 [addresses]
 suilfg_launch = "0x0"
-# Cetus CLMM package address on testnet (published on-chain)
-cetus_clmm = "0x0868b71c0cba55bf0faf6c40df8c179c67a4d0ba0e79965b68b3d72d7dfbf666"
+# Don't need to define cetus_clmm duplicate - provided by CetusClmm dependency
