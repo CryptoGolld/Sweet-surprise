@@ -378,13 +378,19 @@ async function graduationBot() {
 
 **How It Works:**
 ```
-Token reaches 13,333 SUI
+Token reaches 13,333 SUI in reserve
   ↓
 Anyone calls graduation functions
   ↓
-Smart contract automatically:
+distribute_payouts():
+  - Platform takes 1,333 SUI (10%)
+    ├─ Pays creator 40 SUI (from this cut)
+    └─ Keeps 1,293 SUI net
+  - Reserve now has 12,000 SUI
+  ↓
+seed_pool_prepare():
   - Mints 2M team tokens → treasury_address
-  - Creates Cetus pool with 207M tokens + 12,000 SUI
+  - Creates Cetus pool with 207M tokens + 12,000 SUI (90% of reserve)
   - Locks LP for 100 years (can't be unlocked!)
   - Sends LP Position NFT → lp_recipient_address
   - Pool goes live instantly!
@@ -928,7 +934,7 @@ When users search for tickers, results split into:
   - `graduation_reward_sui = 100 SUI` (unused, legacy parameter)
   - `default_cooldown_ms` = 7 days
   - `platform_cut_bps_on_graduation = 1000` (10% platform share at graduation)
-  - `creator_graduation_payout_mist = 40 * 10⁹` (40 SUI paid from platform cut)
+  - `creator_graduation_payout_mist = 40 * 10⁹` (40 SUI paid FROM platform's cut, not reserve)
   - **Ticker Economy**:
     - `ticker_max_lock_ms = 7 days` (maximum ticker lock period)
     - `ticker_early_reuse_base_fee = 33 SUI` (starting reuse fee)
