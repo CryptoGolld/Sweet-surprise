@@ -21,7 +21,7 @@ module suilfg_launch::ticker_registry {
         cooldown_ends_ts_ms: u64,
         whitelist: vector<address>,
         // Ticker economy fields
-        creation_ts_ms: u64,           // When current token was created
+        last_use_ts_ms: u64,           // When ticker was LAST used (resets every reuse!)
         graduated_ts_ms: u64,          // When token graduated (0 if not graduated)
         current_reuse_fee_mist: u64,   // Current fee to bypass cooldown
         reserved_for: Option<address>, // Who ticker is reserved for (if Reserved status)
@@ -101,7 +101,7 @@ module suilfg_launch::ticker_registry {
                 token_id: opt::none<ID>(), 
                 cooldown_ends_ts_ms: 0, 
                 whitelist: vector::empty<address>(),
-                creation_ts_ms: 0,
+                last_use_ts_ms: 0,
                 graduated_ts_ms: 0,
                 current_reuse_fee_mist: 0,
                 reserved_for: opt::some<address>(reserved_for),
@@ -127,13 +127,13 @@ module suilfg_launch::ticker_registry {
 
     public fun set_cooldown_period(_admin: &AdminCap, registry: &mut TickerRegistry, cooldown_ms: u64) { registry.default_cooldown_ms = cooldown_ms; }
 
-    public fun mark_active_with_lock(registry: &mut TickerRegistry, ticker: String, token_id: ID, creation_ts_ms: u64, cooldown_ends_ts_ms: u64) {
+    public fun mark_active_with_lock(registry: &mut TickerRegistry, ticker: String, token_id: ID, last_use_ts_ms: u64, cooldown_ends_ts_ms: u64) {
         let info = TickerInfo { 
             status: TickerStatus::Active, 
             token_id: opt::some<ID>(token_id), 
             cooldown_ends_ts_ms, 
             whitelist: vector::empty<address>(),
-            creation_ts_ms,
+            last_use_ts_ms,  // Timer resets every time ticker is reused!
             graduated_ts_ms: 0,
             current_reuse_fee_mist: 0,
             reserved_for: opt::none<address>(),
@@ -165,11 +165,11 @@ module suilfg_launch::ticker_registry {
         let info = table::borrow<String, TickerInfo>(&registry.tickers, ticker);
         let now = clock::timestamp_ms(clock);
         
-        // Check if max lock period exceeded
-        if (info.creation_ts_ms > 0) {
-            let elapsed = now - info.creation_ts_ms;
+        // Check if max lock period exceeded (from LAST use, not first!)
+        if (info.last_use_ts_ms > 0) {
+            let elapsed = now - info.last_use_ts_ms;
             if (elapsed >= max_lock_ms) {
-                return true // Max lock exceeded
+                return true // 7 days since LAST use exceeded
             }
         };
         
