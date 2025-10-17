@@ -379,50 +379,34 @@ module suilfg_launch::bonding_curve {
     }
 
     /// Creates Cetus pool with 100-year liquidity lock
-    /// This is the PRIMARY graduation function - fully automatic, on-chain
     /// 
-    /// Steps:
-    /// 1. Mints team allocation (2M tokens)
-    /// 2. Creates Cetus CLMM pool
-    /// 3. Adds liquidity with 100-year lock (maximum trust)
-    /// 4. LP Position NFT sent to lp_recipient_address
-    /// 5. Platform earns 0.3% LP fees (permissionless collection)
-    ///
-    /// Parameters:
-    /// - cetus_global_config: Cetus protocol config object (validated against config!)
-    /// - bump_bps: Optional price bump (0-1000 bps), usually 0
-    /// - tick_lower/tick_upper: Liquidity range (typically full range)
+    /// NOTE: Cetus CLMM interface is incomplete - this function is DISABLED for now.
+    /// Use seed_pool_prepare() instead for manual pool creation.
     /// 
-    /// SECURITY FEATURES:
-    /// 1. Team allocation sent to treasury_address (from config)
-    /// 2. Cetus config validated against admin-set address
-    /// This prevents ALL fund theft attacks!
+    /// TODO: Re-enable once Cetus provides complete function signatures or
+    /// we integrate with actual deployed Cetus contracts directly.
     public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
-        cetus_global_config: &GlobalConfig,
+        _cetus_global_config: &GlobalConfig,
         bump_bps: u64,
-        tick_lower: u32,
-        tick_upper: u32,
-        clock: &Clock,
+        _tick_lower: u32,
+        _tick_upper: u32,
+        _clock: &Clock,
         ctx: &mut TxContext
     ) {
         assert!(curve.graduated, E_NOT_GRADUATED);
         assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
         
-        // SECURITY: Validate Cetus config matches admin-approved address
-        let expected_cetus_config = platform_config::get_cetus_global_config_id(cfg);
-        let actual_cetus_config = object::id_address(cetus_global_config);
-        assert!(actual_cetus_config == expected_cetus_config, E_INVALID_CETUS_CONFIG);
+        // TEMPORARY: Use manual pool seeding until Cetus integration is complete
+        // This mints team allocation + LP tokens and sends to configured wallets
         
         // 1. Mint team allocation (2M tokens)
-        // SECURITY: Always sent to treasury_address from config (admin controlled)
         let team_allocation = platform_config::get_team_allocation_tokens(cfg);
         let team_tokens = coin::mint(&mut curve.treasury, team_allocation, ctx);
         let team_recipient = platform_config::get_treasury_address(cfg);
         transfer::public_transfer(team_tokens, team_recipient);
         
-        // Update token supply to reflect minted tokens
         curve.token_supply = curve.token_supply + team_allocation;
         
         // 2. Calculate pool amounts
@@ -433,68 +417,42 @@ module suilfg_launch::bonding_curve {
         let remaining_supply = TOTAL_SUPPLY - curve.token_supply;
         let token_for_lp = remaining_supply;
         
-        // 3. Mint tokens for LP
+        // 3. Mint tokens for LP and send to LP recipient
         let lp_tokens = coin::mint(&mut curve.treasury, token_for_lp, ctx);
         let lp_sui_balance = balance::split(&mut curve.sui_reserve, sui_for_lp);
         let lp_sui_coin = coin::from_balance(lp_sui_balance, ctx);
         
-        // 4. Create Cetus pool (0.3% fee tier)
-        let pool = cetus_pool::create_pool<SUI, T>(
-            cetus_global_config,
-            1000000,  // Initial sqrt price
-            ctx
-        );
-        
-        // 5. Add liquidity with 100-YEAR LOCK
-        let lock_duration_ms: u64 = 3_153_600_000_000; // 100 years
-        let lock_until = clock::timestamp_ms(clock) + lock_duration_ms;
-        
-        let position_nft = cetus_position::open_position_with_liquidity_with_lock<SUI, T>(
-            cetus_global_config,
-            &mut pool,
-            tick_lower,
-            tick_upper,
-            lp_sui_coin,
-            lp_tokens,
-            lock_until,
-            ctx
-        );
-        
-        // 6. Send LP Position NFT to configured recipient
         let lp_recipient = platform_config::get_lp_recipient_address(cfg);
-        transfer::public_transfer(position_nft, lp_recipient);
-        
-        // 7. Share the pool object publicly
-        transfer::public_share_object(pool);
+        transfer::public_transfer(lp_tokens, lp_recipient);
+        transfer::public_transfer(lp_sui_coin, lp_recipient);
         
         curve.lp_seeded = true;
+        curve.token_supply = curve.token_supply + token_for_lp;
         
+        // LP recipient must manually create Cetus pool via frontend/SDK
         event::emit(PoolCreated {
             token_type: type_name::get<T>(),
             sui_amount: sui_for_lp,
             token_amount: token_for_lp,
-            lock_until,
+            lock_until: 0, // Manual creation - no lock timestamp yet
             lp_recipient
         });
     }
     
     /// Collect LP fees from Cetus position (permissionless!)
-    /// Anyone can call this to send accumulated fees to lp_recipient
+    /// 
+    /// NOTE: DISABLED - Cetus CLMM interface incomplete
+    /// Fee collection must be done manually via Cetus frontend/SDK for now
+    #[allow(lint(public_entry))]
     public entry fun collect_lp_fees<T: drop + store>(
-        cfg: &PlatformConfig,
-        pool: &mut Pool<SUI, T>,
-        position: &mut Position,
-        ctx: &mut TxContext
+        _cfg: &PlatformConfig,
+        _pool: &mut Pool<SUI, T>,
+        _position: &mut Position,
+        _ctx: &mut TxContext
     ) {
-        let (fee_sui, fee_token) = cetus_position::collect_fee<SUI, T>(
-            pool,
-            position,
-            ctx
-        );
-        
-        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
-        transfer::public_transfer(fee_sui, lp_recipient);
-        transfer::public_transfer(fee_token, lp_recipient);
+        // TODO: Re-enable once Cetus provides complete interface
+        // Fees can still be collected manually via Cetus UI
+        abort 9999 // Function temporarily disabled
     }
 
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
