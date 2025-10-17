@@ -305,24 +305,24 @@ module suilfg_launch::bonding_curve {
         let reserve = balance::value<SUI>(&curve.sui_reserve);
         let platform_cut = (reserve * platform_config::get_platform_cut_bps_on_graduation(cfg)) / 10_000;
         let creator_payout = platform_config::get_creator_graduation_payout_mist(cfg);
-        let mut remaining = reserve;
-        // Platform cut
+        
+        // Platform takes its cut (10% = 1,333 SUI)
         if (platform_cut > 0) {
-            let bal = balance::split(&mut curve.sui_reserve, platform_cut);
-            let c = coin::from_balance(bal, ctx);
-            transfer::public_transfer(c, platform_config::get_treasury_address(cfg));
-            remaining = remaining - platform_cut;
+            let platform_balance = balance::split(&mut curve.sui_reserve, platform_cut);
+            let platform_coin = coin::from_balance(platform_balance, ctx);
+            
+            // Creator payout comes FROM platform's cut (40 SUI from 1,333 SUI)
+            if (creator_payout > 0 && creator_payout <= platform_cut) {
+                let creator_coin = coin::split(&mut platform_coin, creator_payout, ctx);
+                transfer::public_transfer(creator_coin, curve.creator);
+            };
+            
+            // Platform keeps the rest (1,293 SUI)
+            transfer::public_transfer(platform_coin, platform_config::get_treasury_address(cfg));
         };
-        // Creator payout (clamp to remaining)
-        let payout = if (creator_payout > remaining) { remaining } else { creator_payout };
-        if (payout > 0) {
-            let bal2 = balance::split(&mut curve.sui_reserve, payout);
-            let c2 = coin::from_balance(bal2, ctx);
-            transfer::public_transfer(c2, curve.creator);
-            remaining = remaining - payout;
-        };
+        
         curve.reward_paid = true;
-        // Note: remaining SUI stays in reserve for LP seeding
+        // Note: Remaining 12,000 SUI stays in reserve for LP seeding (90% of 13,333)
     }
 
     /// Legacy function for manual pool creation (kept for backwards compatibility)

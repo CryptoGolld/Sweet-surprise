@@ -384,7 +384,7 @@ Anyone calls graduation functions
   ↓
 Smart contract automatically:
   - Mints 2M team tokens → treasury_address
-  - Creates Cetus pool with 207M tokens + 11,960 SUI
+  - Creates Cetus pool with 207M tokens + 12,000 SUI
   - Locks LP for 100 years (can't be unlocked!)
   - Sends LP Position NFT → lp_recipient_address
   - Pool goes live instantly!
