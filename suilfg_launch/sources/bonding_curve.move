@@ -11,10 +11,12 @@ module suilfg_launch::bonding_curve {
     use std::u128;
     use std::u64;
     use std::string;
+    use std::option::{Self as option, Option};
     use std::type_name::{Self, TypeName};
 
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
+    use suilfg_launch::referral_registry::{Self, ReferralRegistry};
     
     // Cetus CLMM imports for automatic pool creation with PERMANENT LP burn
     use cetusclmm::config::GlobalConfig;
@@ -53,8 +55,8 @@ module suilfg_launch::bonding_curve {
     // TokenCoin removed; we mint/burn Coin<T> directly via TreasuryCap
 
     public struct Created has copy, drop { creator: address }
-    public struct Bought has copy, drop { buyer: address, amount_sui: u64 }
-    public struct Sold has copy, drop { seller: address, amount_sui: u64 }
+    public struct Bought has copy, drop { buyer: address, amount_sui: u64, referrer: address }
+    public struct Sold has copy, drop { seller: address, amount_sui: u64, referrer: address }
     public struct Graduated has copy, drop { creator: address, reward_sui: u64, treasury: address }
     public struct GraduationReady has copy, drop { creator: address, token_supply: u64, spot_price_sui_approx: u64 }
     public struct PoolCreated has copy, drop { 
@@ -152,10 +154,12 @@ module suilfg_launch::bonding_curve {
     public entry fun buy<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
+        referral_registry: &mut ReferralRegistry,
         mut payment: Coin<SUI>,
         max_sui_in: u64,
         min_tokens_out: u64,
         deadline_ts_ms: u64,
+        referrer: Option<address>,
         clk: &Clock,
         ctx: &mut TxContext
     ) {
@@ -168,6 +172,18 @@ module suilfg_launch::bonding_curve {
 
         // Deadline check
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {}; // E_DEADLINE_EXPIRED
+        
+        let buyer = sender(ctx);
+        
+        // AUTO-REGISTER: Try to set referrer if provided and user has none
+        if (option::is_some(&referrer)) {
+            referral_registry::try_register(
+                referral_registry,
+                buyer,
+                *option::borrow(&referrer),
+                clock::timestamp_ms(clk)
+            );
+        };
 
         let gross_in = coin::value(&payment);
         if (gross_in > max_sui_in) { abort 5; }; // E_MAX_IN_EXCEEDED
@@ -183,18 +199,32 @@ module suilfg_launch::bonding_curve {
             };
         };
 
-        // Platform and creator fees based on trade size (excluding first_fee)
-        let platform_fee = coin::value(&payment) * curve.platform_fee_bps / 10_000;
-        let creator_fee = coin::value(&payment) * curve.creator_fee_bps / 10_000;
-
-        if (platform_fee > 0) {
-            let fee_coin = coin::split(&mut payment, platform_fee, ctx);
+        // Calculate fees
+        let trade_amount_after_first_fee = coin::value(&payment);
+        let platform_fee = trade_amount_after_first_fee * curve.platform_fee_bps / 10_000;
+        let creator_fee = trade_amount_after_first_fee * curve.creator_fee_bps / 10_000;
+        
+        // Calculate and pay referral reward (comes from platform's cut)
+        let referral_fee = calculate_and_pay_referral(
+            cfg,
+            referral_registry,
+            buyer,
+            trade_amount_after_first_fee,
+            &mut payment,
+            ctx
+        );
+        
+        // Platform gets: platform_fee - referral_fee
+        let actual_platform_fee = platform_fee - referral_fee;
+        
+        if (actual_platform_fee > 0) {
+            let fee_coin = coin::split(&mut payment, actual_platform_fee, ctx);
             transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
-        } else { };
+        };
         if (creator_fee > 0) {
             let fee_coin = coin::split(&mut payment, creator_fee, ctx);
             transfer::public_transfer(fee_coin, curve.creator);
-        } else { };
+        };
 
         // Remaining trade amount
         let trade_in = coin::value(&payment);
@@ -222,31 +252,49 @@ module suilfg_launch::bonding_curve {
         // Mint tokens as Coin<T> to buyer and update supply
         curve.token_supply = s2_clamped;
         let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_out, ctx);
-        transfer::public_transfer(minted, sender(ctx));
-        event::emit(Bought { buyer: sender(ctx), amount_sui: used });
+        transfer::public_transfer(minted, buyer);
+        
+        let referrer_addr = if (option::is_some(&referral_registry::get_referrer(referral_registry, buyer))) {
+            *option::borrow(&referral_registry::get_referrer(referral_registry, buyer))
+        } else {
+            @0x0
+        };
+        event::emit(Bought { buyer, amount_sui: used, referrer: referrer_addr });
     }
 
     public entry fun sell<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
+        referral_registry: &mut ReferralRegistry,
         mut tokens: Coin<T>,
         amount_tokens: u64,
         min_sui_out: u64,
         deadline_ts_ms: u64,
+        referrer: Option<address>,
         clk: &Clock,
         ctx: &mut TxContext
     ) {
         // Only allow when open or whitelisted exit; if WL, enforce allowlist
+        let seller = sender(ctx);
         match (curve.status) {
             TradingStatus::Open => { },
             TradingStatus::Frozen => { abort E_TRADING_FROZEN; },
             TradingStatus::WhitelistedExit => {
-                let user = sender(ctx);
-                if (!is_whitelisted(&curve.whitelist, user)) { abort E_NOT_WHITELISTED; }
+                if (!is_whitelisted(&curve.whitelist, seller)) { abort E_NOT_WHITELISTED; }
             }
         };
 
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {}; // E_DEADLINE_EXPIRED
+        
+        // AUTO-REGISTER: Try to set referrer if provided (in case they received tokens)
+        if (option::is_some(&referrer)) {
+            referral_registry::try_register(
+                referral_registry,
+                seller,
+                *option::borrow(&referrer),
+                clock::timestamp_ms(clk)
+            );
+        };
 
         // Compute payout and fees
         let s1 = curve.token_supply;
@@ -257,7 +305,19 @@ module suilfg_launch::bonding_curve {
 
         let platform_fee = gross * curve.platform_fee_bps / 10_000;
         let creator_fee = gross * curve.creator_fee_bps / 10_000;
-        let net = gross - platform_fee - creator_fee;
+        
+        // Calculate referral fee (comes from platform's cut)
+        let referral_bps = platform_config::get_referral_fee_bps(cfg);
+        let referrer_opt = referral_registry::get_referrer(referral_registry, seller);
+        let referral_fee = if (option::is_some(&referrer_opt)) {
+            gross * referral_bps / 10_000
+        } else {
+            0
+        };
+        
+        // Platform gets: platform_fee - referral_fee
+        let actual_platform_fee = platform_fee - referral_fee;
+        let net = gross - actual_platform_fee - creator_fee - referral_fee;
 
         // Burn the tokens being sold; if needed, split first
         let val = coin::value(&tokens);
@@ -273,21 +333,38 @@ module suilfg_launch::bonding_curve {
         // Withdraw from reserve
         let payout_bal = balance::split(&mut curve.sui_reserve, net);
         let payout_coin = coin::from_balance(payout_bal, ctx);
-        transfer::public_transfer(payout_coin, sender(ctx));
+        transfer::public_transfer(payout_coin, seller);
 
-        if (platform_fee > 0) {
-            let fee_bal = balance::split(&mut curve.sui_reserve, platform_fee);
+        // Pay referral reward if applicable
+        if (referral_fee > 0 && option::is_some(&referrer_opt)) {
+            let referrer = *option::borrow(&referrer_opt);
+            let ref_bal = balance::split(&mut curve.sui_reserve, referral_fee);
+            let ref_coin = coin::from_balance(ref_bal, ctx);
+            transfer::public_transfer(ref_coin, referrer);
+            
+            // Update stats
+            referral_registry::record_reward(referral_registry, referrer, referral_fee);
+        };
+
+        if (actual_platform_fee > 0) {
+            let fee_bal = balance::split(&mut curve.sui_reserve, actual_platform_fee);
             let fee_coin = coin::from_balance(fee_bal, ctx);
             transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
-        } else {};
+        };
         if (creator_fee > 0) {
             let fee_bal = balance::split(&mut curve.sui_reserve, creator_fee);
             let fee_coin = coin::from_balance(fee_bal, ctx);
             transfer::public_transfer(fee_coin, curve.creator);
-        } else {};
+        };
 
         curve.token_supply = curve.token_supply - amount_tokens;
-        event::emit(Sold { seller: sender(ctx), amount_sui: net });
+        
+        let referrer_addr = if (option::is_some(&referrer_opt)) {
+            *option::borrow(&referrer_opt)
+        } else {
+            @0x0
+        };
+        event::emit(Sold { seller, amount_sui: net, referrer: referrer_addr });
     }
 
     public entry fun try_graduate<T: drop + store>(
@@ -670,4 +747,36 @@ module suilfg_launch::bonding_curve {
     }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
+    
+    /// Calculate and pay referral reward (returns fee amount paid)
+    fun calculate_and_pay_referral(
+        cfg: &PlatformConfig,
+        referral_registry: &mut ReferralRegistry,
+        trader: address,
+        trade_amount: u64,
+        payment: &mut Coin<SUI>,
+        ctx: &mut TxContext
+    ): u64 {
+        // Check if trader has referrer on-chain
+        let referrer_opt = referral_registry::get_referrer(referral_registry, trader);
+        
+        if (option::is_none(&referrer_opt)) {
+            return 0  // No referrer, no fee
+        };
+        
+        let referrer = *option::borrow(&referrer_opt);
+        let referral_bps = platform_config::get_referral_fee_bps(cfg);
+        let referral_fee = trade_amount * referral_bps / 10_000;
+        
+        if (referral_fee > 0) {
+            // Pay referrer INSTANTLY
+            let referral_coin = coin::split(payment, referral_fee, ctx);
+            transfer::public_transfer(referral_coin, referrer);
+            
+            // Update stats
+            referral_registry::record_reward(referral_registry, referrer, referral_fee);
+        };
+        
+        referral_fee
+    }
 }
