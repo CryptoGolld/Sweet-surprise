@@ -17,11 +17,11 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     
     // Cetus CLMM imports for automatic pool creation with PERMANENT LP burn
-    use cetus_clmm::config::GlobalConfig;
-    use cetus_clmm::pool::{Self as cetus_pool, Pool};
-    use cetus_clmm::position::Position;
-    use cetus_clmm::pool_creator;
-    use cetus_clmm::factory::Pools;
+    use cetusclmm::config::GlobalConfig;
+    use cetusclmm::pool::{Self as cetus_pool, Pool};
+    use cetusclmm::position::Position;
+    use cetusclmm::pool_creator;
+    use cetusclmm::factory::Pools;
     use lpburn::lp_burn::{Self, BurnManager, CetusLPBurnProof};
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
