@@ -53,19 +53,21 @@
 
 ## 📚 Documentation
 
-### Quick Start
-- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Everything in one place! START HERE! ⭐
+**START HERE:** 📖 **[SuiLFG-Launch-Blueprint.md](SuiLFG-Launch-Blueprint.md)** - Complete implementation guide
 
-### Detailed Guides
-- **[REFERRAL_SYSTEM.md](REFERRAL_SYSTEM.md)** - Complete referral implementation
-- **[HOW_REFERRAL_LINKS_WORK.md](HOW_REFERRAL_LINKS_WORK.md)** - Simple explanation of referral flow
-- **[PERMANENT_LP_LOCK.md](PERMANENT_LP_LOCK.md)** - LP burn mechanism
+This single document contains:
+- ✅ Architecture overview
+- ✅ All smart contract modules explained
+- ✅ Referral system implementation
+- ✅ Permanent LP lock details
+- ✅ Fee structure (all fees in SUI!)
+- ✅ Deployment guide
+- ✅ Frontend integration examples
+- ✅ Testing checklist
+- ✅ Admin operations
 
-### Platform Documentation
-- **[SuiLFG-Launch-Blueprint.md](SuiLFG-Launch-Blueprint.md)** - Original platform design
-- **[BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md)** - How to compile contracts
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Deployment steps
-- **[READY_TO_DEPLOY.md](READY_TO_DEPLOY.md)** - Pre-deployment checklist
+**Additional Resources:**
+- **[BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md)** - Build troubleshooting
 
 ---
 
@@ -100,7 +102,7 @@ sui client call \
 ```
 
 ### 4. Frontend Integration
-See [REFERRAL_SYSTEM.md](REFERRAL_SYSTEM.md) for complete frontend examples!
+See [SuiLFG-Launch-Blueprint.md](SuiLFG-Launch-Blueprint.md) Section 8 for complete frontend examples!
 
 ```typescript
 // Basic referral link handling
