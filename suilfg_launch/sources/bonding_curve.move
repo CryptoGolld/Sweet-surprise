@@ -571,14 +571,13 @@ module suilfg_launch::bonding_curve {
         
         // 5. PERMANENTLY BURN the LP position!
         // This wraps it in CetusLPBurnProof and makes liquidity removal IMPOSSIBLE
-        let position_id = object::id(&position_nft);
         let burn_proof = lp_burn::burn_lp_v2(
             burn_manager,
             position_nft,
             ctx
         );
         
-        let burn_proof_id = object::id(&burn_proof);
+        let burn_proof_id = object::id_address(&burn_proof);
         
         // 6. Transfer burn proof to treasury for permanent custody
         // Fees can still be collected via collect_lp_fees_from_burned_position
@@ -592,7 +591,7 @@ module suilfg_launch::bonding_curve {
             sui_amount: sui_for_lp,
             token_amount: token_for_lp,
             pool_id: @0x0, // Pool is shared, can be found via events
-            burned_position_id: object::id_address(&burn_proof_id),
+            burned_position_id: burn_proof_id,
             lp_fee_recipient: curve.lp_fee_recipient
         });
     }
