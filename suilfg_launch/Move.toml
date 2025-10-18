@@ -6,13 +6,13 @@ edition = "2024"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.35.1" }
+CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0" }
+LpBurn = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/lp_burn", rev = "testnet-v1.26.0" }
 
 [dev-dependencies]
 
 [addresses]
 suilfg_launch = "0x0"
-# Using published testnet addresses directly (avoids dependency version conflicts)
-cetusclmm = "0x0868b71c0cba55bf0faf6c40df8c179c67a4d0ba0e79965b68b3d72d7dfbf666"
-lpburn = "0x9c751fccc633f3ebad2becbe7884e5f38b4e497127689be0d404b24f79d95d71"
-integer_mate = "0x8d89c3efc8bf60fcfbc27fd2e86f05b4b3e7e6e3c48bda33c5c8c4d5d5e5e5e5"
-move_stl = "0x1"
+
+[overrides]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.35.1" }
