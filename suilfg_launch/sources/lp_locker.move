@@ -77,6 +77,9 @@ module suilfg_launch::lp_locker {
         locked_at: u64,
         ctx: &mut TxContext
     ): LockedLPPosition<CoinA, CoinB> {
+        // SECURITY: Prevent locking with invalid recipient (would trap fees forever!)
+        assert!(fee_recipient != @0x0, E_INVALID_RECIPIENT);
+        
         let position_id = object::id(&position);
         let locked_id = object::new(ctx);
         let locked_position_id = object::uid_to_inner(&locked_id);
@@ -112,6 +115,10 @@ module suilfg_launch::lp_locker {
         pool: &mut Pool<CoinA, CoinB>,
         ctx: &mut TxContext
     ) {
+        // SECURITY: Verify recipient is valid before collecting
+        // This prevents fees from being trapped if recipient was set to 0x0
+        assert!(locked.fee_recipient != @0x0, E_INVALID_RECIPIENT);
+        
         // Collect fees from the locked position (position stays locked!)
         let (balance_a, balance_b) = cetus_pool::collect_fee<CoinA, CoinB>(
             cetus_config,
@@ -146,6 +153,9 @@ module suilfg_launch::lp_locker {
         locked: &mut LockedLPPosition<CoinA, CoinB>,
         new_recipient: address
     ) {
+        // SECURITY: Prevent setting to 0x0 which would trap fees forever!
+        assert!(new_recipient != @0x0, E_INVALID_RECIPIENT);
+        
         let old_recipient = locked.fee_recipient;
         locked.fee_recipient = new_recipient;
         
@@ -193,6 +203,48 @@ module suilfg_launch::lp_locker {
         locked.locked_at
     }
     
+    // ==================== Emergency Recovery (Just In Case) ====================
+    
+    /// Emergency: Collect fees with custom recipient
+    /// ONLY used if fee_recipient becomes invalid somehow
+    /// Requires admin authority + still can't unlock liquidity!
+    public entry fun emergency_collect_to_custom_recipient<CoinA, CoinB>(
+        _admin: &AdminCap,
+        locked: &mut LockedLPPosition<CoinA, CoinB>,
+        cetus_config: &GlobalConfig,
+        pool: &mut Pool<CoinA, CoinB>,
+        emergency_recipient: address,
+        ctx: &mut TxContext
+    ) {
+        // SECURITY: Emergency recipient must be valid
+        assert!(emergency_recipient != @0x0, E_INVALID_RECIPIENT);
+        
+        // Collect fees from the locked position
+        let (balance_a, balance_b) = cetus_pool::collect_fee<CoinA, CoinB>(
+            cetus_config,
+            pool,
+            &locked.position,
+            true
+        );
+        
+        let fee_sui_amount = balance::value(&balance_a);
+        let fee_token_amount = balance::value(&balance_b);
+        
+        let coin_a = coin::from_balance(balance_a, ctx);
+        let coin_b = coin::from_balance(balance_b, ctx);
+        
+        // Send to emergency recipient (NOT locked.fee_recipient)
+        transfer::public_transfer(coin_a, emergency_recipient);
+        transfer::public_transfer(coin_b, emergency_recipient);
+        
+        event::emit(FeeCollected {
+            locked_position_id: object::id(locked),
+            fee_sui: fee_sui_amount,
+            fee_token: fee_token_amount,
+            recipient: emergency_recipient,  // Log emergency recipient
+        });
+    }
+    
     // ==================== IMPORTANT: NO UNLOCK FUNCTION! ====================
     // 
     // There is NO function to unlock or remove liquidity!
@@ -202,6 +254,7 @@ module suilfg_launch::lp_locker {
     // The only thing that can be done is:
     // 1. Collect fees (anyone can call)
     // 2. Change fee recipient (admin only)
+    // 3. Emergency collect (admin only, if regular collection breaks)
     // 
     // The Position NFT is trapped in this shared object FOREVER! 🔒
 }
