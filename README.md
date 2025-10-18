@@ -1,6 +1,6 @@
 # 🚀 SuiLFG Launch - Memecoin Launchpad Contracts
 
-**Version:** 6.0  
+**Version:** 7.0  
 **Status:** Production Ready ✅  
 **Network:** Sui Blockchain  
 
@@ -26,11 +26,12 @@
 - ✅ **Admin customizable** rate
 
 ### 🔒 Permanent LP Lock (NEW!)
-- ✅ **Permanent liquidity lock** via Cetus LP Burn
-- ✅ **LP fees still collectible** even when burned
+- ✅ **Permanent liquidity lock** via custom lp_locker module
+- ✅ **Upgrade-safe flag** prevents future unlock
+- ✅ **LP fees still collectible** even when locked
 - ✅ **Changeable fee recipient** (admin configurable)
 - ✅ **Zero rug-pull risk** (mathematically impossible)
-- ✅ **Community verifiable** on-chain
+- ✅ **100% transparent** - simple, auditable code
 
 ---
 
@@ -41,12 +42,14 @@
 2. **bonding_curve.move** - Trading engine with referral integration
 3. **ticker_registry.move** - Ticker lifecycle management
 4. **referral_registry.move** - Referral tracking & payouts
+5. **lp_locker.move** - Permanent LP lock with upgrade-safe flag
 
 ### Shared Objects:
 - `PlatformConfig` - Global settings
 - `TickerRegistry` - Ticker states
 - `ReferralRegistry` - Referral relationships
 - `BondingCurve<T>` - Per-token trading curve
+- `LockedLPPosition<T>` - Permanently locked LP positions
 - `AdminCap` - Admin authority
 
 ---
@@ -86,7 +89,7 @@ sui client publish --gas-budget 500000000
 
 ### 3. Configure
 ```bash
-# Set Cetus config (for LP burn)
+# Set Cetus config (for pool creation)
 sui client call \
   --package <PACKAGE_ID> \
   --module platform_config \
@@ -129,7 +132,6 @@ txb.moveCall({
 
 ```
 Cetus GlobalConfig: 0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e
-Cetus BurnManager: <Get from Cetus docs>
 ```
 
 ---
@@ -175,10 +177,11 @@ sui client publish --gas-budget 500000000
 
 ### Test LP Lock:
 1. Graduate token (13,333 SUI)
-2. Create Cetus pool with burn
-3. Verify CetusLPBurnProof exists
-4. Try to remove liquidity (should fail)
-5. Collect LP fees (should work)
+2. Create Cetus pool with lock
+3. Verify LockedLPPosition shared object exists
+4. Check is_permanently_locked() returns true
+5. Verify no unlock() function exists in lp_locker
+6. Collect LP fees (should work)
 
 ---
 
@@ -191,9 +194,10 @@ sui client publish --gas-budget 500000000
 - ✅ No manipulation possible
 
 ### LP Lock:
-- ✅ Permanent burn (cannot be undone)
-- ✅ Cetus config validated
-- ✅ Burn manager validated
+- ✅ Permanent lock (cannot be undone)
+- ✅ Upgrade-safe flag protection
+- ✅ Cetus config validated (for pool creation)
+- ✅ No unlock function exists
 - ✅ Team allocation always to treasury
 
 ### Platform:
@@ -291,15 +295,13 @@ See LICENSE file.
 ## 🆘 Support
 
 ### Documentation:
-- Start with [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
-- For referrals, see [REFERRAL_SYSTEM.md](REFERRAL_SYSTEM.md)
-- For LP lock, see [PERMANENT_LP_LOCK.md](PERMANENT_LP_LOCK.md)
+- **START HERE:** [SuiLFG-Launch-Blueprint.md](SuiLFG-Launch-Blueprint.md) - Complete guide with all features
 
 ### Key Concepts:
 - **Referral Links:** Just append `?ref=WALLET_ADDRESS` to any URL
 - **Auto-Registration:** Happens on first trade (zero extra gas)
 - **Instant Payouts:** Referrer paid every trade automatically
-- **Permanent Lock:** LP burned via Cetus, cannot be removed
+- **Permanent Lock:** LP locked in shared object with upgrade-safe flag
 
 ---
 
@@ -307,7 +309,7 @@ See LICENSE file.
 
 All contracts are implemented and documented. Next steps:
 
-1. ✅ Review [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
+1. ✅ Review [SuiLFG-Launch-Blueprint.md](SuiLFG-Launch-Blueprint.md)
 2. ✅ Build contracts: `sui move build`
 3. ✅ Deploy to testnet
 4. ✅ Test referral flow
