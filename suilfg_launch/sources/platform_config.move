@@ -32,6 +32,8 @@ module suilfg_launch::platform_config {
         // SECURITY: Hardcoded Cetus config (admin controlled)
         cetus_global_config_id: address,
         cetus_burn_manager_id: address,
+        // Referral system (flat rate, no tiers)
+        referral_fee_bps: u64,  // e.g., 10 = 0.1% for all referrers
     }
 
     /// Capability that authorizes admin-only operations
@@ -59,6 +61,8 @@ module suilfg_launch::platform_config {
     const DEFAULT_TICKER_MAX_LOCK_MS: u64 = 7 * 24 * 60 * 60 * 1000; // 7 days
     const DEFAULT_TICKER_EARLY_REUSE_BASE_FEE_MIST: u64 = 33 * 1_000_000_000; // 33 SUI
     const DEFAULT_TICKER_EARLY_REUSE_MAX_FEE_MIST: u64 = 666 * 1_000_000_000; // 666 SUI cap
+    // Referral system: flat 0.1% for all referrers (comes from platform fee)
+    const DEFAULT_REFERRAL_FEE_BPS: u64 = 10; // 0.1%
 
     public fun get_treasury_address(cfg: &PlatformConfig): address { cfg.treasury_address }
     public fun get_creation_is_paused(cfg: &PlatformConfig): bool { cfg.creation_is_paused }
@@ -80,6 +84,7 @@ module suilfg_launch::platform_config {
     public fun get_cetus_global_config_id(cfg: &PlatformConfig): address { cfg.cetus_global_config_id }
     public fun get_cetus_burn_manager_id(cfg: &PlatformConfig): address { cfg.cetus_burn_manager_id }
     public fun get_lp_recipient_address(cfg: &PlatformConfig): address { cfg.lp_recipient_address }
+    public fun get_referral_fee_bps(cfg: &PlatformConfig): u64 { cfg.referral_fee_bps }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
     fun init(_w: PLATFORM_CONFIG, ctx: &mut TxContext) {
@@ -106,6 +111,7 @@ module suilfg_launch::platform_config {
             lp_recipient_address: sender(ctx),
             cetus_global_config_id: @0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e, // Testnet Global Config
             cetus_burn_manager_id: @0x0, // Must be set after deployment
+            referral_fee_bps: DEFAULT_REFERRAL_FEE_BPS,
         };
         transfer::share_object(cfg);
         transfer::transfer(admin, sender(ctx));
@@ -200,5 +206,12 @@ module suilfg_launch::platform_config {
     /// Get the correct address from Cetus LP burn deployment for your network
     public entry fun set_cetus_burn_manager_id(_admin: &AdminCap, cfg: &mut PlatformConfig, burn_manager_addr: address) {
         cfg.cetus_burn_manager_id = burn_manager_addr;
+    }
+    
+    /// Set referral fee (admin only)
+    /// Fee is paid from platform's cut, so platform earns: platform_fee - referral_fee
+    public entry fun set_referral_fee_bps(_admin: &AdminCap, cfg: &mut PlatformConfig, fee_bps: u64) {
+        assert!(fee_bps <= 10_000, 1005); // Max 100%
+        cfg.referral_fee_bps = fee_bps;
     }
 }
