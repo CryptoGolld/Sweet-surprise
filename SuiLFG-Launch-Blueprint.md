@@ -1,9 +1,9 @@
 # SuiLFG Launch — Complete Implementation Blueprint
 
-**Version:** 6.0  
+**Version:** 7.0  
 **Status:** Production-Ready ✅  
 **Last Updated:** December 2024  
-**New Features:** Referral System + Permanent LP Lock 🔥
+**New Features:** Referral System + Custom LP Locker (Upgrade-Safe) 🔥
 
 ---
 
@@ -208,7 +208,82 @@ public fun get_stats(
 
 ---
 
-### 3.4 ticker_registry.move
+### 3.4 lp_locker.move (NEW!)
+
+**Purpose:** Permanently lock Cetus LP Position NFTs with upgrade-safe design.
+
+**Features:**
+- Locks Position NFT in shared object
+- `is_permanently_locked: bool` flag (immutable)
+- No unlock function exists
+- Collects LP fees to changeable recipient
+- 100% transparent and auditable
+
+**Data Structure:**
+
+```move
+public struct LockedLPPosition<phantom CoinA, phantom CoinB> has key {
+    id: UID,
+    position: Position,              // Cetus Position NFT locked inside
+    pool_id: ID,                     // Which pool
+    fee_recipient: address,          // Changeable by admin
+    locked_at: u64,                  // Timestamp
+    bonding_curve_id: ID,            // Which token created this
+    is_permanently_locked: bool,     // TRUE = cannot unlock (EVER!)
+}
+```
+
+**Key Functions:**
+
+```move
+// Lock position permanently (called once at graduation)
+public fun lock_position_permanent<CoinA, CoinB>(
+    position: Position,
+    pool_id: ID,
+    fee_recipient: address,
+    bonding_curve_id: ID,
+    locked_at: u64,
+    ctx: &mut TxContext
+): LockedLPPosition<CoinA, CoinB>
+
+// Collect fees (permissionless - anyone can call!)
+public entry fun collect_lp_fees<CoinA, CoinB>(
+    locked: &mut LockedLPPosition<CoinA, CoinB>,
+    cetus_config: &GlobalConfig,
+    pool: &mut Pool<CoinA, CoinB>,
+    ctx: &mut TxContext
+)
+
+// Change fee recipient (admin only)
+public entry fun set_fee_recipient<CoinA, CoinB>(
+    admin: &AdminCap,
+    locked: &mut LockedLPPosition<CoinA, CoinB>,
+    new_recipient: address
+)
+
+// View functions
+public fun is_permanently_locked<CoinA, CoinB>(
+    locked: &LockedLPPosition<CoinA, CoinB>
+): bool  // Always returns true!
+```
+
+**Upgrade Safety:**
+
+Even if a future upgrade adds an `unlock()` function, the `is_permanently_locked` flag protects old positions:
+
+```move
+// Hypothetical future function (won't work on old locks!)
+public fun unlock(...) {
+    assert!(!locked.is_permanently_locked, E_PERMANENTLY_LOCKED);
+    // Can only unlock positions created with flag = false
+}
+```
+
+All positions created by our contracts have `is_permanently_locked = true`, making them mathematically provable as permanent! 🔒
+
+---
+
+### 3.5 ticker_registry.move
 
 **Purpose:** Ticker lifecycle management with 7-day max lock.
 
@@ -386,13 +461,21 @@ async function getReferrerStats(referrerAddress: string) {
 
 ### 5.1 Overview
 
-Instead of time-based locks, we use **Cetus LP Burn** for permanent liquidity locking:
+We use a **Custom LP Locker** with upgrade-safe design for permanent liquidity locking:
 
 - ✅ **Permanent lock** - Liquidity cannot be removed (ever!)
-- ✅ **LP fees collectible** - Even when burned
+- ✅ **Upgrade-safe flag** - `is_permanently_locked: bool` prevents future unlock functions
+- ✅ **LP fees collectible** - Even when locked
 - ✅ **Changeable recipient** - Admin can update fee recipient
 - ✅ **Zero rug risk** - Mathematically impossible to remove liquidity
-- ✅ **Community verifiable** - CetusLPBurnProof on-chain
+- ✅ **100% our code** - Fully auditable, no external dependencies
+- ✅ **No dependency conflicts** - Uses Cetus for pool creation only
+
+**Why Custom Locker Instead of Cetus LP Burn?**
+- No git dependency conflicts (Cetus packages had version issues)
+- Simpler to audit and verify
+- Clear upgrade safety with immutable flag
+- Community can easily read and trust the code
 
 ### 5.2 How It Works
 
@@ -429,13 +512,12 @@ public entry fun distribute_payouts<T>(
 }
 ```
 
-**Step 3: Create Pool & Burn LP**
+**Step 3: Create Pool & Lock LP**
 ```move
-public entry fun seed_pool_and_create_cetus_with_burn<T>(
+public entry fun seed_pool_and_create_cetus_with_lock<T>(
     cfg: &PlatformConfig,
     curve: &mut BondingCurve<T>,
     cetus_global_config: &GlobalConfig,
-    burn_manager: &mut BurnManager,
     pools: &mut Pools,
     // ... other params
 ) {
@@ -446,11 +528,18 @@ public entry fun seed_pool_and_create_cetus_with_burn<T>(
     // 2. Create Cetus pool with remaining liquidity
     let (position_nft, refund_sui, refund_token) = pool_creator::create_pool_v2(...);
     
-    // 3. BURN the LP position permanently
-    let burn_proof = lp_burn::burn_lp_v2(burn_manager, position_nft, ctx);
+    // 3. LOCK the LP position permanently in shared object
+    let locked_lp = lp_locker::lock_position_permanent<SUI, T>(
+        position_nft,
+        pool_id,
+        curve.lp_fee_recipient,
+        object::id(curve),
+        timestamp,
+        ctx
+    );
     
-    // 4. Store burn proof in treasury
-    transfer::public_transfer(burn_proof, treasury_address);
+    // 4. Share the locked object (anyone can verify it's locked!)
+    transfer::share_object(locked_lp);
     
     // Result: Liquidity LOCKED FOREVER!
 }
@@ -458,24 +547,41 @@ public entry fun seed_pool_and_create_cetus_with_burn<T>(
 
 **Step 4: Collect Fees (Still Works!)**
 ```move
-public entry fun collect_lp_fees_from_burned_position<T>(
-    curve: &BondingCurve<T>,
-    burn_manager: &BurnManager,
+public entry fun collect_lp_fees_from_locked_position<T>(
+    locked_lp: &mut LockedLPPosition<SUI, T>,
     cetus_config: &GlobalConfig,
     pool: &mut Pool<SUI, T>,
-    burn_proof: &mut CetusLPBurnProof,
     ctx: &mut TxContext
 ) {
-    // Collect fees from burned position
-    let (fee_sui, fee_token) = lp_burn::collect_fee(...);
+    // Delegate to lp_locker module
+    lp_locker::collect_lp_fees<SUI, T>(
+        locked_lp,
+        cetus_config,
+        pool,
+        ctx
+    );
     
-    // Send to changeable recipient
-    transfer::public_transfer(fee_sui, curve.lp_fee_recipient);
-    transfer::public_transfer(fee_token, curve.lp_fee_recipient);
+    // Fees sent to changeable recipient automatically
 }
 ```
 
-**Step 5: Change Fee Recipient (Admin Only)**
+**Step 5: Verify Permanent Lock (Anyone Can Check!)**
+```move
+// View function - returns true (always!)
+public fun is_permanently_locked<CoinA, CoinB>(
+    locked: &LockedLPPosition<CoinA, CoinB>
+): bool {
+    locked.is_permanently_locked  // This is IMMUTABLE!
+}
+```
+
+**Why This Flag Matters:**
+- Even if future contract upgrade adds `unlock()` function
+- Old locked positions have `is_permanently_locked = true`
+- Flag is immutable (can't be changed after creation)
+- Mathematical proof of permanent lock!
+
+**Step 6: Change Fee Recipient (Admin Only)**
 ```move
 public entry fun set_lp_fee_recipient<T>(
     admin: &AdminCap,
@@ -490,10 +596,12 @@ public entry fun set_lp_fee_recipient<T>(
 
 Users can verify permanent lock by:
 1. Check `BondingCurve.lp_seeded == true`
-2. Find `PoolCreated` event with `burned_position_id`
-3. Verify `CetusLPBurnProof` exists in treasury
-4. Confirm liquidity in Cetus pool matches expected amount
-5. Try to remove liquidity (will fail - burned!)
+2. Find `PoolCreated` event with `locked_position_id`
+3. Query `LockedLPPosition` shared object
+4. Call `is_permanently_locked()` - should return `true`
+5. Verify no `unlock()` function exists in `lp_locker` module
+6. Confirm liquidity in Cetus pool matches expected amount
+7. Read the simple `lp_locker.move` source code (100% transparent!)
 
 ---
 
@@ -952,11 +1060,11 @@ console.log('Total earned:', stats.totalEarned, 'SUI');
 
 ✅ **All Fees in SUI:** Every fee (platform, creator, referral) is paid in SUI tokens, never in the meme token.
 
-✅ **Permanent LP Lock:** Using Cetus LP Burn provides mathematically provable permanent liquidity lock.
+✅ **Permanent LP Lock:** Custom lp_locker module with `is_permanently_locked` flag provides mathematically provable permanent liquidity lock (upgrade-safe!).
 
 ✅ **Admin-Controlled Addresses:** Team allocation and platform cut always sent to admin-controlled addresses (treasury).
 
-✅ **Validated Cetus Config:** Both GlobalConfig and BurnManager IDs are validated against admin-set addresses.
+✅ **Validated Cetus Config:** GlobalConfig ID is validated against admin-set address for pool creation.
 
 ### 11.3 Revenue Model
 

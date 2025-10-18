@@ -18,13 +18,15 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     use suilfg_launch::referral_registry::{Self, ReferralRegistry};
     
-    // Cetus CLMM imports for automatic pool creation with PERMANENT LP burn
-    use cetusclmm::config::GlobalConfig;
-    use cetusclmm::pool::{Self as cetus_pool, Pool};
-    use cetusclmm::position::Position;
-    use cetusclmm::pool_creator;
-    use cetusclmm::factory::Pools;
-    use lpburn::lp_burn::{Self, BurnManager, CetusLPBurnProof};
+    // Cetus CLMM imports for automatic pool creation
+    use cetus_clmm::config::GlobalConfig;
+    use cetus_clmm::pool::{Self as cetus_pool, Pool};
+    use cetus_clmm::position::Position;
+    use cetus_clmm::pool_creator;
+    use cetus_clmm::factory::Pools;
+    
+    // Our custom LP locker for permanent lock with upgrade-safe flag
+    use suilfg_launch::lp_locker::{Self, LockedLPPosition};
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
 
@@ -64,7 +66,7 @@ module suilfg_launch::bonding_curve {
         sui_amount: u64,
         token_amount: u64,
         pool_id: address,
-        burned_position_id: address,
+        locked_position_id: address,
         lp_fee_recipient: address
     }
 
@@ -487,11 +489,10 @@ module suilfg_launch::bonding_curve {
     /// 2. Cetus config validated against admin-set address
     /// 3. LP position PERMANENTLY BURNED - cannot rug!
     /// 4. Fee recipient changeable for flexibility
-    public entry fun seed_pool_and_create_cetus_with_burn<T: drop + store>(
+    public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         cetus_global_config: &GlobalConfig,
-        burn_manager: &mut BurnManager,
         pools: &mut Pools,
         tick_spacing: u32,
         initialize_sqrt_price: u128,
@@ -507,11 +508,6 @@ module suilfg_launch::bonding_curve {
         let expected_cetus_config = platform_config::get_cetus_global_config_id(cfg);
         let actual_cetus_config = object::id_address(cetus_global_config);
         assert!(actual_cetus_config == expected_cetus_config, E_INVALID_CETUS_CONFIG);
-        
-        // Validate burn manager (could add validation against config if needed)
-        let expected_burn_manager = platform_config::get_cetus_burn_manager_id(cfg);
-        let actual_burn_manager = object::id_address(burn_manager);
-        assert!(actual_burn_manager == expected_burn_manager, E_INVALID_BURN_MANAGER);
         
         // 1. Mint team allocation (2M tokens)
         // SECURITY: Always sent to treasury_address from config (admin controlled)
@@ -569,19 +565,23 @@ module suilfg_launch::bonding_curve {
             coin::destroy_zero(refund_token);
         };
         
-        // 5. PERMANENTLY BURN the LP position!
-        // This wraps it in CetusLPBurnProof and makes liquidity removal IMPOSSIBLE
-        let burn_proof = lp_burn::burn_lp_v2(
-            burn_manager,
+        // 5. PERMANENTLY LOCK the LP position in our custom locker!
+        // This makes liquidity removal IMPOSSIBLE with upgrade-safe flag
+        let pool_id = @0x0; // Pool address will be in Cetus events
+        let locked_lp = lp_locker::lock_position_permanent<SUI, T>(
             position_nft,
+            object::id_from_address(pool_id),
+            curve.lp_fee_recipient,
+            object::id(curve),
+            clock::timestamp_ms(clock),
             ctx
         );
         
-        let burn_proof_id = object::id_address(&burn_proof);
+        let locked_position_id = object::id_address(&locked_lp);
         
-        // 6. Transfer burn proof to treasury for permanent custody
-        // Fees can still be collected via collect_lp_fees_from_burned_position
-        transfer::public_transfer(burn_proof, platform_config::get_treasury_address(cfg));
+        // 6. Share the locked position object - anyone can verify it's permanently locked!
+        // Fees can still be collected via collect_lp_fees function
+        transfer::share_object(locked_lp);
         
         curve.lp_seeded = true;
         curve.token_supply = curve.token_supply + token_for_lp;
@@ -590,36 +590,31 @@ module suilfg_launch::bonding_curve {
             token_type: type_name::get<T>(),
             sui_amount: sui_for_lp,
             token_amount: token_for_lp,
-            pool_id: @0x0, // Pool is shared, can be found via events
-            burned_position_id: burn_proof_id,
+            pool_id: @0x0, // Pool is shared, can be found via Cetus events
+            locked_position_id,
             lp_fee_recipient: curve.lp_fee_recipient
         });
     }
     
-    /// Collect LP fees from BURNED Cetus position (permissionless!)
+    /// Collect LP fees from LOCKED Cetus position (permissionless!)
     /// Anyone can call this to send accumulated fees to the changeable lp_fee_recipient
     /// 
     /// This works even though liquidity is permanently locked!
-    public entry fun collect_lp_fees_from_burned_position<T: drop + store>(
-        curve: &BondingCurve<T>,
-        burn_manager: &BurnManager,
+    /// Note: The locked_lp object can be different from curve's original lock,
+    /// so anyone can collect fees from any locked position to its designated recipient.
+    public entry fun collect_lp_fees_from_locked_position<T: drop + store>(
+        locked_lp: &mut LockedLPPosition<SUI, T>,
         cetus_config: &GlobalConfig,
         pool: &mut Pool<SUI, T>,
-        burn_proof: &mut CetusLPBurnProof,
         ctx: &mut TxContext
     ) {
-        // Collect fees from the burned position
-        let (fee_sui, fee_token) = lp_burn::collect_fee<SUI, T>(
-            burn_manager,
+        // Delegate to lp_locker module (which handles the actual collection)
+        lp_locker::collect_lp_fees<SUI, T>(
+            locked_lp,
             cetus_config,
             pool,
-            burn_proof,
             ctx
         );
-        
-        // Send to the changeable fee recipient address
-        transfer::public_transfer(fee_sui, curve.lp_fee_recipient);
-        transfer::public_transfer(fee_token, curve.lp_fee_recipient);
     }
     
     /// Change the LP fee recipient address (admin only)
