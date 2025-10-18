@@ -1,5 +1,11 @@
 # 🔒 LP Lock Implementation Options
 
+**CURRENT STATUS:** ✅ Plan A Implemented (Testing...)
+
+---
+
+## ⚡ PLAN A: On-Chain Package Addresses (CURRENTLY TESTING)
+
 ## PLAN 1: Custom Shared Object Lock (In Our Contracts)
 
 ### Implementation:
@@ -337,3 +343,21 @@ Testnet BurnManager: (Need to find, if using LP burn)
 - Just send Position NFT to treasury (no lock, trust-based)
 
 **Tell me which and I'll implement immediately!** 🚀
+
+---
+
+## 🚀 CURRENT STATUS: PLAN A IMPLEMENTED
+
+Move.toml updated to reference on-chain packages:
+- ✅ cetusclmm: 0x0868...
+- ✅ lpburn: 0x9c75...
+- ✅ No git dependencies (only Sui framework)
+
+**Next: Try building**
+```bash
+cd /workspace/suilfg_launch
+sui move build
+```
+
+If successful: Uses official Cetus LP burn! 🎉
+If fails: Implement Plan B (custom lp_locker.move)
