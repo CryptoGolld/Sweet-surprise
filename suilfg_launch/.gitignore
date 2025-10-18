@@ -1,0 +1,20 @@
+# Sui build artifacts
+build/
+*.mv
+*.mvsm
+Move.lock
+
+# Sui binaries (should not be committed)
+sui-*
+move-analyzer
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

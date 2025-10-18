@@ -397,7 +397,7 @@ module suilfg_launch::bonding_curve {
         // Platform takes its cut (10% = 1,333 SUI)
         if (platform_cut > 0) {
             let platform_balance = balance::split(&mut curve.sui_reserve, platform_cut);
-            let platform_coin = coin::from_balance(platform_balance, ctx);
+            let mut platform_coin = coin::from_balance(platform_balance, ctx);
             
             // Creator payout comes FROM platform's cut (40 SUI from 1,333 SUI)
             if (creator_payout > 0 && creator_payout <= platform_cut) {
@@ -581,7 +581,7 @@ module suilfg_launch::bonding_curve {
         
         // 6. Share the locked position object - anyone can verify it's permanently locked!
         // Fees can still be collected via collect_lp_fees function
-        transfer::share_object(locked_lp);
+        lp_locker::share_locked_position(locked_lp);
         
         curve.lp_seeded = true;
         curve.token_supply = curve.token_supply + token_for_lp;

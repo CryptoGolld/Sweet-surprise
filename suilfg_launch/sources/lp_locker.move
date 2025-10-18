@@ -63,6 +63,7 @@ module suilfg_launch::lp_locker {
     
     const E_PERMANENTLY_LOCKED: u64 = 1;
     const E_NOT_PERMANENTLY_LOCKED: u64 = 2;
+    const E_INVALID_RECIPIENT: u64 = 3;
     
     // ==================== Core Functions ====================
     
@@ -104,6 +105,12 @@ module suilfg_launch::lp_locker {
         });
         
         locked
+    }
+    
+    /// Share a locked LP position object (called from bonding_curve module)
+    /// This function must be in the lp_locker module due to Sui's transfer restrictions
+    public fun share_locked_position<CoinA, CoinB>(locked: LockedLPPosition<CoinA, CoinB>) {
+        transfer::share_object(locked);
     }
     
     /// Collect LP fees from locked position (PERMISSIONLESS!)
