@@ -29,8 +29,11 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::lp_locker::{Self, LockedLPPosition};
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;  // 1B total supply
-    const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens max on bonding curve (rest reserved for graduation)
-    const VIRTUAL_INITIAL_SUPPLY: u64 = 1_000_000;  // 1M virtual tokens to prevent s0=0 division issue
+    const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens sold on curve at graduation
+    const CETUS_POOL_TOKENS: u64 = 207_000_000;  // 207M tokens for Cetus pool (20.7%)
+    const TEAM_ALLOCATION: u64 = 2_000_000;  // 2M team allocation (0.2%)
+    const BURNED_SUPPLY: u64 = 54_000_000;  // 54M never minted (5.4% - deflationary!)
+    // Total circulating after graduation: 946M (737M + 2M + 207M)
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
@@ -110,7 +113,7 @@ module suilfg_launch::bonding_curve {
             id: object::new(ctx),
             status: TradingStatus::Open,
             sui_reserve: balance::zero<SUI>(),
-            token_supply: VIRTUAL_INITIAL_SUPPLY,  // Start with 1M virtual supply to prevent s0=0 overflow
+            token_supply: 0,  // Start at 0 (formula includes base_price to prevent division issues)
             platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
             creator: creator,
