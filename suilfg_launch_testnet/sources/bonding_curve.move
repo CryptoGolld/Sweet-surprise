@@ -25,6 +25,7 @@ module suilfg_launch::bonding_curve {
     // use suilfg_launch::simple_amm;
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
+    const MAX_CURVE_SUPPLY: u64 = 800_000_000;  // 800M tokens available for trading (200M reserved for graduation)
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
@@ -67,6 +68,7 @@ module suilfg_launch::bonding_curve {
     const E_NOT_WHITELISTED: u64 = 3;
     const E_NOT_GRADUATED: u64 = 4;
     const E_LP_ALREADY_SEEDED: u64 = 5;
+    const E_SUPPLY_EXCEEDED: u64 = 6;
 
     fun init_for_token<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
@@ -180,6 +182,9 @@ module suilfg_launch::bonding_curve {
         // Calculate tokens to mint
         let tokens_to_mint = calculate_tokens_for_sui(curve, net_sui_for_reserve);
         if (tokens_to_mint < min_tokens_out) { abort 1003; } else {};
+        
+        // Check supply limit (800M tokens available for trading, 200M reserved for graduation)
+        if (curve.token_supply + tokens_to_mint > MAX_CURVE_SUPPLY) { abort E_SUPPLY_EXCEEDED; } else {};
 
         // Take fees
         if (platform_fee > 0) {
