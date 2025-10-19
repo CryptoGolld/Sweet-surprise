@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+*.mv
+*.mvsm
+Move.lock
+core
+
+# Sui binaries
+sui-*
+move-analyzer
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+test_coin*/

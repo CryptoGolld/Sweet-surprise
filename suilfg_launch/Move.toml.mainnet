@@ -1,0 +1,17 @@
+[package]
+name = "suilfg_launch"
+version = "0.0.1"
+published-at = ""
+edition = "2024.beta"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet-v1.58.2", override = true }
+
+# Cetus CLMM - COMMENTED OUT FOR TESTNET (version incompatibility)
+# Uncomment for mainnet testing:
+# CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0" }
+
+[dev-dependencies]
+
+[addresses]
+suilfg_launch = "0x0"
