@@ -2,6 +2,9 @@
   "dependencies": {
     "@mysten/sui": "^1.43.0",
     "@mysten/sui.js": "^0.54.1",
-    "dotenv": "^17.2.3"
+    "@types/node": "^24.8.1",
+    "dotenv": "^17.2.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }
