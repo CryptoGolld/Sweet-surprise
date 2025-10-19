@@ -89,7 +89,7 @@ module suilfg_launch::bonding_curve {
             id: object::new(ctx),
             status: TradingStatus::Open,
             sui_reserve: balance::zero<SUI>(),
-            token_supply: VIRTUAL_INITIAL_SUPPLY,  // Start with 1M virtual supply to prevent s0=0 overflow
+            token_supply: 0,  // Start at 0 (formula includes base_price to prevent division issues)
             platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
             creator: creator,
