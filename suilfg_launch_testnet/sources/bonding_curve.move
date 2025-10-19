@@ -67,7 +67,7 @@ module suilfg_launch::bonding_curve {
     const E_NOT_GRADUATED: u64 = 4;
     const E_LP_ALREADY_SEEDED: u64 = 5;
 
-    fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
@@ -89,7 +89,7 @@ module suilfg_launch::bonding_curve {
         }
     }
 
-    fun init_for_token_with_m<T: drop + store>(
+    fun init_for_token_with_m<T: drop>(
         cfg: &PlatformConfig,
         creator: address,
         treasury: TreasuryCap<T>,
@@ -103,10 +103,10 @@ module suilfg_launch::bonding_curve {
         curve
     }
 
-    public fun freeze_trading<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
-    public fun initiate_whitelisted_exit<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
+    public fun freeze_trading<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
+    public fun initiate_whitelisted_exit<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
 
-    public entry fun create_new_meme_token<T: drop + store>(
+    public entry fun create_new_meme_token<T: drop>(
         cfg: &PlatformConfig,
         treasury: TreasuryCap<T>,
         ctx: &mut TxContext
@@ -118,7 +118,7 @@ module suilfg_launch::bonding_curve {
         transfer::share_object(curve);
     }
 
-    public entry fun create_new_meme_token_with_m<T: drop + store>(
+    public entry fun create_new_meme_token_with_m<T: drop>(
         cfg: &PlatformConfig,
         treasury: TreasuryCap<T>,
         m_num: u64,
@@ -132,7 +132,7 @@ module suilfg_launch::bonding_curve {
         transfer::share_object(curve);
     }
 
-    public entry fun buy<T: drop + store>(
+    public entry fun buy<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         referral_registry: &mut ReferralRegistry,
@@ -208,7 +208,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Bought { buyer: buyer_addr, amount_sui: payment_amount, referrer: referrer_addr });
     }
 
-    public entry fun sell<T: drop + store>(
+    public entry fun sell<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         referral_registry: &mut ReferralRegistry,
@@ -276,7 +276,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Sold { seller: seller_addr, amount_sui: gross_sui, referrer: referrer_addr });
     }
 
-    fun calculate_tokens_for_sui<T: drop + store>(curve: &BondingCurve<T>, sui_in: u64): u64 {
+    fun calculate_tokens_for_sui<T: drop>(curve: &BondingCurve<T>, sui_in: u64): u64 {
         let s0 = (curve.token_supply as u128);
         let r = (sui_in as u128);
         let m_num_u128 = (curve.m_num as u128);
@@ -287,7 +287,7 @@ module suilfg_launch::bonding_curve {
         narrow_u128_to_u64(delta_s)
     }
 
-    fun calculate_sui_for_tokens<T: drop + store>(curve: &BondingCurve<T>, token_in: u64): u64 {
+    fun calculate_sui_for_tokens<T: drop>(curve: &BondingCurve<T>, token_in: u64): u64 {
         let s0 = (curve.token_supply as u128);
         let delta_s = (token_in as u128);
         let m_num_u128 = (curve.m_num as u128);
@@ -306,7 +306,7 @@ module suilfg_launch::bonding_curve {
         }
     }
 
-    fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
+    fun spot_price_u128<T: drop>(curve: &BondingCurve<T>): u128 {
         let s = (curve.token_supply as u128);
         let m_num_u128 = (curve.m_num as u128);
         let m_den_u128 = curve.m_den;
@@ -315,13 +315,13 @@ module suilfg_launch::bonding_curve {
         (numerator / denominator)
     }
 
-    fun spot_price_u64<T: drop + store>(curve: &BondingCurve<T>): u64 {
+    fun spot_price_u64<T: drop>(curve: &BondingCurve<T>): u64 {
         narrow_u128_to_u64(spot_price_u128(curve))
     }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
 
-    public entry fun mark_graduation_ready<T: drop + store>(curve: &mut BondingCurve<T>, cfg: &PlatformConfig) {
+    public entry fun mark_graduation_ready<T: drop>(curve: &mut BondingCurve<T>, cfg: &PlatformConfig) {
         if (curve.graduated) { return; } else {};
         let reserve = balance::value<SUI>(&curve.sui_reserve);
         if (reserve < platform_config::get_default_graduation_target_mist(cfg)) { abort 9001; } else {};
@@ -331,7 +331,7 @@ module suilfg_launch::bonding_curve {
         event::emit(GraduationReady { creator: curve.creator, token_supply: curve.token_supply, spot_price_sui_approx: spot_u64 });
     }
 
-    public entry fun distribute_payouts<T: drop + store>(
+    public entry fun distribute_payouts<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         ctx: &mut TxContext
@@ -358,7 +358,7 @@ module suilfg_launch::bonding_curve {
 
     /*
     /// Graduate to Simple AMM pool (TESTNET VERSION) - TEMPORARILY COMMENTED FOR TESTING
-    public entry fun graduate_to_simple_amm<T: drop + store>(
+    public entry fun graduate_to_simple_amm<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         ctx: &mut TxContext
@@ -407,10 +407,10 @@ module suilfg_launch::bonding_curve {
     }
 
     // View functions
-    public fun get_sui_reserve<T: drop + store>(curve: &BondingCurve<T>): u64 { balance::value(&curve.sui_reserve) }
-    public fun get_token_supply<T: drop + store>(curve: &BondingCurve<T>): u64 { curve.token_supply }
-    public fun get_creator<T: drop + store>(curve: &BondingCurve<T>): address { curve.creator }
-    public fun is_graduated<T: drop + store>(curve: &BondingCurve<T>): bool { curve.graduated }
-    public fun is_lp_seeded<T: drop + store>(curve: &BondingCurve<T>): bool { curve.lp_seeded }
-    public fun get_status<T: drop + store>(curve: &BondingCurve<T>): TradingStatus { curve.status }
+    public fun get_sui_reserve<T: drop>(curve: &BondingCurve<T>): u64 { balance::value(&curve.sui_reserve) }
+    public fun get_token_supply<T: drop>(curve: &BondingCurve<T>): u64 { curve.token_supply }
+    public fun get_creator<T: drop>(curve: &BondingCurve<T>): address { curve.creator }
+    public fun is_graduated<T: drop>(curve: &BondingCurve<T>): bool { curve.graduated }
+    public fun is_lp_seeded<T: drop>(curve: &BondingCurve<T>): bool { curve.lp_seeded }
+    public fun get_status<T: drop>(curve: &BondingCurve<T>): TradingStatus { curve.status }
 }
