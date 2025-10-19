@@ -19,6 +19,7 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     use suilfg_launch::referral_registry::{Self, ReferralRegistry};
+    use suilfg_launch::simple_amm;
     
     // Simple AMM for testnet graduation (TEMPORARILY COMMENTED FOR BASIC TESTING)
     // use suilfg_launch::simple_amm;
