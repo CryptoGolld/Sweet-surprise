@@ -1,5 +1,5 @@
-/// Bonding Curve for Meme Token Launch - TESTNET VERSION
-/// Uses Simple AMM for graduation (no Cetus dependency)
+// Bonding Curve for Meme Token Launch - TESTNET VERSION
+// Uses Simple AMM for graduation (no Cetus dependency)
 module suilfg_launch::bonding_curve {
     use sui::object::{Self as object, UID, id_address};
     use sui::tx_context::{TxContext, sender};
@@ -356,7 +356,6 @@ module suilfg_launch::bonding_curve {
         curve.reward_paid = true;
     }
 
-    /*
     /// Graduate to Simple AMM pool (TESTNET VERSION) - TEMPORARILY COMMENTED FOR TESTING
     public entry fun graduate_to_simple_amm<T: drop>(
         cfg: &PlatformConfig,
