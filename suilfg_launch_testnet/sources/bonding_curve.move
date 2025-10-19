@@ -24,8 +24,8 @@ module suilfg_launch::bonding_curve {
     // Simple AMM for testnet graduation (TEMPORARILY COMMENTED FOR BASIC TESTING)
     // use suilfg_launch::simple_amm;
 
-    const TOTAL_SUPPLY: u64 = 1_000_000_000;
-    const MAX_CURVE_SUPPLY: u64 = 800_000_000;  // 800M tokens available for trading (200M reserved for graduation)
+    const TOTAL_SUPPLY: u64 = 1_000_000_000;  // 1B total supply
+    const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens max on bonding curve (rest reserved for graduation)
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 

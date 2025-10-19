@@ -28,7 +28,8 @@ module suilfg_launch::bonding_curve {
     // Our custom LP locker for permanent lock with upgrade-safe flag
     use suilfg_launch::lp_locker::{Self, LockedLPPosition};
 
-    const TOTAL_SUPPLY: u64 = 1_000_000_000;
+    const TOTAL_SUPPLY: u64 = 1_000_000_000;  // 1B total supply
+    const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens max on bonding curve (rest reserved for graduation)
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
@@ -75,6 +76,7 @@ module suilfg_launch::bonding_curve {
     const E_NOT_WHITELISTED: u64 = 3;
     const E_NOT_GRADUATED: u64 = 4;
     const E_LP_ALREADY_SEEDED: u64 = 5;
+    const E_SUPPLY_EXCEEDED: u64 = 6;
     const E_INVALID_CETUS_CONFIG: u64 = 6;
     const E_INVALID_BURN_MANAGER: u64 = 7;
 
