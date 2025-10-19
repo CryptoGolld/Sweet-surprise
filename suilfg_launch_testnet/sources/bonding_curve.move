@@ -379,11 +379,18 @@ module suilfg_launch::bonding_curve {
         transfer::public_transfer(team_tokens, team_recipient);
         curve.token_supply = curve.token_supply + team_allocation;
         
-        // 2. Prepare liquidity
+        // 2. Calculate LP tokens for 55k SUI MC target
+        // After graduation: 12k SUI in LP, want 55k MC
+        // Ratio: circulating / lp_tokens = 55k / 12k = 4.58
+        // LP tokens = circulating / 4.58 = curve.token_supply / 4.58
         let total_sui_mist = balance::value(&curve.sui_reserve);
         let sui_for_lp = total_sui_mist;
-        let remaining_supply = TOTAL_SUPPLY - curve.token_supply;
-        let token_for_lp = remaining_supply;
+        
+        // Calculate LP tokens: token_supply / 4.58 (using 458/100 for precision)
+        let token_for_lp = ((curve.token_supply as u128) * 100 / 458) as u64;
+        
+        // Remaining supply is burned (never minted)
+        // burned = 1B - curve.token_supply - token_for_lp
         
         let lp_token_coin = coin::mint(&mut curve.treasury, token_for_lp, ctx);
         let lp_token_balance = coin::into_balance(lp_token_coin);
