@@ -157,7 +157,7 @@ module suilfg_launch::bonding_curve {
         if (option::is_some(&referrer)) {
             let ref_addr = option::destroy_some(referrer);
             if (ref_addr != @0x0 && ref_addr != buyer_addr) {
-                referral_registry::try_register(referral_registry, buyer_addr, ref_addr);
+                referral_registry::try_register(referral_registry, buyer_addr, ref_addr, clock::timestamp_ms(clk));
             };
         } else {
             option::destroy_none(referrer);
@@ -171,7 +171,7 @@ module suilfg_launch::bonding_curve {
         let platform_fee = (payment_amount * curve.platform_fee_bps) / 10_000;
         let creator_fee = (payment_amount * curve.creator_fee_bps) / 10_000;
         let referrer_fee = if (has_referrer) {
-            (platform_fee * platform_config::get_referrer_share_bps(cfg)) / 10_000
+            (platform_fee * platform_config::get_referral_fee_bps(cfg)) / 10_000
         } else { 0 };
         let total_fees = platform_fee + creator_fee;
         let net_sui_for_reserve = payment_amount - total_fees;
@@ -182,7 +182,7 @@ module suilfg_launch::bonding_curve {
 
         // Take fees
         if (platform_fee > 0) {
-            let platform_coin = coin::split(&mut payment, platform_fee, ctx);
+            let mut platform_coin = coin::split(&mut payment, platform_fee, ctx);
             if (referrer_fee > 0) {
                 let ref_coin = coin::split(&mut platform_coin, referrer_fee, ctx);
                 transfer::public_transfer(ref_coin, referrer_addr);
@@ -243,7 +243,7 @@ module suilfg_launch::bonding_curve {
         let platform_fee = (gross_sui * curve.platform_fee_bps) / 10_000;
         let creator_fee = (gross_sui * curve.creator_fee_bps) / 10_000;
         let referrer_fee = if (has_referrer) {
-            (platform_fee * platform_config::get_referrer_share_bps(cfg)) / 10_000
+            (platform_fee * platform_config::get_referral_fee_bps(cfg)) / 10_000
         } else { 0 };
         let total_fees = platform_fee + creator_fee;
         let net_sui = gross_sui - total_fees;
@@ -258,7 +258,7 @@ module suilfg_launch::bonding_curve {
 
         // Send fees
         if (platform_fee > 0) {
-            let platform_coin = coin::split(&mut sui_coin, platform_fee, ctx);
+            let mut platform_coin = coin::split(&mut sui_coin, platform_fee, ctx);
             if (referrer_fee > 0) {
                 let ref_coin = coin::split(&mut platform_coin, referrer_fee, ctx);
                 transfer::public_transfer(ref_coin, referrer_addr);
