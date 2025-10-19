@@ -26,6 +26,7 @@ module suilfg_launch::bonding_curve {
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;  // 1B total supply
     const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens max on bonding curve (rest reserved for graduation)
+    const VIRTUAL_INITIAL_SUPPLY: u64 = 1_000_000;  // 1M virtual tokens to prevent s0=0 division issue
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
@@ -75,7 +76,7 @@ module suilfg_launch::bonding_curve {
             id: object::new(ctx),
             status: TradingStatus::Open,
             sui_reserve: balance::zero<SUI>(),
-            token_supply: 0,
+            token_supply: VIRTUAL_INITIAL_SUPPLY,  // Start with 1M virtual supply to prevent s0=0 overflow
             platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
             creator: creator,

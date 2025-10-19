@@ -44,7 +44,7 @@ module suilfg_launch::platform_config {
     const DEFAULT_CREATOR_FEE_BPS: u64 = 50; // 0.5%
     const DEFAULT_GRADUATION_REWARD_SUI: u64 = 100_000_000_000; // 100 SUI
     const DEFAULT_M_NUM: u64 = 1; // default m for blueprint economics
-    const DEFAULT_M_DEN: u128 = 10593721631205675237376; // Calculated for 737M tokens @ 13,333 SUI
+    const DEFAULT_M_DEN: u128 = 20369; // Calculated for 737M tokens @ 13,333 SUI: (737M)² / (2 * 13,333 SUI)
     // Base price for 1k SUI starting market cap (0.000001 SUI in mist)
     const DEFAULT_BASE_PRICE_MIST: u64 = 1_000; // 0.000001 SUI in mist
     // Default graduation target: 13,333 SUI (in Mist) - matches blueprint
