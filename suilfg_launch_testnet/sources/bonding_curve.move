@@ -20,8 +20,8 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     use suilfg_launch::referral_registry::{Self, ReferralRegistry};
     
-    // Simple AMM for testnet graduation
-    use suilfg_launch::simple_amm;
+    // Simple AMM for testnet graduation (TEMPORARILY COMMENTED FOR BASIC TESTING)
+    // use suilfg_launch::simple_amm;
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
 
@@ -356,7 +356,8 @@ module suilfg_launch::bonding_curve {
         curve.reward_paid = true;
     }
 
-    /// Graduate to Simple AMM pool (TESTNET VERSION)
+    /*
+    /// Graduate to Simple AMM pool (TESTNET VERSION) - TEMPORARILY COMMENTED FOR TESTING
     public entry fun graduate_to_simple_amm<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
@@ -404,6 +405,7 @@ module suilfg_launch::bonding_curve {
             pool_id: pool_id_addr,
         });
     }
+    */
 
     // View functions
     public fun get_sui_reserve<T: drop + store>(curve: &BondingCurve<T>): u64 { balance::value(&curve.sui_reserve) }
