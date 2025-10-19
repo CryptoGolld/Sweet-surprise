@@ -32,7 +32,7 @@ module suilfg_launch::bonding_curve {
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
-    public struct BondingCurve<phantom T: drop + store> has key, store {
+    public struct BondingCurve<phantom T: drop> has key, store {
         id: UID,
         status: TradingStatus,
         sui_reserve: Balance<SUI>,
@@ -78,7 +78,7 @@ module suilfg_launch::bonding_curve {
     const E_INVALID_CETUS_CONFIG: u64 = 6;
     const E_INVALID_BURN_MANAGER: u64 = 7;
 
-    fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
@@ -100,7 +100,7 @@ module suilfg_launch::bonding_curve {
         }
     }
 
-    fun init_for_token_with_m<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, m_num: u64, m_den: u128, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token_with_m<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, m_num: u64, m_den: u128, ctx: &mut TxContext): BondingCurve<T> {
         assert!(m_den > 0, 1101);
         assert!(m_num > 0, 1102);
         BondingCurve<T> {
@@ -124,10 +124,10 @@ module suilfg_launch::bonding_curve {
         }
     }
 
-    public fun freeze_trading<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
-    public fun initiate_whitelisted_exit<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
+    public fun freeze_trading<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
+    public fun initiate_whitelisted_exit<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
 
-    public entry fun create_new_meme_token<T: drop + store>(
+    public entry fun create_new_meme_token<T: drop>(
         cfg: &PlatformConfig,
         treasury: TreasuryCap<T>,
         ctx: &mut TxContext
@@ -139,7 +139,7 @@ module suilfg_launch::bonding_curve {
         transfer::share_object(curve);
     }
 
-    public entry fun create_new_meme_token_with_m<T: drop + store>(
+    public entry fun create_new_meme_token_with_m<T: drop>(
         cfg: &PlatformConfig,
         treasury: TreasuryCap<T>,
         m_num: u64,
@@ -153,7 +153,7 @@ module suilfg_launch::bonding_curve {
         transfer::share_object(curve);
     }
 
-    public entry fun buy<T: drop + store>(
+    public entry fun buy<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         referral_registry: &mut ReferralRegistry,
@@ -264,7 +264,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Bought { buyer, amount_sui: used, referrer: referrer_addr });
     }
 
-    public entry fun sell<T: drop + store>(
+    public entry fun sell<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         referral_registry: &mut ReferralRegistry,
@@ -369,7 +369,7 @@ module suilfg_launch::bonding_curve {
         event::emit(Sold { seller, amount_sui: net, referrer: referrer_addr });
     }
 
-    public entry fun try_graduate<T: drop + store>(
+    public entry fun try_graduate<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         _ctx: &mut TxContext
@@ -384,7 +384,7 @@ module suilfg_launch::bonding_curve {
         event::emit(GraduationReady { creator: curve.creator, token_supply: curve.token_supply, spot_price_sui_approx: spot_u64 });
     }
 
-    public entry fun distribute_payouts<T: drop + store>(
+    public entry fun distribute_payouts<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         ctx: &mut TxContext
@@ -417,7 +417,7 @@ module suilfg_launch::bonding_curve {
     /// DEPRECATED: Use seed_pool_and_create_cetus_with_lock() instead
     /// 
     /// SECURITY: Team allocation sent to treasury_address (from config)
-    public entry fun seed_pool_prepare<T: drop + store>(
+    public entry fun seed_pool_prepare<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         bump_bps: u64,
@@ -489,7 +489,7 @@ module suilfg_launch::bonding_curve {
     /// 2. Cetus config validated against admin-set address
     /// 3. LP position PERMANENTLY BURNED - cannot rug!
     /// 4. Fee recipient changeable for flexibility
-    public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
+    public entry fun seed_pool_and_create_cetus_with_lock<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         cetus_global_config: &GlobalConfig,
@@ -602,7 +602,7 @@ module suilfg_launch::bonding_curve {
     /// This works even though liquidity is permanently locked!
     /// Note: The locked_lp object can be different from curve's original lock,
     /// so anyone can collect fees from any locked position to its designated recipient.
-    public entry fun collect_lp_fees_from_locked_position<T: drop + store>(
+    public entry fun collect_lp_fees_from_locked_position<T: drop>(
         locked_lp: &mut LockedLPPosition<SUI, T>,
         cetus_config: &GlobalConfig,
         pool: &mut Pool<SUI, T>,
@@ -619,7 +619,7 @@ module suilfg_launch::bonding_curve {
     
     /// Change the LP fee recipient address (admin only)
     /// This allows flexibility while keeping liquidity permanently locked
-    public entry fun set_lp_fee_recipient<T: drop + store>(
+    public entry fun set_lp_fee_recipient<T: drop>(
         _admin: &AdminCap,
         curve: &mut BondingCurve<T>,
         new_recipient: address
@@ -628,11 +628,11 @@ module suilfg_launch::bonding_curve {
     }
     
     /// View current LP fee recipient
-    public fun get_lp_fee_recipient<T: drop + store>(curve: &BondingCurve<T>): address {
+    public fun get_lp_fee_recipient<T: drop>(curve: &BondingCurve<T>): address {
         curve.lp_fee_recipient
     }
 
-    public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
+    public fun spot_price_u128<T: drop>(curve: &BondingCurve<T>): u128 {
         // p(s) = base_price + (m_num/m_den) * s^2
         let s = curve.token_supply;
         let s128 = (s as u128);
@@ -640,11 +640,11 @@ module suilfg_launch::bonding_curve {
         (curve.base_price_mist as u128) + quadratic_part
     }
 
-    public fun spot_price_u64<T: drop + store>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
+    public fun spot_price_u64<T: drop>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
 
-    public fun minted_supply<T: drop + store>(curve: &BondingCurve<T>): u64 { curve.token_supply }
+    public fun minted_supply<T: drop>(curve: &BondingCurve<T>): u64 { curve.token_supply }
 
-    public entry fun withdraw_reserve_to_treasury<T: drop + store>(
+    public entry fun withdraw_reserve_to_treasury<T: drop>(
         _admin: &AdminCap,
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
@@ -656,7 +656,7 @@ module suilfg_launch::bonding_curve {
         transfer::public_transfer(c, platform_config::get_treasury_address(cfg));
     }
 
-    public entry fun withdraw_reserve_to<T: drop + store>(
+    public entry fun withdraw_reserve_to<T: drop>(
         _admin: &AdminCap,
         curve: &mut BondingCurve<T>,
         to: address,
@@ -668,7 +668,7 @@ module suilfg_launch::bonding_curve {
         transfer::public_transfer(c, to);
     }
 
-    public fun add_to_whitelist<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
+    public fun add_to_whitelist<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
         vector::push_back(&mut curve.whitelist, user);
     }
 

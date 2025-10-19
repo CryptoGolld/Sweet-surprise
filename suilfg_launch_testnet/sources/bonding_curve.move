@@ -27,7 +27,7 @@ module suilfg_launch::bonding_curve {
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
-    public struct BondingCurve<phantom T: drop + store> has key, store {
+    public struct BondingCurve<phantom T: drop> has key, store {
         id: UID,
         status: TradingStatus,
         sui_reserve: Balance<SUI>,
@@ -405,7 +405,6 @@ module suilfg_launch::bonding_curve {
             pool_id: pool_id_addr,
         });
     }
-    */
 
     // View functions
     public fun get_sui_reserve<T: drop + store>(curve: &BondingCurve<T>): u64 { balance::value(&curve.sui_reserve) }
