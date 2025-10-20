@@ -145,12 +145,16 @@ module suilfg_launch::bonding_curve {
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
         
-        // Get ticker symbol from metadata and validate uniqueness
+        // Get ticker symbol from metadata
         let ticker_ascii = coin::get_symbol(metadata);
         let ticker_str = string::from_ascii(ticker_ascii);
         
-        // Check if ticker already exists
-        if (ticker_registry::contains(ticker_registry, ticker_str)) {
+        // Check ticker availability (free claim via cooldown expiry or max lock period)
+        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
+        let is_claimable = ticker_registry::is_ticker_claimable(ticker_registry, ticker_str, max_lock_ms, clock);
+        
+        // If ticker exists and is NOT claimable, it's taken (no fee bypass in simple version)
+        if (ticker_registry::contains(ticker_registry, ticker_str) && !is_claimable) {
             abort E_TICKER_ALREADY_EXISTS
         };
         
@@ -160,7 +164,6 @@ module suilfg_launch::bonding_curve {
         
         // Register ticker with current timestamp
         let now = clock::timestamp_ms(clock);
-        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
         let cooldown_ends = now + max_lock_ms;
         
         ticker_registry::mark_active_with_lock(
@@ -187,12 +190,16 @@ module suilfg_launch::bonding_curve {
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
         
-        // Get ticker symbol from metadata and validate uniqueness
+        // Get ticker symbol from metadata
         let ticker_ascii = coin::get_symbol(metadata);
         let ticker_str = string::from_ascii(ticker_ascii);
         
-        // Check if ticker already exists
-        if (ticker_registry::contains(ticker_registry, ticker_str)) {
+        // Check ticker availability (free claim via cooldown expiry or max lock period)
+        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
+        let is_claimable = ticker_registry::is_ticker_claimable(ticker_registry, ticker_str, max_lock_ms, clock);
+        
+        // If ticker exists and is NOT claimable, it's taken (no fee bypass in simple version)
+        if (ticker_registry::contains(ticker_registry, ticker_str) && !is_claimable) {
             abort E_TICKER_ALREADY_EXISTS
         };
         
@@ -202,7 +209,68 @@ module suilfg_launch::bonding_curve {
         
         // Register ticker with current timestamp
         let now = clock::timestamp_ms(clock);
+        let cooldown_ends = now + max_lock_ms;
+        
+        ticker_registry::mark_active_with_lock(
+            ticker_registry,
+            ticker_str,
+            curve_id,
+            now,
+            cooldown_ends
+        );
+        
+        event::emit(Created { creator: creator_addr });
+        transfer::share_object(curve);
+    }
+
+    // Create with fee-based early ticker reuse (for graduated tokens on cooldown)
+    public entry fun create_new_meme_token_with_fee<T: drop>(
+        cfg: &PlatformConfig,
+        ticker_registry: &mut TickerRegistry,
+        treasury: TreasuryCap<T>,
+        metadata: &coin::CoinMetadata<T>,
+        mut reuse_fee_payment: Coin<SUI>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
+        
+        // Get ticker symbol from metadata
+        let ticker_ascii = coin::get_symbol(metadata);
+        let ticker_str = string::from_ascii(ticker_ascii);
+        
+        // Check if ticker exists and get required fee
         let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
+        let is_claimable = ticker_registry::is_ticker_claimable(ticker_registry, ticker_str, max_lock_ms, clock);
+        
+        // If claimable for free, refund payment and use free path
+        if (is_claimable) {
+            transfer::public_transfer(reuse_fee_payment, sender(ctx));
+        } else if (ticker_registry::contains(ticker_registry, ticker_str)) {
+            // Ticker exists and NOT claimable - check if fee can bypass
+            let required_fee = ticker_registry::get_current_reuse_fee(ticker_registry, ticker_str);
+            let paid = coin::value(&reuse_fee_payment);
+            
+            if (paid < required_fee) {
+                // Not enough fee paid - abort
+                transfer::public_transfer(reuse_fee_payment, sender(ctx));
+                abort E_TICKER_ALREADY_EXISTS
+            };
+            
+            // Fee is sufficient - collect it to treasury
+            let treasury_addr = platform_config::get_treasury_address(cfg);
+            transfer::public_transfer(reuse_fee_payment, treasury_addr);
+        } else {
+            // Ticker doesn't exist - refund payment
+            transfer::public_transfer(reuse_fee_payment, sender(ctx));
+        };
+        
+        let creator_addr = sender(ctx);
+        let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
+        let curve_id = object::id(&curve);
+        
+        // Register ticker with current timestamp
+        let now = clock::timestamp_ms(clock);
         let cooldown_ends = now + max_lock_ms;
         
         ticker_registry::mark_active_with_lock(
