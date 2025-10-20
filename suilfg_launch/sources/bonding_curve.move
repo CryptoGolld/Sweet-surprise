@@ -245,13 +245,27 @@ module suilfg_launch::bonding_curve {
         if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6; }; // E_MIN_OUT_NOT_MET
 
         // Compute exact used amount for tokens_out and split refund
+        // If we hit supply cap (s2_clamped < s2_target), ALWAYS refund excess
+        // Otherwise, only refund if remaining > 0.001 SUI (dust threshold)
         let used_u128 = integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den, curve.base_price_mist);
         let used = narrow_u128_to_u64(used_u128);
         let remaining = coin::value(&payment) - used;
-        if (remaining > 0) {
-            let refund = coin::split(&mut payment, remaining, ctx);
-            transfer::public_transfer(refund, sender(ctx));
-        } else { };
+        let hit_supply_cap = s2_clamped < s2_target;
+        let dust_threshold = 1_000_000; // 0.001 SUI
+        
+        if (hit_supply_cap) {
+            // Near graduation: ALWAYS refund excess, regardless of amount
+            if (remaining > 0) {
+                let refund = coin::split(&mut payment, remaining, ctx);
+                transfer::public_transfer(refund, sender(ctx));
+            };
+        } else {
+            // Normal case: only refund if > dust threshold
+            if (remaining > dust_threshold) {
+                let refund = coin::split(&mut payment, remaining, ctx);
+                transfer::public_transfer(refund, sender(ctx));
+            };
+        };
 
         // Deposit used amount into reserve
         let deposit = coin::into_balance(payment);

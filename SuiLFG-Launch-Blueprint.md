@@ -21,7 +21,7 @@ Price: p(s) = base_price + (m_num/m_den) × s²
 Where:
   base_price = 0.000001 SUI (1,000 mist)
   m_num = 1
-  m_den = 10,593,721,631,205,675,237,376 (u128)
+  m_den = 10,593,721,631,205 (u128)
 ```
 
 **Cost Integral (s1 to s2):**
@@ -51,6 +51,28 @@ cost = base_price×(s2-s1) + (m_num/3m_den)×(s2³-s1³)
 
 **Target MC:** 55,000 SUI (as trading continues)
 
+## Token Economics at Graduation
+
+**Token Distribution:**
+- **Sold on Curve:** 737,000,000 tokens (73.7%)
+- **Team Allocation:** 2,000,000 tokens (0.2%)
+- **Cetus Pool:** 207,000,000 tokens (20.7%)
+- **Burned (Never Minted):** 54,000,000 tokens (5.4%)
+- **Total Circulating:** 946,000,000 tokens (94.6%)
+
+**Cost Progression (Quadratic Incentive):**
+
+The quadratic price formula creates exponentially increasing costs, strongly incentivizing early participation:
+
+| Token Range | Total Cost | Per 100M Tokens |
+|-------------|------------|-----------------|
+| 0-100M | 131 SUI | 131 SUI |
+| 100M-200M | 320 SUI | 320 SUI (2.4x more!) |
+| 200M-300M | 610 SUI | 610 SUI (4.7x more!) |
+| 600M-700M | 3,478 SUI | 3,478 SUI (26x more!) |
+
+**Key Insight:** Later buyers pay dramatically more per token, creating strong early-mover advantage while ensuring fair price discovery.
+
 ## Key Features
 
 ✅ **1k SUI starting MC** - Lower entry barrier
@@ -59,12 +81,13 @@ cost = base_price×(s2-s1) + (m_num/3m_den)×(s2³-s1³)
 ✅ **Optimal liquidity** - 207M tokens in Cetus pool
 ✅ **Small team allocation** - Only 2M (0.2%)
 ✅ **Positive graduation bump** - +11.2% price increase on LP seed
+✅ **Quadratic cost curve** - Strong early buyer incentive with fair price discovery
 
 ## Constants (platform_config.move)
 
 ```move
 const DEFAULT_M_NUM: u64 = 1;
-const DEFAULT_M_DEN: u128 = 10593721631205675237376;
+const DEFAULT_M_DEN: u128 = 10593721631205;
 const DEFAULT_BASE_PRICE_MIST: u64 = 1_000;  // 0.000001 SUI
 const DEFAULT_GRADUATION_TARGET_MIST: u64 = 13_333 * 1_000_000_000;
 const DEFAULT_TEAM_ALLOCATION_TOKENS: u64 = 2_000_000;
@@ -98,7 +121,7 @@ const BURNED_SUPPLY: u64 = 54_000_000;
 ## Implementation Status
 
 ✅ Type constraint fixed: `T: drop` (not `T: drop + store`)
-✅ M_DEN corrected: 10,593,721,631,205,675,237,376
+✅ M_DEN corrected: 10,593,721,631,205
 ✅ Tokenomics: 737M/2M/207M/54M split
 ✅ Supply tracking: Proper accounting through all phases
 ✅ Graduation logic: Mints exactly 207M for Cetus pool
