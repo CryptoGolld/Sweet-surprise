@@ -17,6 +17,7 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     use suilfg_launch::referral_registry::{Self, ReferralRegistry};
+    use suilfg_launch::ticker_registry::{Self as ticker_registry, TickerRegistry};
     
     // Cetus CLMM imports for automatic pool creation
     use cetus_clmm::config::GlobalConfig;
@@ -83,6 +84,7 @@ module suilfg_launch::bonding_curve {
     const E_SUPPLY_EXCEEDED: u64 = 6;
     const E_INVALID_CETUS_CONFIG: u64 = 6;
     const E_INVALID_BURN_MANAGER: u64 = 7;
+    const E_TICKER_ALREADY_EXISTS: u64 = 8;
 
     fun init_for_token<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
@@ -135,26 +137,82 @@ module suilfg_launch::bonding_curve {
 
     public entry fun create_new_meme_token<T: drop>(
         cfg: &PlatformConfig,
+        ticker_registry: &mut TickerRegistry,
         treasury: TreasuryCap<T>,
+        metadata: &coin::CoinMetadata<T>,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
+        
+        // Get ticker symbol from metadata and validate uniqueness
+        let ticker_ascii = coin::get_symbol(metadata);
+        let ticker_str = string::from_ascii(ticker_ascii);
+        
+        // Check if ticker already exists
+        if (ticker_registry::contains(ticker_registry, ticker_str)) {
+            abort E_TICKER_ALREADY_EXISTS
+        };
+        
         let creator_addr = sender(ctx);
         let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
+        let curve_id = object::id(&curve);
+        
+        // Register ticker with current timestamp
+        let now = clock::timestamp_ms(clock);
+        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
+        let cooldown_ends = now + max_lock_ms;
+        
+        ticker_registry::mark_active_with_lock(
+            ticker_registry,
+            ticker_str,
+            curve_id,
+            now,
+            cooldown_ends
+        );
+        
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);
     }
 
     public entry fun create_new_meme_token_with_m<T: drop>(
         cfg: &PlatformConfig,
+        ticker_registry: &mut TickerRegistry,
         treasury: TreasuryCap<T>,
+        metadata: &coin::CoinMetadata<T>,
         m_num: u64,
         m_den: u128,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
+        
+        // Get ticker symbol from metadata and validate uniqueness
+        let ticker_ascii = coin::get_symbol(metadata);
+        let ticker_str = string::from_ascii(ticker_ascii);
+        
+        // Check if ticker already exists
+        if (ticker_registry::contains(ticker_registry, ticker_str)) {
+            abort E_TICKER_ALREADY_EXISTS
+        };
+        
         let creator_addr = sender(ctx);
         let mut curve = init_for_token_with_m<T>(cfg, creator_addr, treasury, m_num, m_den, ctx);
+        let curve_id = object::id(&curve);
+        
+        // Register ticker with current timestamp
+        let now = clock::timestamp_ms(clock);
+        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
+        let cooldown_ends = now + max_lock_ms;
+        
+        ticker_registry::mark_active_with_lock(
+            ticker_registry,
+            ticker_str,
+            curve_id,
+            now,
+            cooldown_ends
+        );
+        
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);
     }
