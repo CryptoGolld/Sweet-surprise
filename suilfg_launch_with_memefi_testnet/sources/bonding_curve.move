@@ -31,11 +31,13 @@ module suilfg_launch_memefi::bonding_curve {
     // Our custom LP locker for permanent lock with upgrade-safe flag
     use suilfg_launch_memefi::lp_locker::{Self, LockedLPPosition};
 
-    const TOTAL_SUPPLY: u64 = 1_000_000_000;  // 1B total supply
-    const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens sold on curve at graduation
-    const CETUS_POOL_TOKENS: u64 = 207_000_000;  // 207M tokens for Cetus pool (20.7%)
-    const TEAM_ALLOCATION: u64 = 2_000_000;  // 2M team allocation (0.2%)
-    const BURNED_SUPPLY: u64 = 54_000_000;  // 54M never minted (5.4% - deflationary!)
+    // Supply constants in whole token units (bonding curve tracks whole tokens, minting converts to smallest units)
+    const DECIMALS: u8 = 9;
+    const TOTAL_SUPPLY: u64 = 1_000_000_000;  // 1B tokens (in whole units)
+    const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens
+    const CETUS_POOL_TOKENS: u64 = 207_000_000;  // 207M tokens  
+    const TEAM_ALLOCATION: u64 = 2_000_000;  // 2M tokens
+    const BURNED_SUPPLY: u64 = 54_000_000;  // 54M tokens
     // Total circulating after graduation: 946M (737M + 2M + 207M)
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
@@ -411,8 +413,10 @@ module suilfg_launch_memefi::bonding_curve {
         balance::join(&mut curve.sui_reserve, deposit);
 
         // Mint tokens as Coin<T> to buyer and update supply
+        // token_supply tracks whole tokens, but minting requires smallest units (with decimals)
         curve.token_supply = s2_clamped;
-        let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_out, ctx);
+        let tokens_to_mint = tokens_out * 1_000_000_000; // Convert whole tokens to smallest units (9 decimals)
+        let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_to_mint, ctx);
         transfer::public_transfer(minted, buyer);
         
         let referrer_addr = if (option::is_some(&referral_registry::get_referrer(referral_registry, buyer))) {
@@ -589,7 +593,7 @@ module suilfg_launch_memefi::bonding_curve {
         // First, mint and transfer team allocation
         // SECURITY: Always sent to treasury_address from config (admin controlled)
         let team_allocation = platform_config::get_team_allocation_tokens(cfg);
-        let team_tokens: Coin<T> = coin::mint<T>(&mut curve.treasury, team_allocation, ctx);
+        let team_tokens: Coin<T> = coin::mint<T>(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
         let team_address = platform_config::get_treasury_address(cfg);
         transfer::public_transfer(team_tokens, team_address);
         
@@ -613,7 +617,7 @@ module suilfg_launch_memefi::bonding_curve {
         let tokens_to_mint = min_u64(optimal_tokens_for_pool, remaining_tokens);
         
         // Mint tokens for LP to treasury address custody
-        let token_lp: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_to_mint, ctx);
+        let token_lp: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_to_mint * 1_000_000_000, ctx);
         curve.token_supply = curve.token_supply + tokens_to_mint;
         
         let bal_sui_lp = balance::split(&mut curve.sui_reserve, sui_lp);
@@ -671,7 +675,7 @@ module suilfg_launch_memefi::bonding_curve {
         // 1. Mint team allocation (2M tokens)
         // SECURITY: Always sent to treasury_address from config (admin controlled)
         let team_allocation = platform_config::get_team_allocation_tokens(cfg);
-        let team_tokens = coin::mint(&mut curve.treasury, team_allocation, ctx);
+        let team_tokens = coin::mint(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
         let team_recipient = platform_config::get_treasury_address(cfg);
         transfer::public_transfer(team_tokens, team_recipient);
         
@@ -686,7 +690,7 @@ module suilfg_launch_memefi::bonding_curve {
         let token_for_lp = remaining_supply;
         
         // 3. Mint tokens for LP
-        let lp_tokens = coin::mint(&mut curve.treasury, token_for_lp, ctx);
+        let lp_tokens = coin::mint(&mut curve.treasury, token_for_lp * 1_000_000_000, ctx);
         let lp_sui_balance = balance::split(&mut curve.sui_reserve, sui_for_lp);
         let lp_sui_coin = coin::from_balance(lp_sui_balance, ctx);
         
