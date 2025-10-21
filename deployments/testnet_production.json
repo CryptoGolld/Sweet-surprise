@@ -1,0 +1,52 @@
+{
+  "network": "testnet",
+  "deployedAt": "2025-10-21T17:00:00Z",
+  "publisher": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f",
+  
+  "platform": {
+    "name": "SuiLFG MemeFi Platform",
+    "version": "0.0.5",
+    "packageId": "0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047",
+    "status": "production",
+    "fixes": [
+      "Supply scaling bug fixed (tokens_out * 1e9)",
+      "Correct SUILFG_MEMEFI dependency",
+      "All arithmetic overflow issues resolved"
+    ],
+    "objects": {
+      "PlatformConfig": "0x7fca4d72dcf81fc27f432bddc2ba07cd1fddf6517327ad448d845b2d3e77ef9c",
+      "TickerRegistry": "0x3bc08244a681e5fa1d125293ebd66c7017605d0c6d1820f4f9e5e1a7961a94e3",
+      "ReferralRegistry": "0xf2d402107eb02d4ac5376e42cfcc09412cf968956ce66c31444621d34fc8828d",
+      "UpgradeCap": "0xde83c90c02cdba98c82be080eb31a9f74950467b962b2d0e5720a7ca596b483d"
+    },
+    "modules": [
+      "bonding_curve",
+      "lp_locker",
+      "platform_config",
+      "referral_registry",
+      "ticker_registry"
+    ]
+  },
+  
+  "faucet": {
+    "name": "SUILFG MemeFi Faucet",
+    "packageId": "0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81",
+    "coinType": "0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81::suilfg_memefi::SUILFG_MEMEFI",
+    "decimals": 9,
+    "symbol": "SUI_MEMEFI",
+    "objects": {
+      "Faucet": "0xd5c81489322b9e74609be2986c02652390feba41f06e4a7fd936a2c312fb9dde",
+      "AdminCap": "0xf1744f87cabafbd46f4bb9de9d7a94393799543fbe68867d7b4dd4632773c69e",
+      "TreasuryCap": "0x4ced36674fb9f0db9345a919ded3edb72da6534fb9e735623de65378245b6596"
+    },
+    "claimAmount": "100 SUI_MEMEFI",
+    "claimInterval": "6 hours"
+  },
+  
+  "notes": [
+    "Platform fully tested and production ready",
+    "Bonding curve uses whole token units internally, scales by 1e9 when minting",
+    "Compatible with Cetus AMM for liquidity pool creation",
+    "All UpgradeCaps preserved for future upgrades"
+  ]
+}
