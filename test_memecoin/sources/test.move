@@ -1,4 +1,4 @@
-/// TEST - Testing the COMPLETE FIXED platform! 🧪
+/// TEST - Guaranteed unique ticker with timestamp
 module test_memecoin::test_memefi {
     use sui::coin::{Self};
     use sui::url;
@@ -9,10 +9,10 @@ module test_memecoin::test_memefi {
         let (treasury_cap, metadata) = coin::create_currency(
             witness,
             9,
-            b"TEST008",
+            b"T1761068154393",
             b"Test MemeFi",
-            b"The ultimate test! Buy 1500 SUILFG_MEMEFI and get MILLIONS of TEST! 🧪🚀",
-            option::some(url::new_unsafe_from_bytes(b"https://raw.githubusercontent.com/suilfg/assets/main/diamond.png")),
+            b"Testing FIXED platform! Expect MILLIONS of tokens! 🚀",
+            option::some(url::new_unsafe_from_bytes(b"https://test.png")),
             ctx
         );
 
