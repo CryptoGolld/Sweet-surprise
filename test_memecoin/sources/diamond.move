@@ -1,17 +1,17 @@
-/// DIAMOND - Testing the COMPLETE FIXED platform! 💎
-module test_memecoin::diamond_memefi {
+/// TEST - Testing the COMPLETE FIXED platform! 🧪
+module test_memecoin::test_memefi {
     use sui::coin::{Self};
     use sui::url;
 
-    public struct DIAMOND_MEMEFI has drop {}
+    public struct TEST_MEMEFI has drop {}
 
-    fun init(witness: DIAMOND_MEMEFI, ctx: &mut TxContext) {
+    fun init(witness: TEST_MEMEFI, ctx: &mut TxContext) {
         let (treasury_cap, metadata) = coin::create_currency(
             witness,
             9,
-            b"DIAMOND",
-            b"Diamond MemeFi",
-            b"The ultimate test! Buy 1000 SUILFG_MEMEFI and get MILLIONS of DIAMOND! 💎🚀",
+            b"TEST008",
+            b"Test MemeFi",
+            b"The ultimate test! Buy 1500 SUILFG_MEMEFI and get MILLIONS of TEST! 🧪🚀",
             option::some(url::new_unsafe_from_bytes(b"https://raw.githubusercontent.com/suilfg/assets/main/diamond.png")),
             ctx
         );
