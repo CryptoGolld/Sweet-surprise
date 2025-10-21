@@ -234,6 +234,48 @@ module suilfg_launch::ticker_registry {
         info.current_reuse_fee_mist
     }
 
+    // Query functions for ticker analytics
+    
+    /// Get ticker reuse count (how many times it's been reused)
+    public fun get_ticker_reuse_count(registry: &TickerRegistry, ticker: String): u64 {
+        let key = clone_string(&ticker);
+        if (!table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            return 0
+        };
+        let info = table::borrow<String, TickerInfo>(&registry.tickers, ticker);
+        info.reuse_count
+    }
+
+    /// Get total tokens launched with this ticker
+    public fun get_ticker_total_tokens(registry: &TickerRegistry, ticker: String): u64 {
+        let key = clone_string(&ticker);
+        if (!table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            return 0
+        };
+        let info = table::borrow<String, TickerInfo>(&registry.tickers, ticker);
+        info.total_tokens_launched
+    }
+
+    /// Get when ticker was first used
+    public fun get_ticker_first_use(registry: &TickerRegistry, ticker: String): u64 {
+        let key = clone_string(&ticker);
+        if (!table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            return 0
+        };
+        let info = table::borrow<String, TickerInfo>(&registry.tickers, ticker);
+        info.first_use_ts_ms
+    }
+
+    /// Get when ticker was last used
+    public fun get_ticker_last_use(registry: &TickerRegistry, ticker: String): u64 {
+        let key = clone_string(&ticker);
+        if (!table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            return 0
+        };
+        let info = table::borrow<String, TickerInfo>(&registry.tickers, ticker);
+        info.last_use_ts_ms
+    }
+
     // Admin force unlock
     public fun force_unlock_ticker(_admin: &AdminCap, registry: &mut TickerRegistry, ticker: String) {
         let key = clone_string(&ticker);
