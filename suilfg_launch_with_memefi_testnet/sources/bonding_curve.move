@@ -373,10 +373,10 @@ module suilfg_launch_memefi::bonding_curve {
         // Remaining trade amount
         let trade_in = coin::value(&payment);
 
-        // Compute target s2 via inverse integral, clamped by TOTAL_SUPPLY
+        // Compute target s2 via inverse integral, clamped by MAX_CURVE_SUPPLY
         let s1 = curve.token_supply;
         let s2_target = inverse_integral_buy(s1, trade_in, curve.m_num, curve.m_den, curve.base_price_mist);
-        let s2_clamped = min_u64(s2_target, TOTAL_SUPPLY);
+        let s2_clamped = min_u64(s2_target, MAX_CURVE_SUPPLY); // FIX: Stop at 737M, not 1B!
         let tokens_out = s2_clamped - s1;
         if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6; }; // E_MIN_OUT_NOT_MET
 
