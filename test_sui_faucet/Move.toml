@@ -2,9 +2,10 @@
 name = "test_sui_faucet"
 version = "0.0.1"
 edition = "2024.beta"
+published-at = "0x443b752b268566bcc4c421afe5b055435766da9fce42a4801c77033b5a0b2999"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
 
 [addresses]
-test_sui_faucet = "0x0"
+test_sui_faucet = "0x443b752b268566bcc4c421afe5b055435766da9fce42a4801c77033b5a0b2999"
