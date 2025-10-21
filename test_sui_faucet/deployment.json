@@ -1,0 +1,14 @@
+{
+  "network": "testnet",
+  "packageId": "0x2cf6aa53988c88614ac4e9e5dfb16c2443db471eb7518b27043aba3b4abca15f",
+  "publishTxDigest": "83YhDv5Mj7rksgVkFVgjZ4eNRDrPfwY6iK4U4bUQFbYT",
+  "objects": {
+    "AdminCap": "0x74b4ed085d825b2f37c9a17dac5c7508397b4d08120527e9c11d5475029bfc13",
+    "UpgradeCap": "0x2ed4b323ea21f03226408d52e7c4418ce544935e91d981cde9d2c1c67bc47823",
+    "CoinMetadata": "0x3210817cfbb8d7c5c6be0da5094b67e75d2f9d1c3feb4fbf26b4e27063df7370"
+  },
+  "coinType": "0x2cf6aa53988c88614ac4e9e5dfb16c2443db471eb7518b27043aba3b4abca15f::test_sui::TEST_SUI",
+  "faucet": {
+    "note": "Need to call create_faucet with a TreasuryCap to create the shared Faucet object"
+  }
+}
