@@ -243,14 +243,28 @@ module suilfg_launch::bonding_curve {
         let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
         let is_claimable = ticker_registry::is_ticker_claimable(ticker_registry, ticker_str, max_lock_ms, clock);
         
-        // If claimable for free, refund payment and use free path
+        let creator_addr = sender(ctx);
+        let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
+        let curve_id = object::id(&curve);
+        
+        let now = clock::timestamp_ms(clock);
+        let cooldown_ends = now + max_lock_ms;
+        
+        // Check if ticker exists (for reuse) or is new
+        let ticker_exists = ticker_registry::contains(ticker_registry, ticker_str);
+        
+        // If claimable for free, refund payment and proceed
         if (is_claimable) {
             transfer::public_transfer(reuse_fee_payment, sender(ctx));
-            // Ticker is claimable, so remove old entry if it exists
-            if (ticker_registry::contains(ticker_registry, ticker_str)) {
-                ticker_registry::remove_ticker(ticker_registry, ticker_str);
+            
+            if (ticker_exists) {
+                // UPDATE existing ticker (preserves history)
+                ticker_registry::update_ticker_for_reuse(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
+            } else {
+                // New ticker - create fresh entry
+                ticker_registry::mark_active_with_lock(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
             };
-        } else if (ticker_registry::contains(ticker_registry, ticker_str)) {
+        } else if (ticker_exists) {
             // Ticker exists and NOT claimable - check if fee can bypass
             let required_fee = ticker_registry::get_current_reuse_fee(ticker_registry, ticker_str);
             let paid = coin::value(&reuse_fee_payment);
@@ -265,28 +279,13 @@ module suilfg_launch::bonding_curve {
             let treasury_addr = platform_config::get_treasury_address(cfg);
             transfer::public_transfer(reuse_fee_payment, treasury_addr);
             
-            // CRITICAL FIX: Remove old ticker entry before adding new one
-            ticker_registry::remove_ticker(ticker_registry, ticker_str);
+            // UPDATE existing ticker (preserves history) - NO REMOVAL!
+            ticker_registry::update_ticker_for_reuse(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
         } else {
-            // Ticker doesn't exist - refund payment
+            // Ticker doesn't exist - refund payment and create fresh
             transfer::public_transfer(reuse_fee_payment, sender(ctx));
+            ticker_registry::mark_active_with_lock(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
         };
-        
-        let creator_addr = sender(ctx);
-        let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
-        let curve_id = object::id(&curve);
-        
-        // Register ticker with current timestamp (fresh entry)
-        let now = clock::timestamp_ms(clock);
-        let cooldown_ends = now + max_lock_ms;
-        
-        ticker_registry::mark_active_with_lock(
-            ticker_registry,
-            ticker_str,
-            curve_id,
-            now,
-            cooldown_ends
-        );
         
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);

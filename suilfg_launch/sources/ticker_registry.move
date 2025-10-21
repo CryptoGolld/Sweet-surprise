@@ -21,10 +21,14 @@ module suilfg_launch::ticker_registry {
         cooldown_ends_ts_ms: u64,
         whitelist: vector<address>,
         // Ticker economy fields
+        first_use_ts_ms: u64,          // When ticker was FIRST used (never resets)
         last_use_ts_ms: u64,           // When ticker was LAST used (resets every reuse!)
-        graduated_ts_ms: u64,          // When token graduated (0 if not graduated)
+        graduated_ts_ms: u64,          // When LATEST token graduated (0 if not graduated)
         current_reuse_fee_mist: u64,   // Current fee to bypass cooldown
         reserved_for: Option<address>, // Who ticker is reserved for (if Reserved status)
+        // History tracking
+        reuse_count: u64,              // How many times ticker has been reused
+        total_tokens_launched: u64,    // Total number of tokens launched with this ticker
     }
 
     public struct TickerRegistry has key, store {
@@ -101,10 +105,13 @@ module suilfg_launch::ticker_registry {
                 token_id: opt::none<ID>(), 
                 cooldown_ends_ts_ms: 0, 
                 whitelist: vector::empty<address>(),
+                first_use_ts_ms: 0,
                 last_use_ts_ms: 0,
                 graduated_ts_ms: 0,
                 current_reuse_fee_mist: 0,
                 reserved_for: opt::some<address>(reserved_for),
+                reuse_count: 0,
+                total_tokens_launched: 0,
             };
             table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
         }
@@ -120,7 +127,7 @@ module suilfg_launch::ticker_registry {
         } else {
             let mut wl = vector::empty<address>();
             vector::push_back(&mut wl, user);
-            let info = TickerInfo { status: TickerStatus::Whitelisted, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: wl, last_use_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
+            let info = TickerInfo { status: TickerStatus::Whitelisted, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: wl, first_use_ts_ms: 0, last_use_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>(), reuse_count: 0, total_tokens_launched: 0 };
             table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
         }
     }
@@ -133,12 +140,39 @@ module suilfg_launch::ticker_registry {
             token_id: opt::some<ID>(token_id), 
             cooldown_ends_ts_ms, 
             whitelist: vector::empty<address>(),
+            first_use_ts_ms: last_use_ts_ms,  // First time using this ticker
             last_use_ts_ms,  // Timer resets every time ticker is reused!
             graduated_ts_ms: 0,
             current_reuse_fee_mist: 0,
             reserved_for: opt::none<address>(),
+            reuse_count: 0,  // First use, no reuse yet
+            total_tokens_launched: 1,  // First token
         };
         table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
+    }
+
+    // Update existing ticker for reuse (preserves history)
+    public fun update_ticker_for_reuse(registry: &mut TickerRegistry, ticker: String, new_token_id: ID, now_ts_ms: u64, cooldown_ends_ts_ms: u64) {
+        let key = clone_string(&ticker);
+        if (!table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            return  // Ticker doesn't exist, can't update
+        };
+        
+        let info = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, ticker);
+        
+        // Update for new token (preserve history)
+        info.status = TickerStatus::Active;
+        info.token_id = opt::some<ID>(new_token_id);
+        info.last_use_ts_ms = now_ts_ms;  // Reset timer
+        info.cooldown_ends_ts_ms = cooldown_ends_ts_ms;
+        info.current_reuse_fee_mist = 0;  // Reset fee
+        info.graduated_ts_ms = 0;  // New token hasn't graduated yet
+        
+        // Increment history counters (THIS IS THE KEY!)
+        info.reuse_count = info.reuse_count + 1;
+        info.total_tokens_launched = info.total_tokens_launched + 1;
+        
+        // Note: first_use_ts_ms is NOT reset - preserves original date!
     }
 
     public fun contains(registry: &TickerRegistry, ticker: String): bool { table::contains<String, TickerInfo>(&registry.tickers, ticker) }
@@ -218,7 +252,7 @@ module suilfg_launch::ticker_registry {
             let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             info_ref.status = status;
         } else {
-            let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>(), last_use_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
+            let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>(), first_use_ts_ms: 0, last_use_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>(), reuse_count: 0, total_tokens_launched: 0 };
             table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
         }
     }
