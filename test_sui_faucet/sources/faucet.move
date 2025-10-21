@@ -1,4 +1,4 @@
-/// Faucet for TEST_SUI - Allows 100 TEST_SUI claims every 6 hours
+/// Faucet for SUILFG_MEMEFI - Allows 100 TEST_SUI claims every 6 hours
 /// Admin can mint unlimited amounts at any time
 /// Platform: SuiLFG MemeFi
 module test_sui_faucet::faucet {
@@ -6,7 +6,7 @@ module test_sui_faucet::faucet {
     use sui::balance::{Self, Balance};
     use sui::table::{Self, Table};
     use sui::clock::{Self, Clock};
-    use test_sui_faucet::test_sui::TEST_SUI;
+    use test_sui_faucet::suilfg_memefi::SUILFG_MEMEFI;
 
     /// Error codes
     const EClaimTooSoon: u64 = 1;
@@ -26,9 +26,9 @@ module test_sui_faucet::faucet {
     public struct Faucet has key {
         id: UID,
         /// Treasury cap for minting
-        treasury_cap: TreasuryCap<TEST_SUI>,
+        treasury_cap: TreasuryCap<SUILFG_MEMEFI>,
         /// Pre-minted balance for regular claims
-        balance: Balance<TEST_SUI>,
+        balance: Balance<SUILFG_MEMEFI>,
         /// Track last claim time per address
         last_claim: Table<address, u64>,
         /// Admin address
@@ -46,7 +46,7 @@ module test_sui_faucet::faucet {
 
     /// Create and share the faucet (called after getting treasury cap)
     public fun create_faucet(
-        treasury_cap: TreasuryCap<TEST_SUI>,
+        treasury_cap: TreasuryCap<SUILFG_MEMEFI>,
         ctx: &mut TxContext
     ) {
         let faucet = Faucet {
@@ -75,7 +75,7 @@ module test_sui_faucet::faucet {
         faucet: &mut Faucet,
         clock: &Clock,
         ctx: &mut TxContext
-    ): Coin<TEST_SUI> {
+    ): Coin<SUILFG_MEMEFI> {
         let sender = tx_context::sender(ctx);
         let current_time = clock::timestamp_ms(clock);
         
