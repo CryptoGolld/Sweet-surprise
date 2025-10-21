@@ -1,0 +1,27 @@
+{
+  "network": "testnet",
+  "version": 2,
+  "publisherAddress": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f",
+  "packageId": "0x53ed170784f810bcfa09e50337ab92f7d4de70f21d3ea9e20fdd9e0f68be97c7",
+  "modules": [
+    "bonding_curve",
+    "lp_locker",
+    "platform_config",
+    "referral_registry",
+    "ticker_registry"
+  ],
+  "objects": {
+    "PlatformConfig": "0x24eae2c058ae25ad908455a776d62182a5423d8d1e1d875e934d7ddaef1a1aa0",
+    "AdminCap": "0x3cf7439fdb280c728e6e9c282b950f863a34a3fb012684c28298b0def0646b9f",
+    "TickerRegistry": "0x25bcd9311f1023dfd179a15c1dcb287f20e6ee37d2b2762f5ec41ef87d43a2b0",
+    "ReferralRegistry": "0x7a33eb5bcc1ddf8d04a2bc21d6205b504bc51a8819660a73f636ed477876dad9",
+    "UpgradeCap": "0xca5ecfc81e6df0ae40a51b38c504b72672cd70935c7602fd4853744cafbe30ac"
+  },
+  "dependencies": {
+    "test_sui_faucet": "0x443b752b268566bcc4c421afe5b055435766da9fce42a4801c77033b5a0b2999",
+    "SUILFG_MEMEFI_coinType": "0x443b752b268566bcc4c421afe5b055435766da9fce42a4801c77033b5a0b2999::suilfg_memefi::SUILFG_MEMEFI"
+  },
+  "deployedAt": "2025-10-21T16:45:00Z",
+  "status": "OPERATIONAL",
+  "notes": "Fixed version with correct SUILFG_MEMEFI dependency. Replaces v1 (0x78969...)"
+}

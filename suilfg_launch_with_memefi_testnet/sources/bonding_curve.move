@@ -13,7 +13,7 @@ module suilfg_launch_memefi::bonding_curve {
     use std::option::{Self as option, Option};
     use std::type_name::{Self, TypeName};
 
-    // Import SUILFG_MEMEFI instead of SUI
+    // Import SUILFG_MEMEFI from the deployed faucet package
     use test_sui_faucet::suilfg_memefi::SUILFG_MEMEFI;
 
     use suilfg_launch_memefi::platform_config as platform_config;

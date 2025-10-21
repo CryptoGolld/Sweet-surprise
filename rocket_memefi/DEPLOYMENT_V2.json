@@ -1,0 +1,33 @@
+{
+  "network": "testnet",
+  "version": 2,
+  "publisherAddress": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f",
+  "packageId": "0xc8cbf9a02201d6b7068cc83ebcf7c0ab6b739cf2876a6de34581ace372f39637",
+  "coinType": "0xc8cbf9a02201d6b7068cc83ebcf7c0ab6b739cf2876a6de34581ace372f39637::rocket_memefi::ROCKET_MEMEFI",
+  "objects": {
+    "TreasuryCap": "0xd9873ba8185eee40e8e9f5dbca1ae7c4fb5b8b341ca6597b16567aadddbcac6d",
+    "CoinMetadata": "0x963522e74322f91ea348d8b740cd5dbf750e40d8768309641b9e0c94e953e77e",
+    "UpgradeCap": "0x6a6b689709a407dfb3db7cce419105d33b8e58faeebf81a248013e3bcef86ed3",
+    "BondingCurve": "0x09d921724e605568c84e78b71d0e17623414fc6678839b11086ca28e826bb579"
+  },
+  "coinDetails": {
+    "symbol": "ROCKET",
+    "name": "Rocket MemeFi",
+    "decimals": 9,
+    "description": "The first community memecoin on SuiLFG MemeFi Platform. To the moon! Launched with 1B supply on bonding curve."
+  },
+  "bondingCurve": {
+    "platform": "0x53ed170784f810bcfa09e50337ab92f7d4de70f21d3ea9e20fdd9e0f68be97c7",
+    "graduationTarget": "13333000000000",
+    "graduationTargetFormatted": "13,333 SUILFG_MEMEFI",
+    "firstBuy": {
+      "buyer": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f",
+      "amountPaid": "100000000000",
+      "amountPaidFormatted": "100 SUILFG_MEMEFI",
+      "tokensReceived": "79950010",
+      "tokensReceivedFormatted": "79.95 ROCKET"
+    }
+  },
+  "deployedAt": "2025-10-21T16:50:00Z",
+  "status": "LIVE_AND_TRADING"
+}
