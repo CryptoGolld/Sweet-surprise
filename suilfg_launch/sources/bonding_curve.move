@@ -246,6 +246,10 @@ module suilfg_launch::bonding_curve {
         // If claimable for free, refund payment and use free path
         if (is_claimable) {
             transfer::public_transfer(reuse_fee_payment, sender(ctx));
+            // Ticker is claimable, so remove old entry if it exists
+            if (ticker_registry::contains(ticker_registry, ticker_str)) {
+                ticker_registry::remove_ticker(ticker_registry, ticker_str);
+            };
         } else if (ticker_registry::contains(ticker_registry, ticker_str)) {
             // Ticker exists and NOT claimable - check if fee can bypass
             let required_fee = ticker_registry::get_current_reuse_fee(ticker_registry, ticker_str);
@@ -260,6 +264,9 @@ module suilfg_launch::bonding_curve {
             // Fee is sufficient - collect it to treasury
             let treasury_addr = platform_config::get_treasury_address(cfg);
             transfer::public_transfer(reuse_fee_payment, treasury_addr);
+            
+            // CRITICAL FIX: Remove old ticker entry before adding new one
+            ticker_registry::remove_ticker(ticker_registry, ticker_str);
         } else {
             // Ticker doesn't exist - refund payment
             transfer::public_transfer(reuse_fee_payment, sender(ctx));
@@ -269,7 +276,7 @@ module suilfg_launch::bonding_curve {
         let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
         let curve_id = object::id(&curve);
         
-        // Register ticker with current timestamp
+        // Register ticker with current timestamp (fresh entry)
         let now = clock::timestamp_ms(clock);
         let cooldown_ends = now + max_lock_ms;
         

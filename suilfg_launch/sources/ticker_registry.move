@@ -15,7 +15,7 @@ module suilfg_launch::ticker_registry {
 
     public enum TickerStatus has copy, drop, store { Available, Active, OnCooldown, Banned, Reserved, Whitelisted }
 
-    public struct TickerInfo has store {
+    public struct TickerInfo has store, drop {
         status: TickerStatus,
         token_id: Option<ID>,
         cooldown_ends_ts_ms: u64,
@@ -142,6 +142,15 @@ module suilfg_launch::ticker_registry {
     }
 
     public fun contains(registry: &TickerRegistry, ticker: String): bool { table::contains<String, TickerInfo>(&registry.tickers, ticker) }
+
+    // Remove ticker entry (for reuse)
+    public fun remove_ticker(registry: &mut TickerRegistry, ticker: String) {
+        let key = clone_string(&ticker);
+        if (table::contains<String, TickerInfo>(&registry.tickers, key)) {
+            let _removed = table::remove<String, TickerInfo>(&mut registry.tickers, ticker);
+            // TickerInfo has 'drop' ability, so it's automatically dropped
+        }
+    }
 
     // Mark token as graduated and set up cooldown with fee
     public fun mark_graduated(registry: &mut TickerRegistry, ticker: String, graduated_ts_ms: u64, base_fee_mist: u64) {
