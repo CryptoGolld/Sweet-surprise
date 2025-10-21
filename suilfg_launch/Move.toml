@@ -1,7 +1,7 @@
 [package]
 name = "suilfg_launch"
 version = "0.0.1"
-published-at = "PackageID:"
+published-at = "0xf811c72078537cef0a525a37c790b61f9746b36445089e7ae3012fed43354ada"
 edition = "2024.beta"
 
 [dependencies]
