@@ -19,11 +19,8 @@ export async function createCoinTransaction(params: {
   moduleName: string;
   structName: string;
 }> {
-  // 1. Call compilation service (either Next.js API or standalone service)
-  const compileEndpoint = process.env.NEXT_PUBLIC_COMPILE_API || '/api/compile-coin';
-  const compileUrl = compileEndpoint.startsWith('http') 
-    ? `${compileEndpoint}/compile`
-    : compileEndpoint;
+  // 1. Call compilation service via Vercel proxy (avoids HTTPS->HTTP mixed content)
+  const compileUrl = '/api/compile-proxy';
   
   const response = await fetch(compileUrl, {
     method: 'POST',
