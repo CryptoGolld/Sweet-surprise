@@ -80,29 +80,42 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       
       // Step 2: User signs to publish (they pay gas!)
       setStatus('Please sign to publish package...');
-      const publishResult = await signAndExecute(
-        {
-          transaction: publishTx,
-        },
-        {
-          onSuccess: (result) => {
-            console.log('Publish success:', result);
-          },
-        }
-      );
+      const publishResult = await signAndExecute({
+        transaction: publishTx,
+      });
       
-      if (publishResult.effects?.status?.status !== 'success') {
+      // Check if transaction succeeded
+      const digest = publishResult.digest;
+      if (!digest) {
+        throw new Error('Package publish failed - no digest returned');
+      }
+      
+      // Wait a moment for indexing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Fetch full transaction details from RPC
+      const { getFullnodeUrl, SuiClient } = await import('@mysten/sui/client');
+      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      const txDetails = await client.getTransactionBlock({
+        digest,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
+        },
+      });
+      
+      if (txDetails.effects?.status?.status !== 'success') {
         throw new Error('Package publish failed');
       }
       
       // Step 3: Extract package ID and objects
-      const publishedObj = publishResult.objectChanges?.find(
+      const publishedObj = txDetails.objectChanges?.find(
         (obj: any) => obj.type === 'published'
       );
-      const treasuryCapObj = publishResult.objectChanges?.find(
+      const treasuryCapObj = txDetails.objectChanges?.find(
         (obj: any) => obj.type === 'created' && obj.objectType?.includes('TreasuryCap')
       );
-      const metadataObj = publishResult.objectChanges?.find(
+      const metadataObj = txDetails.objectChanges?.find(
         (obj: any) => obj.type === 'created' && obj.objectType?.includes('CoinMetadata')
       );
       
