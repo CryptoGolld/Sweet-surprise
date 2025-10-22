@@ -175,9 +175,35 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       
     } catch (error: any) {
       console.error('Failed to create coin:', error);
+      
+      // Build detailed error log for mobile debugging
+      const debugInfo = {
+        error: error.message || error.toString(),
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+        ticker: formData.ticker,
+        name: formData.name,
+      };
+      
+      const debugLog = JSON.stringify(debugInfo, null, 2);
+      setErrorDetails(debugLog);
+      
       toast.error('Failed to create coin', {
-        description: error.message || 'Please try again',
-        duration: 6000,
+        description: (
+          <div>
+            <p className="mb-2">{error.message || 'Please try again'}</p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(debugLog);
+                toast.success('Error details copied! 📋');
+              }}
+              className="px-3 py-1 bg-white/10 rounded text-xs hover:bg-white/20 transition-colors"
+            >
+              📋 Copy Error Details
+            </button>
+          </div>
+        ),
+        duration: 10000,
       });
       setStatus('');
     } finally {
