@@ -129,14 +129,20 @@ ${moduleName} = "0x0"
     // Try to find sui binary (check common locations)
     const suiPath = process.env.SUI_PATH || '/home/ubuntu/sui/sui';
     
+    let buildOutput;
     try {
-      execSync(
+      buildOutput = execSync(
         `cd ${tempDir} && ${suiPath} move build 2>&1`,
         { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
       );
+      console.log('  📝 Build output:', buildOutput);
     } catch (buildError) {
-      console.error('  ❌ Build error:', buildError.message);
-      throw new Error(`Compilation failed: ${buildError.message}\n\nMake sure Sui CLI is installed and accessible at: ${suiPath}`);
+      console.error('  ❌ Build error stdout:', buildError.stdout);
+      console.error('  ❌ Build error stderr:', buildError.stderr);
+      console.error('  ❌ Build error message:', buildError.message);
+      
+      const errorDetails = buildError.stderr || buildError.stdout || buildError.message;
+      throw new Error(`Compilation failed:\n${errorDetails}`);
     }
     
     // Read compiled bytecode
