@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { useCurrentAccount } from '@mysten/dapp-kit';
-import { createCoinViaAPI } from '@/lib/sui/transactions';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
 
@@ -310,7 +310,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               disabled={isCreating || !currentAccount}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
             >
-              {isCreating ? '🚀 Creating... (10-15 sec)' : '🚀 Create Coin'}
+              {isCreating ? (status || '🚀 Creating...') : '🚀 Create Coin'}
             </button>
           </div>
         </form>
