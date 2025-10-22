@@ -127,7 +127,7 @@ ${moduleName} = "0x0"
     console.log(`  🔨 Building package...`);
     
     // Try to find sui binary (check common locations)
-    const suiPath = process.env.SUI_PATH || '/usr/local/bin/sui';
+    const suiPath = process.env.SUI_PATH || '/home/ubuntu/sui/sui';
     
     try {
       execSync(
