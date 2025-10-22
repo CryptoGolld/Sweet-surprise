@@ -152,11 +152,16 @@ ${moduleName} = "0x0"
     }
     
     const moduleFiles = fs.readdirSync(bytecodeModulesPath);
-    const modules = moduleFiles.map(file => {
-      const modulePath = path.join(bytecodeModulesPath, file);
-      const bytecode = fs.readFileSync(modulePath);
-      return Array.from(bytecode);
-    });
+    const modules = moduleFiles
+      .filter(file => {
+        const modulePath = path.join(bytecodeModulesPath, file);
+        return fs.statSync(modulePath).isFile(); // Only process files, not directories
+      })
+      .map(file => {
+        const modulePath = path.join(bytecodeModulesPath, file);
+        const bytecode = fs.readFileSync(modulePath);
+        return Array.from(bytecode);
+      });
     
     // Prepare response
     const result = {
