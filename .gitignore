@@ -1,24 +1,36 @@
-# Build artifacts
-build/
-*.mv
-*.mvsm
-Move.lock
-core
+# dependencies
+node_modules
+.pnp
+.pnp.js
 
-# Sui binaries
-sui-*
-move-analyzer
+# testing
+coverage
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# next.js
+.next/
+out/
+build
+dist
 
-# OS
+# misc
 .DS_Store
-Thumbs.db
+*.pem
 
-# Test files
-test_coin*/
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Contracts (backend only, not needed for frontend deploy)
+contracts/

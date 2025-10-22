@@ -1,108 +1,49 @@
-# 🚀 SuiLFG Launch Platform
+# 🚀 SuiLFG MemeFi
 
-The official memecoin launchpad for the Sui blockchain - combining Pump.fun's viral appeal with robust security and transparent fees.
+The premier memecoin launchpad on Sui blockchain.
 
----
+## 🎯 Testnet Campaign
 
-## 📁 Project Structure
+Fair launch memecoins with bonding curves. No presales. No BS.
 
-### Two Deployment Versions:
+### Features
 
-#### 1. **`suilfg_launch/`** - MAINNET (Cetus CLMM)
-- Full-featured with Cetus concentrated liquidity integration
-- Permanent LP lock with automated pool creation
-- Production-ready for mainnet launch
+- ⚡ **Instant Launch** - Create your memecoin in seconds
+- 📈 **Fair Bonding Curve** - Transparent pricing for all
+- 🎓 **Auto-Graduate** - Automatic graduation at 737M tokens sold
+- 🏊 **Cetus Integration** - Automatic LP pool creation
 
-#### 2. **`suilfg_launch_testnet/`** - TESTNET (Simple AMM)
-- Uses custom constant-product AMM (x * y = k)
-- No external dependencies (testnet-compatible)
-- Identical contract names for seamless frontend integration
+### Contract Addresses (Testnet)
 
----
+- **Platform**: `0x39d07cf0e87e2f2c3cb1807b30ae49ba1e786d587b98ede8e36c7f23833e1de3`
+- **Faucet (SUILFG_MEMEFI)**: `0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81`
 
-## 🔧 Quick Start
+### How It Works
 
-### Testnet Deployment:
+1. **Create** - Anyone can launch a memecoin
+2. **Trade** - Buy/sell on bonding curve (737M supply)
+3. **Graduate** - Curve graduates at 13K SUI collected
+4. **Pool** - Automatic Cetus LP creation
+
+### Bonding Curve
+
+- **Max Curve Supply**: 737M tokens (73.7% of total)
+- **Total Supply**: 1B tokens
+- **LP Allocation**: 200M tokens (20%)
+- **Team Allocation**: 63M tokens (6.3%)
+- **Graduation Target**: 13,000 SUI
+
+### Development
+
 ```bash
-cd suilfg_launch_testnet
-sui move build
-sui client publish --gas-budget 500000000
+npm install
+npm run dev
 ```
 
-### Mainnet Deployment:
-```bash
-cd suilfg_launch
-sui move build --dependencies-are-root
-sui client publish --gas-budget 500000000 --dependencies-are-root
-```
+### Deployment
+
+This project is deployed on Vercel.
 
 ---
 
-## 📖 Documentation
-
-- **Complete Blueprint**: [`SuiLFG-Launch-Blueprint.md`](./SuiLFG-Launch-Blueprint.md)
-- **Build Instructions**: [`BUILD_INSTRUCTIONS.md`](./BUILD_INSTRUCTIONS.md)
-
----
-
-## 🎯 Why Two Versions?
-
-**Cetus CLMM testnet compatibility issue**: Cetus dependencies are built for older Sui versions, causing `VMVerificationOrDeserializationError` on current testnet (v1.58.2).
-
-**Solution**:
-- ✅ **Testnet**: Simple AMM (works perfectly, no external deps)
-- ✅ **Mainnet**: Cetus CLMM (stable, production-ready)
-
-Both versions feature:
-- Identical bonding curve mechanics
-- Same buy/sell logic
-- Compatible frontend APIs
-- Only difference: graduation pool type
-
----
-
-## ✨ Key Features
-
-- 🎮 **Bonding Curve Trading** - Fair price discovery
-- 💰 **Referral System** - On-chain rewards
-- 🔒 **Permanent LP Lock** - Rug-proof graduation
-- 👥 **Platform Fees** - Sustainable revenue model
-- 🏆 **Creator Rewards** - Incentivize quality launches
-- 🎯 **Admin Controls** - Emergency pause & configuration
-
----
-
-## 🚀 Deployment Strategy
-
-1. **Launch Testnet** → Use `suilfg_launch_testnet/` for community testing
-2. **Test Mainnet** → Verify Cetus integration (~0.5 SUI cost)
-3. **Production** → Deploy `suilfg_launch/` for real launch
-
----
-
-## 📦 What's Inside
-
-### Common Modules (both versions):
-- `platform_config.move` - Central configuration & admin controls
-- `referral_registry.move` - On-chain referral tracking
-- `ticker_registry.move` - Token ticker management
-
-### Mainnet-Specific:
-- `bonding_curve.move` - Cetus CLMM graduation
-- `lp_locker.move` - Permanent Cetus position lock
-
-### Testnet-Specific:
-- `bonding_curve.move` - Simple AMM graduation  
-- `simple_amm.move` - Custom constant-product AMM
-
----
-
-## 🤝 Contributing
-
-This is production code. Please test thoroughly before deploying.
-
----
-
-## 📄 License
-
-Proprietary - SuiLFG Platform
+**Built with ❤️ for the Sui ecosystem**
