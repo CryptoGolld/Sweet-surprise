@@ -32,5 +32,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Contracts (backend only, not needed for frontend deploy)
-contracts/
+# Note: contracts/ folder is committed to git but excluded from Vercel build via vercel.json
