@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
-import { createCoinTransaction } from '@/lib/sui/transactions';
+import { useCurrentAccount } from '@mysten/dapp-kit';
+import { createCoinViaAPI } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
 
@@ -13,7 +13,7 @@ interface CreateCoinModalProps {
 
 export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const currentAccount = useCurrentAccount();
-  const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
+  const [isCreating, setIsCreating] = useState(false);
   
   const [formData, setFormData] = useState({
     ticker: '',
@@ -52,7 +52,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     
     if (!currentAccount) {
@@ -65,63 +65,108 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       return;
     }
 
+    setIsCreating(true);
+    
     try {
-      const socials = [
-        formData.twitter,
-        formData.telegram,
-        formData.website,
-      ].filter(Boolean);
-      
-      const tx = createCoinTransaction({
+      // Step 1: Compile on backend
+      setStatus('Compiling package...');
+      const { transaction: publishTx, moduleName, structName } = await createCoinTransaction({
         ticker: formData.ticker.toUpperCase(),
         name: formData.name,
         description: formData.description,
-        imageUrl: formData.imageUrl,
-        socials,
       });
-
-      signAndExecute(
-        {
-          transaction: tx,
+      
+      // Step 2: User signs to publish (they pay gas!)
+      setStatus('Please sign to publish package...');
+      const publishResult = await signAndExecute({
+        transaction: publishTx,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
         },
-        {
-          onSuccess: (result) => {
-            toast.success('Coin created successfully!', {
-              description: 'View on explorer',
-              action: {
-                label: 'View',
-                onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank'),
-              },
-            });
-            
-            // Reset form
-            setFormData({
-              ticker: '',
-              name: '',
-              description: '',
-              imageUrl: '',
-              twitter: '',
-              telegram: '',
-              website: '',
-            });
-            
-            onClose();
-            
-            // Reload after a delay to show new coin
-            setTimeout(() => window.location.reload(), 2000);
-          },
-          onError: (error) => {
-            console.error('Failed to create coin:', error);
-            toast.error('Failed to create coin', {
-              description: error.message || 'Please try again',
-            });
-          },
-        }
-      );
-    } catch (error: any) {
-      toast.error('Failed to build transaction', {
-        description: error.message,
       });
+      
+      if (publishResult.effects?.status?.status !== 'success') {
+        throw new Error('Package publish failed');
+      }
+      
+      // Step 3: Extract package ID and objects
+      const publishedObj = publishResult.objectChanges?.find(
+        (obj: any) => obj.type === 'published'
+      );
+      const treasuryCapObj = publishResult.objectChanges?.find(
+        (obj: any) => obj.type === 'created' && obj.objectType?.includes('TreasuryCap')
+      );
+      const metadataObj = publishResult.objectChanges?.find(
+        (obj: any) => obj.type === 'created' && obj.objectType?.includes('CoinMetadata')
+      );
+      
+      if (!publishedObj || !treasuryCapObj || !metadataObj) {
+        throw new Error('Failed to find published objects');
+      }
+      
+      const packageId = (publishedObj as any).packageId;
+      const treasuryCapId = (treasuryCapObj as any).objectId;
+      const metadataId = (metadataObj as any).objectId;
+      
+      // Step 4: Create bonding curve
+      setStatus('Creating bonding curve...');
+      const curveTx = createCurveTransaction({
+        packageId,
+        moduleName,
+        structName,
+        treasuryCapId,
+        metadataId,
+      });
+      
+      const curveResult = await signAndExecute({
+        transaction: curveTx,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
+        },
+      });
+      
+      if (curveResult.effects?.status?.status !== 'success') {
+        throw new Error('Curve creation failed');
+      }
+      
+      // Success!
+      toast.success('🎉 Coin created successfully!', {
+        description: `${formData.ticker} is now live on SuiLFG MemeFi`,
+        action: {
+          label: 'View',
+          onClick: () => window.open(getExplorerLink(curveResult.digest, 'txblock'), '_blank'),
+        },
+        duration: 8000,
+      });
+      
+      // Reset form
+      setFormData({
+        ticker: '',
+        name: '',
+        description: '',
+        imageUrl: '',
+        twitter: '',
+        telegram: '',
+        website: '',
+      });
+      
+      setStatus('');
+      onClose();
+      
+      // Reload after a delay to show new coin
+      setTimeout(() => window.location.reload(), 2000);
+      
+    } catch (error: any) {
+      console.error('Failed to create coin:', error);
+      toast.error('Failed to create coin', {
+        description: error.message || 'Please try again',
+        duration: 6000,
+      });
+      setStatus('');
+    } finally {
+      setIsCreating(false);
     }
   }
 
@@ -255,17 +300,17 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
             <button
               type="button"
               onClick={onClose}
-              disabled={isPending}
+              disabled={isCreating}
               className="flex-1 px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isPending || !currentAccount}
+              disabled={isCreating || !currentAccount}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
             >
-              {isPending ? '🚀 Creating...' : '🚀 Create Coin'}
+              {isCreating ? '🚀 Creating... (10-15 sec)' : '🚀 Create Coin'}
             </button>
           </div>
         </form>
