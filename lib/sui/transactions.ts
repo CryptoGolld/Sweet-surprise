@@ -19,8 +19,13 @@ export async function createCoinTransaction(params: {
   moduleName: string;
   structName: string;
 }> {
-  // 1. Call backend to compile Move code
-  const response = await fetch('/api/compile-coin', {
+  // 1. Call compilation service (either Next.js API or standalone service)
+  const compileEndpoint = process.env.NEXT_PUBLIC_COMPILE_API || '/api/compile-coin';
+  const compileUrl = compileEndpoint.startsWith('http') 
+    ? `${compileEndpoint}/compile`
+    : compileEndpoint;
+  
+  const response = await fetch(compileUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
