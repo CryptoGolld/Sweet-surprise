@@ -125,10 +125,19 @@ ${moduleName} = "0x0"
     
     // Compile
     console.log(`  🔨 Building package...`);
-    execSync(
-      `cd ${tempDir} && sui move build 2>&1`,
-      { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
-    );
+    
+    // Try to find sui binary (check common locations)
+    const suiPath = process.env.SUI_PATH || '/usr/local/bin/sui';
+    
+    try {
+      execSync(
+        `cd ${tempDir} && ${suiPath} move build 2>&1`,
+        { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
+      );
+    } catch (buildError: any) {
+      console.error('  ❌ Build error:', buildError.message);
+      throw new Error(`Compilation failed: ${buildError.message}\n\nMake sure Sui CLI is installed and accessible at: ${suiPath}`);
+    }
     
     // Read compiled bytecode
     const buildDir = path.join(tempDir, 'build', moduleName);
