@@ -13,7 +13,9 @@ interface CreateCoinModalProps {
 
 export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const currentAccount = useCurrentAccount();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   const [isCreating, setIsCreating] = useState(false);
+  const [status, setStatus] = useState('');
   
   const [formData, setFormData] = useState({
     ticker: '',
