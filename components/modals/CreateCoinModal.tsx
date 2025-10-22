@@ -305,7 +305,6 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               <li>737M tokens available for trading</li>
               <li>Graduates at 13K SUI collected</li>
               <li>Auto-creates Cetus liquidity pool</li>
-              <li>No presales, no team allocation on curve</li>
             </ul>
           </div>
 
