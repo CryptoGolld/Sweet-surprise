@@ -139,14 +139,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       
       const curveResult = await signAndExecute({
         transaction: curveTx,
-        options: {
-          showEffects: true,
-          showObjectChanges: true,
-        },
       });
       
-      if (curveResult.effects?.status?.status !== 'success') {
-        throw new Error('Curve creation failed');
+      if (!curveResult.digest) {
+        throw new Error('Curve creation failed - no digest returned');
       }
       
       // Success!
