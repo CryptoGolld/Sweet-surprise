@@ -166,7 +166,7 @@ ${moduleName} = "0x0"
       modules: modules,
       dependencies: ['0x1', '0x2'],
       moduleName: moduleName,
-      structName: structName,
+      structName: witnessName, // The witness struct name
       timestamp: Date.now(),
     };
     
