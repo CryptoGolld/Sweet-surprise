@@ -16,6 +16,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   const [isCreating, setIsCreating] = useState(false);
   const [status, setStatus] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
   
   const [formData, setFormData] = useState({
     ticker: '',
