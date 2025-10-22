@@ -80,13 +80,16 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       
       // Step 2: User signs to publish (they pay gas!)
       setStatus('Please sign to publish package...');
-      const publishResult = await signAndExecute({
-        transaction: publishTx,
-        options: {
-          showEffects: true,
-          showObjectChanges: true,
+      const publishResult = await signAndExecute(
+        {
+          transaction: publishTx,
         },
-      });
+        {
+          onSuccess: (result) => {
+            console.log('Publish success:', result);
+          },
+        }
+      );
       
       if (publishResult.effects?.status?.status !== 'success') {
         throw new Error('Package publish failed');
