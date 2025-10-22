@@ -48,10 +48,11 @@ export async function createCoinTransaction(params: {
     modules: modules.map((m: number[]) => new Uint8Array(m)),
     dependencies: dependencies,
   });
-  
+
   // Transfer UpgradeCap to sender (they own the package!)
-  tx.transferObjects([upgradeCap], tx.pure.address(await tx.pure.address('0x0'))); // Will be replaced by actual sender
-  
+  // The sender is automatically set by the wallet when signing
+  tx.transferObjects([upgradeCap], tx.gas);
+
   // Note: We can't create the curve in the same transaction because we need
   // the packageId, which we only get after publish executes.
   // User will need to sign twice: once to publish, once to create curve.
