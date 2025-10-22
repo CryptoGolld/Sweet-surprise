@@ -86,19 +86,17 @@ ${moduleName} = "0x0"
     fs.writeFileSync(path.join(tempDir, 'Move.toml'), moveToml);
     
     // Generate Move source
-    const structName = `${ticker.toUpperCase()}_SUILFG_MEMEFI`;
+    const witnessName = ticker.toUpperCase(); // Must match module name for one-time witness
     const desc = description || `${name} - Launched on SuiLFG MemeFi`;
     
     const moveSource = `module ${moduleName}::${moduleName} {
-    use sui::coin::{Self, TreasuryCap};
-    use sui::tx_context::TxContext;
-    use std::option;
+    use sui::coin;
 
-    /// The branded coin type for SuiLFG MemeFi platform
-    public struct ${structName} has drop {}
+    /// One-time witness (must match module name in uppercase)
+    public struct ${witnessName} has drop {}
 
     /// Initialize the coin and create TreasuryCap
-    fun init(witness: ${structName}, ctx: &mut TxContext) {
+    fun init(witness: ${witnessName}, ctx: &mut sui::tx_context::TxContext) {
         let (treasury, metadata) = coin::create_currency(
             witness,
             9,
@@ -110,10 +108,10 @@ ${moduleName} = "0x0"
         );
         
         // Freeze metadata so it can't be changed
-        transfer::public_freeze_object(metadata);
+        sui::transfer::public_freeze_object(metadata);
         
         // Transfer TreasuryCap to sender (will be used by bonding curve)
-        transfer::public_transfer(treasury, tx_context::sender(ctx));
+        sui::transfer::public_transfer(treasury, sui::tx_context::sender(ctx));
     }
 }
 `;
