@@ -1,95 +1,286 @@
-# 🚀 SuiLFG MemeFi - Deployment Guide
+# SuiLFG Launch - Testnet Deployment Guide
 
-## ✅ What's Ready
+## Pre-Deployment Checklist
 
-### Backend (100% Complete)
-- ✅ Bonding curve contracts deployed on testnet
-- ✅ SUILFG_MEMEFI faucet token live
-- ✅ All core functions tested and working
-- ✅ Supply cap fix implemented (737M tokens)
-- ✅ Graduation mechanism working
-- ✅ Manual Cetus pooling ready
+### 1. Contract Review
+- ✅ All files compile without errors
+- ✅ All parameters correctly set
+- ✅ No syntax errors
+- ✅ Dependencies properly configured
 
-### Frontend (v1 - Landing Page)
-- ✅ Next.js app built successfully  
-- ✅ Beautiful UI with Sui branding
-- ✅ Responsive design
-- ✅ Production-ready build
-- ⏳ Interactive features coming in v2
-
-## 🌐 Deploy to Vercel
-
-### Option 1: Vercel CLI (Recommended)
-
+### 2. Required Tools
 ```bash
-# Install Vercel CLI
-npm install -g vercel
+# Install Sui CLI (if not already installed)
+cargo install --locked --git https://github.com/MystenLabs/sui.git --branch testnet sui
 
-# Login to Vercel
-vercel login
-
-# Deploy
-vercel --prod
+# Verify installation
+sui --version
 ```
 
-### Option 2: Vercel Dashboard
+### 3. Set Up Sui Wallet
+```bash
+# Create new wallet or import existing
+sui client new-address ed25519
 
-1. Go to https://vercel.com/new
-2. Import your GitHub repository
-3. Select branch: `cursor/install-sui-cli-and-login-burner-wallet-5a0f`
-4. Framework: Next.js (auto-detected)
-5. Click "Deploy"
+# Get testnet SUI from faucet
+curl --location --request POST 'https://faucet.testnet.sui.io/gas' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "FixedAmountRequest": {
+        "recipient": "YOUR_ADDRESS"
+    }
+}'
+```
 
-Done! Your site will be live in ~2 minutes.
+## Deployment Steps
 
-## 📋 Post-Deployment Checklist
+### Step 1: Build Contracts
+```bash
+cd suilfg_launch
+sui move build
+```
 
-- [ ] Verify site loads correctly
-- [ ] Test responsive design on mobile
-- [ ] Check all gradient animations working
-- [ ] Add custom domain (optional)
-- [ ] Share testnet launch announcement
+**Expected output:**
+```
+BUILDING suilfg_launch
+BUILDING Sui
+Build Successful
+```
 
-## 🔜 v2 Features (Next Sprint)
+**If errors occur:**
+- Check all imports
+- Verify Move.toml dependencies
+- Ensure edition = 2024
 
-- [ ] Sui wallet integration (@mysten/dapp-kit)
-- [ ] Create memecoin modal
-- [ ] Buy/sell trading interface
-- [ ] Real-time coin list from blockchain
-- [ ] User portfolio view
-- [ ] Graduation status tracking
+### Step 2: Test Locally (Optional but Recommended)
+```bash
+# Run unit tests
+sui move test
 
-## 📊 Platform Status
+# Expected: All tests pass
+```
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| Contracts | ✅ Live | Testnet v0.0.5 |
-| Faucet | ✅ Live | SUILFG_MEMEFI working |
-| Frontend | ✅ v1 | Landing page ready |
-| Wallet Integration | ⏳ v2 | Coming soon |
-| Trading UI | ⏳ v2 | Coming soon |
+### Step 3: Deploy to Testnet
+```bash
+# Deploy package
+sui client publish --gas-budget 500000000
 
-## 🎯 Launch Strategy
+# Save the output!
+```
 
-### Phase 1 (Now - 1 hour)
-- ✅ Deploy landing page
-- ✅ Announce testnet campaign
-- ✅ Share contract addresses
+**Important outputs to save:**
+- Package ID: `0xABC...`
+- PlatformConfig object ID: `0xDEF...`
+- AdminCap object ID: `0x123...`
+- TickerRegistry object ID: `0x456...`
 
-### Phase 2 (Next 24-48 hours)
-- ⏳ Add wallet integration
-- ⏳ Enable coin creation
-- ⏳ Enable trading
+### Step 4: Verify Deployment
+```bash
+# Check package exists
+sui client object <PACKAGE_ID>
 
-### Phase 3 (Week 1)
-- ⏳ Community feedback
-- ⏳ UI/UX improvements
-- ⏳ Additional features
+# Check PlatformConfig
+sui client object <PLATFORM_CONFIG_ID>
+```
 
-## 📞 Support
+### Step 5: Configure Parameters (Optional)
 
-Contract issues? Check `/workspace/contracts/` for full source code and deployment info.
+If you need to change any defaults:
+
+```bash
+# Set treasury address
+sui client call --package <PKG> \
+  --module platform_config \
+  --function set_treasury_address \
+  --args <ADMIN_CAP> <PLATFORM_CONFIG> <YOUR_TREASURY_ADDRESS> \
+  --gas-budget 10000000
+
+# Set LP recipient address  
+sui client call --package <PKG> \
+  --module platform_config \
+  --function set_lp_recipient_address \
+  --args <ADMIN_CAP> <PLATFORM_CONFIG> <YOUR_LP_WALLET> \
+  --gas-budget 10000000
+
+# Set team wallet for allocations
+# (This is passed as parameter to seed_pool_prepare, not in config)
+```
+
+## Post-Deployment Setup
+
+### 1. Save Deployment Info
+
+Create `deployments/testnet.json`:
+```json
+{
+  "network": "testnet",
+  "packageId": "0xABC...",
+  "platformConfig": "0xDEF...",
+  "adminCap": "0x123...",
+  "tickerRegistry": "0x456...",
+  "deployedAt": "2024-10-12",
+  "deployer": "0xYOUR_ADDRESS"
+}
+```
+
+### 2. Update Frontend Config
+```typescript
+// config/contracts.ts
+export const CONTRACTS = {
+  PACKAGE_ID: '0xABC...',
+  PLATFORM_CONFIG: '0xDEF...',
+  TICKER_REGISTRY: '0x456...',
+};
+```
+
+### 3. Configure Supabase
+```sql
+-- Add deployed contract addresses
+INSERT INTO platform_config (
+  package_id,
+  platform_config_id,
+  ticker_registry_id,
+  network
+) VALUES (
+  '0xABC...',
+  '0xDEF...',
+  '0x456...',
+  'testnet'
+);
+```
+
+## Testing on Testnet
+
+### Test 1: Create Token
+```bash
+# You'll need to:
+# 1. Publish a test coin module first
+# 2. Get TreasuryCap
+# 3. Call create_new_meme_token with it
+
+# This tests the full flow
+```
+
+### Test 2: Buy Tokens
+```bash
+sui client call --package <PKG> \
+  --module bonding_curve \
+  --function buy \
+  --type-args <COIN_TYPE> \
+  --args <CONFIG> <CURVE> <PAYMENT_COIN> 1000000000 0 999999999999999 <CLOCK> \
+  --gas-budget 50000000
+```
+
+### Test 3: Graduation Flow
+```bash
+# Step 1: try_graduate
+sui client call --package <PKG> \
+  --module bonding_curve \
+  --function try_graduate \
+  --type-args <COIN_TYPE> \
+  --args <CONFIG> <CURVE> \
+  --gas-budget 50000000
+
+# Step 2: distribute_payouts
+sui client call --package <PKG> \
+  --module bonding_curve \
+  --function distribute_payouts \
+  --type-args <COIN_TYPE> \
+  --args <CONFIG> <CURVE> \
+  --gas-budget 50000000
+
+# Step 3: seed_pool_prepare
+sui client call --package <PKG> \
+  --module bonding_curve \
+  --function seed_pool_prepare \
+  --type-args <COIN_TYPE> \
+  --args <CONFIG> <CURVE> 0 <TEAM_WALLET> \
+  --gas-budget 50000000
+```
+
+## Common Issues & Solutions
+
+### Issue 1: "Out of gas"
+**Solution**: Increase gas-budget
+```bash
+--gas-budget 1000000000  # 1 SUI
+```
+
+### Issue 2: "Type mismatch"
+**Solution**: Ensure correct type arguments
+```bash
+--type-args 0xABC::module::TYPE
+```
+
+### Issue 3: "Object not found"
+**Solution**: Verify object IDs are correct
+```bash
+sui client object <OBJECT_ID>
+```
+
+### Issue 4: "Insufficient funds"
+**Solution**: Get more testnet SUI from faucet
+
+## Mainnet Deployment (Later)
+
+**Differences from testnet:**
+1. Change Sui dependency to mainnet framework
+2. Use mainnet faucet (real SUI needed!)
+3. Triple-check all parameters
+4. Consider audit before mainnet
+5. Have emergency pause plan
+
+**Move.toml for mainnet:**
+```toml
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+```
+
+## Security Checklist
+
+Before deploying:
+- [ ] All admin functions require AdminCap
+- [ ] No hardcoded addresses (except framework)
+- [ ] All parameters configurable
+- [ ] Emergency pause works
+- [ ] Graduation flow tested
+- [ ] Fee calculations verified
+- [ ] Token supply accounting correct
+- [ ] Binary search converges
+- [ ] No infinite loops possible
+
+## Monitoring After Deployment
+
+### Set Up Alerts
+- Platform creation paused
+- Large withdrawals
+- Graduation events
+- Error rates
+
+### Track Metrics
+- Tokens created
+- Total volume
+- Graduations
+- Gas costs
+- Error rates
 
 ---
 
-**🎉 Ready to launch!** Deploy now and iterate fast! 🚀
+## Quick Deploy Commands
+
+```bash
+# Full deployment in one go
+cd suilfg_launch
+sui move build
+sui client publish --gas-budget 500000000
+
+# Save the Package ID, Config IDs, etc.
+# Update your frontend config
+# Start indexer and graduation bot
+# Test token creation
+# Done!
+```
+
+---
+
+**Ready to deploy!** 🚀
