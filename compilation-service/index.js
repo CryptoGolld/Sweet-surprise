@@ -19,8 +19,13 @@ const PORT = process.env.PORT || 3001;
 // Enable CORS so Vercel frontend can call this API
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*', // Set to your Vercel URL in production
-  methods: ['POST'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 app.use(express.json());
 
