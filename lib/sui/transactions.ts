@@ -33,12 +33,25 @@ export async function createCoinTransaction(params: {
     body: JSON.stringify(params),
   });
   
+  console.log('Compile response status:', response.status);
+  console.log('Compile response ok:', response.ok);
+  
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.details || error.error || 'Failed to compile coin');
+    let errorDetails;
+    try {
+      const error = await response.json();
+      errorDetails = error.details || error.error || `HTTP ${response.status}`;
+    } catch (e) {
+      errorDetails = `HTTP ${response.status}: ${response.statusText}`;
+    }
+    console.error('Compilation failed:', errorDetails);
+    throw new Error(errorDetails);
   }
   
-  const { modules, dependencies, moduleName, structName } = await response.json();
+  const result = await response.json();
+  console.log('Compilation success:', { moduleName: result.moduleName, structName: result.structName });
+  
+  const { modules, dependencies, moduleName, structName } = result;
   
   // 2. Build transaction
   const tx = new Transaction();
