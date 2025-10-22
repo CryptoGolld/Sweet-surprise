@@ -134,7 +134,7 @@ ${moduleName} = "0x0"
         `cd ${tempDir} && ${suiPath} move build 2>&1`,
         { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }
       );
-    } catch (buildError: any) {
+    } catch (buildError) {
       console.error('  ❌ Build error:', buildError.message);
       throw new Error(`Compilation failed: ${buildError.message}\n\nMake sure Sui CLI is installed and accessible at: ${suiPath}`);
     }
