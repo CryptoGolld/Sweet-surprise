@@ -1,8 +1,0 @@
-[package]
-name = "test_simple_coin"
-version = "1.0.0"
-edition = "2024.beta"
-[dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
-[addresses]
-test_simple_coin = "0x0"
