@@ -2,6 +2,7 @@
 
 import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
@@ -24,7 +25,7 @@ export function UserPortfolio() {
   const { data: suiPrice = 1.0 } = useSuiPrice();
   const { data: bondingCurves = [] } = useBondingCurves();
 
-  const { data: coins, isLoading } = useQuery({
+  const { data: coins, isLoading, refetch } = useQuery({
     queryKey: ['user-portfolio', account?.address, bondingCurves],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
       if (!account?.address) return [];
@@ -91,6 +92,23 @@ export function UserPortfolio() {
     enabled: !!account?.address,
     refetchInterval: 10000,
   });
+
+  // Refetch portfolio when bonding curves finish loading
+  useEffect(() => {
+    if (bondingCurves && bondingCurves.length > 0 && coins) {
+      // Check if any coins are missing price data
+      const hasMissingPrices = coins.some(coin => {
+        const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
+        const curve = bondingCurves.find(c => c.coinType === coin.type);
+        return !isMainToken && !curve;
+      });
+      
+      if (hasMissingPrices) {
+        // Refetch to update with new curve data
+        setTimeout(() => refetch(), 1000);
+      }
+    }
+  }, [bondingCurves, coins, refetch]);
 
   if (!account) {
     return (
@@ -199,8 +217,19 @@ export function UserPortfolio() {
           // For meme tokens, calculate current spot price from bonding curve
           // NOTE: curve.curveSupply is already in whole tokens from contract
           const currentSupply = Number(curve.curveSupply);
-          pricePerToken = calculateSpotPrice(currentSupply) * suiPrice; // Convert to USD
-          totalValue = balanceNum * pricePerToken;
+          
+          // Only calculate if supply is valid
+          if (currentSupply > 0 && !isNaN(currentSupply)) {
+            pricePerToken = calculateSpotPrice(currentSupply) * suiPrice; // Convert to USD
+            totalValue = balanceNum * pricePerToken;
+          } else {
+            // For newly created tokens with 0 supply, use base price
+            pricePerToken = calculateSpotPrice(0) * suiPrice;
+            totalValue = balanceNum * pricePerToken;
+          }
+        } else {
+          // No curve found - might be loading or not a platform token
+          console.log('No curve found for token:', coin.type, 'Symbol:', coin.symbol);
         }
 
         return (
@@ -243,11 +272,15 @@ export function UserPortfolio() {
                 <div className="font-bold text-lg">
                   {formatAmount(coin.balance, coin.decimals)} {coin.symbol}
                 </div>
-                {totalValue > 0 && (
+                {totalValue > 0 ? (
                   <div className="text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
-                )}
+                ) : !isMainToken && !curve ? (
+                  <div className="text-xs text-gray-500 italic">
+                    Loading price...
+                  </div>
+                ) : null}
                 {curve && (
                   <div className="text-xs text-sui-blue group-hover:underline">
                     Trade →
