@@ -55,6 +55,12 @@ module suilfg_launch::bonding_curve {
         lock_until: u64,
         lp_recipient: address
     }
+    
+    /// Capability for automated pool creation (v0.0.7)
+    /// Allows backend to create pools without holding private keys to valuable wallets
+    public struct PoolCreatorCap has key, store {
+        id: UID,
+    }
 
     const E_CREATION_PAUSED: u64 = 1;
     const E_TRADING_FROZEN: u64 = 2;
@@ -319,6 +325,31 @@ module suilfg_launch::bonding_curve {
         
         curve.reward_paid = true;
         // Note: Remaining 12,000 SUI stays in reserve for LP seeding (90% of 13,333)
+    }
+    
+    /// ========== CAPABILITY MANAGEMENT (v0.0.7) ==========
+    
+    /// Issue a pool creator capability to automated backend
+    /// Only admin can issue capabilities
+    public entry fun issue_pool_creator_cap(
+        _admin: &AdminCap,
+        recipient: address,
+        ctx: &mut TxContext
+    ) {
+        let cap = PoolCreatorCap {
+            id: object::new(ctx),
+        };
+        transfer::transfer(cap, recipient);
+    }
+    
+    /// Revoke a pool creator capability
+    /// Only admin can revoke capabilities (for emergency response)
+    public entry fun revoke_pool_creator_cap(
+        _admin: &AdminCap,
+        cap: PoolCreatorCap,
+    ) {
+        let PoolCreatorCap { id } = cap;
+        object::delete(id);
     }
 
     /// AUTOMATIC POOL CREATION (v0.0.6)
