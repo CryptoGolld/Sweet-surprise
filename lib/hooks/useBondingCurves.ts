@@ -30,6 +30,12 @@ export function useBondingCurves() {
       try {
         console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
         
+        // Show debug toast on mobile
+        toast.info('🔍 Fetching coins...', {
+          description: `Querying: ${CONTRACTS.PLATFORM_PACKAGE}`,
+          duration: 3000,
+        });
+        
         // Query CurveCreated events
         const events = await client.queryEvents({
           query: {
@@ -40,6 +46,19 @@ export function useBondingCurves() {
         });
         
         console.log(`✅ Found ${events.data.length} CurveCreated events`);
+        
+        // Show results toast
+        if (events.data.length === 0) {
+          toast.warning('No CurveCreated events found', {
+            description: 'No coins have been created yet on this platform',
+            duration: 5000,
+          });
+        } else {
+          toast.success(`✅ Found ${events.data.length} coins!`, {
+            description: 'Loading curve data...',
+            duration: 3000,
+          });
+        }
         
         const curves: BondingCurve[] = [];
         
@@ -149,29 +168,6 @@ export function useBondingCurve(curveId: string) {
       let coinType = '';
       const objectType = curveObject.data.content.type;
       const match = objectType.match(/<(.+)>/);
-      if (match) {
-        coinType = match[1];
-      }
-      
-      return {
-        id: curveId,
-        ticker: fields.ticker || 'UNKNOWN',
-        name: fields.name || 'Unknown',
-        description: fields.description || '',
-        imageUrl: fields.image_url || '',
-        creator: fields.creator,
-        curveSupply: fields.curve_supply || '0',
-        curveBalance: fields.curve_balance || '0',
-        graduated: fields.graduated || false,
-        coinType,
-        ...fields,
-      };
-    },
-    enabled: !!curveId,
-    refetchInterval: 5000,
-  });
-}
-   const match = objectType.match(/<(.+)>/);
       if (match) {
         coinType = match[1];
       }
