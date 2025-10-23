@@ -3,7 +3,7 @@
   "outputDirectory": ".next",
   "framework": "nextjs",
   "ignoreCommand": "git diff --quiet HEAD^ HEAD ./",
-  "installCommand": "npm install",
+  "installCommand": "npm ci --legacy-peer-deps || npm install --legacy-peer-deps",
   "env": {
     "NEXT_PUBLIC_NETWORK": "testnet"
   }
