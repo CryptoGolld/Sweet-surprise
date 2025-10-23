@@ -169,13 +169,34 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           });
           return;
         }
+        
+        // Filter out coins with 0 balance
+        const validCoins = memeCoins.filter(c => BigInt(c.balance) > 0n);
+        
+        if (validCoins.length === 0) {
+          toast.error(`No ${curve.ticker} tokens with balance found`, {
+            description: 'Your coin balance is 0',
+          });
+          return;
+        }
 
         const amountInSmallest = parseAmount(amount, 9);
         const userBalanceBigInt = BigInt(memeBalance);
+        
+        // Calculate total balance from valid coins
+        const totalCoinBalance = validCoins.reduce((sum, coin) => sum + BigInt(coin.balance), 0n);
 
         if (BigInt(amountInSmallest) > userBalanceBigInt) {
           toast.error('Insufficient balance', {
             description: `You only have ${formatAmount(memeBalance, 9)} ${curve.ticker}`,
+          });
+          return;
+        }
+        
+        // Additional check: ensure the amount is positive and valid
+        if (BigInt(amountInSmallest) <= 0n) {
+          toast.error('Invalid amount', {
+            description: 'Please enter a valid amount to sell',
           });
           return;
         }
@@ -184,15 +205,17 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           amount,
           amountInSmallest,
           memeBalance,
-          numCoins: memeCoins.length,
-          coinBalances: memeCoins.map(c => c.balance),
+          totalCoinBalance: totalCoinBalance.toString(),
+          numCoins: validCoins.length,
+          coinBalances: validCoins.map(c => c.balance),
+          coinIds: validCoins.map(c => c.coinObjectId),
         });
 
-        // Build sell transaction - pass all coin IDs to merge them
+        // Build sell transaction - pass valid coin IDs only
         const tx = sellTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          memeTokenCoinIds: memeCoins.map(c => c.coinObjectId),
+          memeTokenCoinIds: validCoins.map(c => c.coinObjectId),
           tokensToSell: amountInSmallest,
           minSuiOut: '0',
         });

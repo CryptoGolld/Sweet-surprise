@@ -180,31 +180,36 @@ export function sellTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
-  // Use only the first coin for now to debug
-  // TODO: Handle multiple coins properly
-  const coinToUse = tx.object(params.memeTokenCoinIds[0]);
+  // Handle coin consolidation properly
+  const primaryCoinInput = tx.object(params.memeTokenCoinIds[0]);
   
-  // Pass the coin - the Move function will handle splitting/burning
-  // Note: The Move function checks coin value and handles both cases:
-  // - If coin value == amount: burns entire coin
-  // - If coin value > amount: splits, burns the split amount, returns remainder
+  // If there are multiple coins, merge them into the first one
+  if (params.memeTokenCoinIds.length > 1) {
+    tx.mergeCoins(
+      primaryCoinInput,
+      params.memeTokenCoinIds.slice(1).map(id => tx.object(id))
+    );
+  }
+  
+  // The Move sell function expects:
+  // - mut tokens: Coin<T> - the coin to sell from (it handles splitting internally)
+  // - amount_tokens: u64 - the amount to sell
+  // It will split if needed and return remainder to sender
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
     typeArguments: [params.coinType],
     arguments: [
-      tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
-      tx.object(params.curveId), // curve: &mut BondingCurve<T>
-      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      coinToUse, // tokens: Coin<T> - coin (Move function handles splitting)
-      tx.pure.u64(params.tokensToSell), // amount_tokens: u64 - use pure.u64 directly
-      tx.pure.u64(params.minSuiOut), // min_sui_out: u64
-      tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
-      tx.object('0x6'), // clk: &Clock
+      tx.object(CONTRACTS.PLATFORM_STATE),
+      tx.object(params.curveId),
+      tx.object(CONTRACTS.REFERRAL_REGISTRY),
+      primaryCoinInput, // Pass the merged coin directly
+      tx.pure.u64(params.tokensToSell),
+      tx.pure.u64(params.minSuiOut),
+      tx.pure.u64(deadlineMs),
+      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()),
+      tx.object('0x6'),
     ],
   });
-  
-  // Note: sell is an entry function, SUI is auto-transferred to sender
   
   return tx;
 }
