@@ -104,27 +104,19 @@ export function useBondingCurves() {
         
         // Show detailed error toast for mobile debugging
         const errorMsg = error.message || error.toString();
+        const debugInfo = {
+          error: errorMsg,
+          package: CONTRACTS.PLATFORM_PACKAGE,
+          timestamp: new Date().toISOString(),
+        };
+        
         toast.error('❌ Failed to load coins', {
-          description: (
-            <div>
-              <p className="mb-2">{errorMsg}</p>
-              <button
-                onClick={() => {
-                  const debugInfo = {
-                    error: errorMsg,
-                    package: CONTRACTS.PLATFORM_PACKAGE,
-                    timestamp: new Date().toISOString(),
-                  };
-                  navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
-                  toast.success('Error details copied! 📋');
-                }}
-                className="px-3 py-1 bg-white/10 rounded text-xs hover:bg-white/20 transition-colors"
-              >
-                📋 Copy Error Details
-              </button>
-            </div>
-          ),
+          description: `${errorMsg}\n\nTap to copy error details`,
           duration: 10000,
+          onClick: () => {
+            navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
+            toast.success('📋 Error details copied!');
+          },
         });
         
         throw error; // Re-throw so the error UI shows
