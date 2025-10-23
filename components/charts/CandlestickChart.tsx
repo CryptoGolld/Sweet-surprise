@@ -17,8 +17,8 @@ interface CandlestickChartProps {
 
 export function CandlestickChart({ data }: CandlestickChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const chartRef = useRef<any>(null);
+  const seriesRef = useRef<any>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
