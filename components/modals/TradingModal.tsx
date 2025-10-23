@@ -221,6 +221,11 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
 
   const userBalance = mode === 'buy' ? formatAmount(paymentBalance, 9) : formatAmount(memeBalance, 9);
   const tokenSymbol = mode === 'buy' ? 'SUILFG' : curve.ticker;
+  
+  // Raw balance values for percentage calculations (not formatted)
+  const rawBalance = mode === 'buy' 
+    ? Number(paymentBalance) / 1e9 
+    : Number(memeBalance) / 1e9;
 
   function handleShare() {
     const url = `${window.location.origin}/tokens/${curve.id}`;
@@ -386,38 +391,41 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none text-lg transition-colors disabled:opacity-50"
               />
               <div className="flex gap-2 mt-2 flex-wrap">
-                {/* Percentage buttons */}
-                {[
-                  { label: '25%', value: 0.25 },
-                  { label: '50%', value: 0.5 },
-                  { label: '100%', value: 1.0 },
-                ].map((preset) => (
-                  <button
-                    key={preset.label}
-                    onClick={() => {
-                      const balance = parseFloat(userBalance);
-                      if (!isNaN(balance) && balance > 0) {
-                        setAmount((balance * preset.value).toFixed(4));
-                      }
-                    }}
-                    disabled={curve.graduated || !userBalance || parseFloat(userBalance) === 0}
-                    className="px-3 py-1 bg-gradient-to-r from-meme-purple/20 to-sui-blue/20 hover:from-meme-purple/30 hover:to-sui-blue/30 border border-meme-purple/30 rounded text-sm font-semibold transition-colors disabled:opacity-50"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-                
-                {/* Quick amount buttons for buy mode */}
-                {mode === 'buy' && [10, 50, 100, 500].map((preset) => (
-                  <button
-                    key={preset}
-                    onClick={() => setAmount(preset.toString())}
-                    disabled={curve.graduated}
-                    className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded text-sm transition-colors disabled:opacity-50"
-                  >
-                    {preset}
-                  </button>
-                ))}
+                {mode === 'buy' ? (
+                  // Buy mode: Quick amount buttons in SUI
+                  [10, 50, 100, 500].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setAmount(preset.toString())}
+                      disabled={curve.graduated}
+                      className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded text-sm transition-colors disabled:opacity-50"
+                    >
+                      {preset}
+                    </button>
+                  ))
+                ) : (
+                  // Sell mode: Percentage buttons
+                  [
+                    { label: '25%', value: 0.25 },
+                    { label: '50%', value: 0.5 },
+                    { label: '100%', value: 1.0 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => {
+                        if (!isNaN(rawBalance) && rawBalance > 0) {
+                          const calculatedAmount = rawBalance * preset.value;
+                          // Set the amount with proper precision
+                          setAmount(calculatedAmount.toString());
+                        }
+                      }}
+                      disabled={curve.graduated || rawBalance === 0}
+                      className="px-3 py-1 bg-gradient-to-r from-meme-purple/20 to-sui-blue/20 hover:from-meme-purple/30 hover:to-sui-blue/30 border border-meme-purple/30 rounded text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {preset.label}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 

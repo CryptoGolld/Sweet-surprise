@@ -128,14 +128,16 @@ export function buyTokensTransaction(params: {
   const deadlineMs = Date.now() + 300000;
   
   // Merge all payment coins first if there are multiple
-  let primaryCoin = tx.object(params.paymentCoinIds[0]);
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
   if (params.paymentCoinIds.length > 1) {
     const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-    tx.mergeCoins(primaryCoin, coinsToMerge);
+    tx.mergeCoins(mergedCoin, coinsToMerge);
   }
   
-  // Split the exact payment amount from the merged coin
-  const paymentCoin = tx.splitCoins(primaryCoin, [
+  // Split the payment amount from the merged coin
+  // The Move function requires coin value <= max_sui_in (aborts if >)
+  // It will handle refunds internally if not all is used
+  const paymentCoin = tx.splitCoins(mergedCoin, [
     tx.pure.u64(params.maxSuiIn)
   ]);
   
@@ -146,7 +148,7 @@ export function buyTokensTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
       tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      paymentCoin, // payment: Coin<SUILFG_MEMEFI> - split to exact amount
+      paymentCoin, // payment: Coin<SUILFG_MEMEFI> - split to max_sui_in
       tx.pure(bcs.u64().serialize(params.maxSuiIn).toBytes()), // max_sui_in: u64
       tx.pure(bcs.u64().serialize(params.minTokensOut).toBytes()), // min_tokens_out: u64
       tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
@@ -179,17 +181,16 @@ export function sellTokensTransaction(params: {
   const deadlineMs = Date.now() + 300000;
   
   // Merge all meme token coins first if there are multiple
-  let primaryCoin = tx.object(params.memeTokenCoinIds[0]);
+  let mergedCoin = tx.object(params.memeTokenCoinIds[0]);
   if (params.memeTokenCoinIds.length > 1) {
     const coinsToMerge = params.memeTokenCoinIds.slice(1).map(id => tx.object(id));
-    tx.mergeCoins(primaryCoin, coinsToMerge);
+    tx.mergeCoins(mergedCoin, coinsToMerge);
   }
   
-  // Now split the exact amount to sell from the merged coin
-  const tokensToSellCoin = tx.splitCoins(primaryCoin, [
-    tx.pure.u64(params.tokensToSell)
-  ]);
-  
+  // Pass the merged coin directly - the Move function will handle splitting/burning
+  // Note: The Move function checks coin value and handles both cases:
+  // - If coin value == amount: burns entire coin
+  // - If coin value > amount: splits, burns the split amount, returns remainder
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
     typeArguments: [params.coinType],
@@ -197,8 +198,8 @@ export function sellTokensTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
       tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      tokensToSellCoin, // payment: Coin<T> - split to exact amount
-      tx.pure(bcs.u64().serialize(params.tokensToSell).toBytes()), // tokens_to_sell: u64
+      mergedCoin, // tokens: Coin<T> - merged coin (Move function handles splitting)
+      tx.pure(bcs.u64().serialize(params.tokensToSell).toBytes()), // amount_tokens: u64
       tx.pure(bcs.u64().serialize(params.minSuiOut).toBytes()), // min_sui_out: u64
       tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
       tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
