@@ -108,7 +108,7 @@ export function useBondingCurves() {
                 imageUrl: '',
                 creator: fields.creator || '0x0',
                 curveSupply: fields.token_supply || '0',
-                curveBalance: fields.sui_reserve?.fields?.value || '0',
+                curveBalance: fields.sui_reserve || '0', // Balance is stored directly as a number
                 graduated: fields.graduated || false,
                 createdAt: event.timestampMs ? parseInt(event.timestampMs) : Date.now(),
                 coinType,
