@@ -130,11 +130,14 @@ export function useBondingCurves() {
         };
         
         toast.error('❌ Failed to load coins', {
-          description: `${errorMsg}\n\nTap to copy error details`,
+          description: errorMsg,
           duration: 10000,
-          onClick: () => {
-            navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
-            toast.success('📋 Error details copied!');
+          action: {
+            label: '📋 Copy Details',
+            onClick: () => {
+              navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
+              toast.success('📋 Error details copied!');
+            },
           },
         });
         
