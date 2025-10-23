@@ -122,11 +122,11 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           return;
         }
 
-        // Build buy transaction
+        // Build buy transaction - pass all coin IDs to merge them
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinId: paymentCoins[0].coinObjectId,
+          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
@@ -180,11 +180,11 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           return;
         }
 
-        // Build sell transaction
+        // Build sell transaction - pass all coin IDs to merge them
         const tx = sellTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          memeTokenCoinId: memeCoins[0].coinObjectId,
+          memeTokenCoinIds: memeCoins.map(c => c.coinObjectId),
           tokensToSell: amountInSmallest,
           minSuiOut: '0',
         });
@@ -385,8 +385,30 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
                 disabled={curve.graduated}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none text-lg transition-colors disabled:opacity-50"
               />
-              <div className="flex gap-2 mt-2">
-                {[10, 50, 100, 500].map((preset) => (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {/* Percentage buttons */}
+                {[
+                  { label: '25%', value: 0.25 },
+                  { label: '50%', value: 0.5 },
+                  { label: '100%', value: 1.0 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      const balance = parseFloat(userBalance);
+                      if (!isNaN(balance) && balance > 0) {
+                        setAmount((balance * preset.value).toFixed(4));
+                      }
+                    }}
+                    disabled={curve.graduated || !userBalance || parseFloat(userBalance) === 0}
+                    className="px-3 py-1 bg-gradient-to-r from-meme-purple/20 to-sui-blue/20 hover:from-meme-purple/30 hover:to-sui-blue/30 border border-meme-purple/30 rounded text-sm font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                
+                {/* Quick amount buttons for buy mode */}
+                {mode === 'buy' && [10, 50, 100, 500].map((preset) => (
                   <button
                     key={preset}
                     onClick={() => setAmount(preset.toString())}

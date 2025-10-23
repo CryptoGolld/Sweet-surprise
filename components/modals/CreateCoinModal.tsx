@@ -332,15 +332,14 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         throw new Error(`No SUILFG_MEMEFI tokens found. You have ${coins.data?.length || 0} coin objects. Please claim from faucet first.`);
       }
       
-      // Use first coin
-      const paymentCoin = coins.data[0];
+      // Use all coins
       const amountInMist = BigInt(Math.floor(parseFloat(buyAmount) * 1_000_000_000));
       
       setStatus('Creating buy transaction...');
       const buyTx = buyTokensTransaction({
         curveId: curveData.curveId,
         coinType: curveData.coinType,
-        paymentCoinId: paymentCoin.coinObjectId,
+        paymentCoinIds: coins.data.map(c => c.coinObjectId),
         maxSuiIn: amountInMist.toString(),
         minTokensOut: '0', // Accept any amount (user accepts slippage)
       });

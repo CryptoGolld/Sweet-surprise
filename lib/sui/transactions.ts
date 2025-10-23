@@ -115,7 +115,7 @@ export function createCurveTransaction(params: {
 export function buyTokensTransaction(params: {
   curveId: string;
   coinType: string;
-  paymentCoinId: string;
+  paymentCoinIds: string[]; // Array of payment coin object IDs
   maxSuiIn: string;
   minTokensOut: string;
 }): Transaction {
@@ -127,9 +127,15 @@ export function buyTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
-  // Split the exact payment amount from the coin to avoid maxSuiIn mismatch
-  // The payment coin might have more balance than maxSuiIn
-  const paymentCoin = tx.splitCoins(tx.object(params.paymentCoinId), [
+  // Merge all payment coins first if there are multiple
+  let primaryCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+    tx.mergeCoins(primaryCoin, coinsToMerge);
+  }
+  
+  // Split the exact payment amount from the merged coin
+  const paymentCoin = tx.splitCoins(primaryCoin, [
     tx.pure.u64(params.maxSuiIn)
   ]);
   
@@ -160,7 +166,7 @@ export function buyTokensTransaction(params: {
 export function sellTokensTransaction(params: {
   curveId: string;
   coinType: string;
-  memeTokenCoinId: string;
+  memeTokenCoinIds: string[]; // Array of coin object IDs
   tokensToSell: string;
   minSuiOut: string;
 }): Transaction {
@@ -172,9 +178,15 @@ export function sellTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
-  // Split the exact amount of tokens to sell from the coin
-  // The meme token coin might have more balance than tokensToSell
-  const tokensToSellCoin = tx.splitCoins(tx.object(params.memeTokenCoinId), [
+  // Merge all meme token coins first if there are multiple
+  let primaryCoin = tx.object(params.memeTokenCoinIds[0]);
+  if (params.memeTokenCoinIds.length > 1) {
+    const coinsToMerge = params.memeTokenCoinIds.slice(1).map(id => tx.object(id));
+    tx.mergeCoins(primaryCoin, coinsToMerge);
+  }
+  
+  // Now split the exact amount to sell from the merged coin
+  const tokensToSellCoin = tx.splitCoins(primaryCoin, [
     tx.pure.u64(params.tokensToSell)
   ]);
   
