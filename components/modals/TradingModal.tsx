@@ -12,7 +12,8 @@ import {
   calculateTokensOut, 
   calculateSuiOut, 
   calculatePriceImpact,
-  formatTokenAmount 
+  formatTokenAmount,
+  calculateSpotPrice 
 } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
 
@@ -82,6 +83,11 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
     curve.curveSupply,
     BONDING_CURVE.MAX_CURVE_SUPPLY * 1e9
   );
+  
+  // Calculate volume in USD (approximate using spot price * tokens traded)
+  const tokensSoldInWholeUnits = Number(curve.curveSupply) / 1e9;
+  const spotPrice = calculateSpotPrice(tokensSoldInWholeUnits);
+  const volumeUsd = spotPrice * tokensSoldInWholeUnits * suiPrice;
 
   async function handleTrade() {
     if (!currentAccount) {
@@ -274,7 +280,11 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Max Supply (Curve)</span>
-                  <span>{(BONDING_CURVE.MAX_CURVE_SUPPLY / 1e9).toLocaleString()}</span>
+                  <span>{BONDING_CURVE.MAX_CURVE_SUPPLY.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">24h Volume</span>
+                  <span className="text-meme-purple font-bold">{formatUSD(volumeUsd)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">SUI Collected</span>
@@ -291,7 +301,7 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
             {/* Info */}
             <div className="text-xs text-gray-400 space-y-1 bg-white/5 rounded-lg p-3">
               <p>• Fair launch bonding curve</p>
-              <p>• {BONDING_CURVE.MAX_CURVE_SUPPLY / 1e9}M tokens on curve</p>
+              <p>• {BONDING_CURVE.MAX_CURVE_SUPPLY.toLocaleString()} tokens on curve</p>
               <p>• Graduates at {BONDING_CURVE.TARGET_SUI.toLocaleString()} SUI</p>
               <p>• Auto-creates Cetus LP</p>
             </div>

@@ -6,6 +6,7 @@ import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
 import { useBondingCurves } from '@/lib/hooks/useBondingCurves';
+import { calculateSpotPrice } from '@/lib/utils/bondingCurve';
 import Link from 'next/link';
 
 interface CoinWithMetadata {
@@ -134,10 +135,23 @@ export function UserPortfolio() {
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
         const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
         
-        // For SUILFG_MEMEFI, use real-time SUI price
-        // For other tokens, show balance only (no USD value yet)
-        const pricePerToken = isMainToken ? suiPrice : 0;
-        const totalValue = isMainToken ? balanceNum * suiPrice : 0;
+        // Find bonding curve data for this token to get current price
+        const curve = bondingCurves.find(c => c.coinType === coin.type);
+        
+        // Calculate price per token
+        let pricePerToken = 0;
+        let totalValue = 0;
+        
+        if (isMainToken) {
+          // SUILFG_MEMEFI uses real-time SUI price
+          pricePerToken = suiPrice;
+          totalValue = balanceNum * suiPrice;
+        } else if (curve) {
+          // For meme tokens, calculate current spot price from bonding curve
+          const currentSupply = Number(curve.curveSupply) / 1e9;
+          pricePerToken = calculateSpotPrice(currentSupply) * suiPrice; // Convert to USD
+          totalValue = balanceNum * pricePerToken;
+        }
 
         return (
           <div
@@ -166,30 +180,28 @@ export function UserPortfolio() {
                 )}
                 
                 <div>
-                  <div className="font-bold text-lg">{coin.symbol}</div>
+                  <div className="font-bold text-lg">{coin.name}</div>
                   <div className="text-xs text-gray-400">
-                    {isMainToken ? `$${suiPrice.toFixed(3)} per token` : coin.name}
+                    {pricePerToken > 0 ? `$${pricePerToken.toFixed(6)} per ${coin.symbol}` : coin.symbol}
                   </div>
                 </div>
               </div>
               
               <div className="text-right">
                 <div className="font-bold text-lg">
-                  {formatAmount(coin.balance, coin.decimals)}
+                  {formatAmount(coin.balance, coin.decimals)} {coin.symbol}
                 </div>
-                {isMainToken && totalValue > 0 && (
+                {totalValue > 0 && (
                   <div className="text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
                 )}
-                {isMainToken && (
-                  <Link
-                    href="/tokens"
-                    className="text-xs text-sui-blue hover:underline"
-                  >
-                    Trade →
-                  </Link>
-                )}
+                <Link
+                  href="/tokens"
+                  className="text-xs text-sui-blue hover:underline"
+                >
+                  Trade →
+                </Link>
               </div>
             </div>
           </div>
