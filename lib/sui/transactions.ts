@@ -149,9 +149,9 @@ export function buyTokensTransaction(params: {
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
       tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
       paymentCoin, // payment: Coin<SUILFG_MEMEFI> - split to max_sui_in
-      tx.pure(bcs.u64().serialize(params.maxSuiIn).toBytes()), // max_sui_in: u64
-      tx.pure(bcs.u64().serialize(params.minTokensOut).toBytes()), // min_tokens_out: u64
-      tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
+      tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
+      tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
+      tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
       tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
       tx.object('0x6'), // clk: &Clock
     ],
@@ -180,14 +180,11 @@ export function sellTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
-  // Merge all meme token coins first if there are multiple
-  let mergedCoin = tx.object(params.memeTokenCoinIds[0]);
-  if (params.memeTokenCoinIds.length > 1) {
-    const coinsToMerge = params.memeTokenCoinIds.slice(1).map(id => tx.object(id));
-    tx.mergeCoins(mergedCoin, coinsToMerge);
-  }
+  // Use only the first coin for now to debug
+  // TODO: Handle multiple coins properly
+  const coinToUse = tx.object(params.memeTokenCoinIds[0]);
   
-  // Pass the merged coin directly - the Move function will handle splitting/burning
+  // Pass the coin - the Move function will handle splitting/burning
   // Note: The Move function checks coin value and handles both cases:
   // - If coin value == amount: burns entire coin
   // - If coin value > amount: splits, burns the split amount, returns remainder
@@ -198,10 +195,10 @@ export function sellTokensTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
       tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      mergedCoin, // tokens: Coin<T> - merged coin (Move function handles splitting)
-      tx.pure(bcs.u64().serialize(params.tokensToSell).toBytes()), // amount_tokens: u64
-      tx.pure(bcs.u64().serialize(params.minSuiOut).toBytes()), // min_sui_out: u64
-      tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
+      coinToUse, // tokens: Coin<T> - coin (Move function handles splitting)
+      tx.pure.u64(params.tokensToSell), // amount_tokens: u64 - use pure.u64 directly
+      tx.pure.u64(params.minSuiOut), // min_sui_out: u64
+      tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
       tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
       tx.object('0x6'), // clk: &Clock
     ],

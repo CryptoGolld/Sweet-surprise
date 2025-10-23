@@ -180,6 +180,14 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           return;
         }
 
+        console.log('Sell transaction details:', {
+          amount,
+          amountInSmallest,
+          memeBalance,
+          numCoins: memeCoins.length,
+          coinBalances: memeCoins.map(c => c.balance),
+        });
+
         // Build sell transaction - pass all coin IDs to merge them
         const tx = sellTokensTransaction({
           curveId: curve.id,
