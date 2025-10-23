@@ -4,8 +4,8 @@
 
 :root {
   --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 15, 20, 25;
-  --background-end-rgb: 5, 10, 15;
+  --background-start-rgb: 5, 8, 12;
+  --background-end-rgb: 1, 2, 4;
 }
 
 body {
@@ -17,6 +17,38 @@ body {
     )
     rgb(var(--background-start-rgb));
   min-height: 100vh;
+  position: relative;
+}
+
+/* Animated background stars/sparkles */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(2px 2px at 20% 30%, rgba(255, 22, 148, 0.3), transparent),
+    radial-gradient(2px 2px at 60% 70%, rgba(153, 69, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 50% 50%, rgba(77, 162, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 80% 10%, rgba(255, 22, 148, 0.2), transparent),
+    radial-gradient(2px 2px at 90% 60%, rgba(153, 69, 255, 0.2), transparent);
+  background-size: 200% 200%;
+  animation: sparkle 20s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0.3;
+    background-position: 0% 0%;
+  }
+  50% {
+    opacity: 0.6;
+    background-position: 100% 100%;
+  }
 }
 
 @layer utilities {
@@ -46,7 +78,7 @@ body {
     background: linear-gradient(
       45deg,
       transparent,
-      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.08),
       transparent
     );
     transform: rotate(45deg);
@@ -60,5 +92,38 @@ body {
     100% {
       transform: translateX(100%) translateY(100%) rotate(45deg);
     }
+  }
+  
+  .glow-text {
+    text-shadow: 
+      0 0 10px rgba(255, 22, 148, 0.5),
+      0 0 20px rgba(153, 69, 255, 0.3),
+      0 0 30px rgba(77, 162, 255, 0.2);
+  }
+  
+  .glow-border {
+    box-shadow: 
+      0 0 20px rgba(255, 22, 148, 0.2),
+      0 0 40px rgba(153, 69, 255, 0.1),
+      inset 0 0 20px rgba(255, 255, 255, 0.05);
+  }
+  
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-20px);
+    }
+  }
+  
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 }

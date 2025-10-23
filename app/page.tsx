@@ -115,8 +115,8 @@ export default function Home() {
             </div>
             
             <div className="text-center">
-              <div className="text-3xl font-bold text-gradient mb-2">0.2 SUI</div>
-              <p className="text-gray-400">Total cost to launch</p>
+              <div className="text-3xl font-bold text-gradient mb-2">Free</div>
+              <p className="text-gray-400">Just gas fees</p>
             </div>
             
             <div className="text-center">

@@ -6,6 +6,7 @@ import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
 import { useBondingCurves } from '@/lib/hooks/useBondingCurves';
+import { calculateSpotPrice } from '@/lib/utils/bondingCurve';
 import Link from 'next/link';
 
 interface CoinWithMetadata {
@@ -53,11 +54,15 @@ export function UserPortfolio() {
           // Check if this coin has a bonding curve (for image URL)
           const curve = bondingCurves.find(c => c.coinType === type);
           
+          // Use ticker as name if name is empty or same as ticker (for memecoins)
+          const symbol = metadata?.symbol || curve?.ticker || type.split('::').pop() || 'UNKNOWN';
+          const name = metadata?.name && metadata.name !== symbol ? metadata.name : (curve?.name && curve.name !== symbol ? curve.name : `${symbol} Token`);
+          
           coinsWithMetadata.push({
             type,
             balance: data.balance.toString(),
-            symbol: metadata?.symbol || curve?.ticker || type.split('::').pop() || 'UNKNOWN',
-            name: metadata?.name || curve?.name || 'Unknown Token',
+            symbol,
+            name,
             iconUrl: curve?.imageUrl || metadata?.iconUrl || undefined,
             decimals: metadata?.decimals || 9,
           });
@@ -66,11 +71,15 @@ export function UserPortfolio() {
           const parts = type.split('::');
           const curve = bondingCurves.find(c => c.coinType === type);
           
+          // Use ticker as name if name is empty or same as ticker (for memecoins)
+          const symbol = curve?.ticker || parts[parts.length - 1] || 'UNKNOWN';
+          const name = curve?.name && curve.name !== symbol ? curve.name : `${symbol} Token`;
+          
           coinsWithMetadata.push({
             type,
             balance: data.balance.toString(),
-            symbol: curve?.ticker || parts[parts.length - 1] || 'UNKNOWN',
-            name: curve?.name || parts[parts.length - 1] || 'Unknown Token',
+            symbol,
+            name,
             iconUrl: curve?.imageUrl || undefined,
             decimals: 9,
           });
@@ -128,23 +137,78 @@ export function UserPortfolio() {
     );
   }
 
+  // Calculate total portfolio value
+  const totalPortfolioValue = coins.reduce((acc, coin) => {
+    const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
+    const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
+    const curve = bondingCurves.find(c => c.coinType === coin.type);
+    
+    let totalValue = 0;
+    if (isMainToken) {
+      totalValue = balanceNum * suiPrice;
+    } else if (curve) {
+      // NOTE: curve.curveSupply is already in whole tokens from contract
+      const currentSupply = Number(curve.curveSupply);
+      const pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
+      totalValue = balanceNum * pricePerToken;
+    }
+    
+    return acc + totalValue;
+  }, 0);
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
+      {/* Total Portfolio Value Card */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-meme-pink/20 via-meme-purple/20 to-sui-blue/20 border border-white/20 rounded-2xl p-8 backdrop-blur-sm">
+        <div className="absolute inset-0 bg-gradient-to-r from-meme-pink/5 to-sui-blue/5 animate-pulse" />
+        <div className="relative z-10">
+          <div className="text-sm text-gray-400 mb-2 font-semibold tracking-wide uppercase">Total Portfolio Value</div>
+          <div className="text-5xl font-bold bg-gradient-to-r from-meme-pink via-meme-purple to-sui-blue bg-clip-text text-transparent animate-in fade-in duration-700">
+            {formatUSD(totalPortfolioValue)}
+          </div>
+          <div className="mt-4 flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-gray-400">{coins.length} Assets</span>
+            </div>
+            <div className="text-gray-500">•</div>
+            <div className="text-gray-400">Live Prices</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Token List */}
+      <div className="space-y-3">
       {coins.map((coin) => {
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
         const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
         
-        // For SUILFG_MEMEFI, use real-time SUI price
-        // For other tokens, show balance only (no USD value yet)
-        const pricePerToken = isMainToken ? suiPrice : 0;
-        const totalValue = isMainToken ? balanceNum * suiPrice : 0;
+        // Find bonding curve data for this token to get current price
+        const curve = bondingCurves.find(c => c.coinType === coin.type);
+        
+        // Calculate price per token
+        let pricePerToken = 0;
+        let totalValue = 0;
+        
+        if (isMainToken) {
+          // SUILFG_MEMEFI uses real-time SUI price
+          pricePerToken = suiPrice;
+          totalValue = balanceNum * suiPrice;
+        } else if (curve) {
+          // For meme tokens, calculate current spot price from bonding curve
+          // NOTE: curve.curveSupply is already in whole tokens from contract
+          const currentSupply = Number(curve.curveSupply);
+          pricePerToken = calculateSpotPrice(currentSupply) * suiPrice; // Convert to USD
+          totalValue = balanceNum * pricePerToken;
+        }
 
         return (
           <div
             key={coin.type}
-            className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors"
+            className="group relative bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl p-4 hover:from-white/10 hover:to-white/5 hover:border-meme-purple/30 hover:shadow-lg hover:shadow-meme-purple/10 transition-all duration-300 animate-in slide-in-from-bottom"
           >
-            <div className="flex items-center justify-between">
+            <div className="absolute inset-0 bg-gradient-to-r from-meme-pink/0 via-meme-purple/0 to-sui-blue/0 group-hover:from-meme-pink/5 group-hover:via-meme-purple/5 group-hover:to-sui-blue/5 rounded-xl transition-all duration-300" />
+            <div className="relative z-10 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {/* Token Image */}
                 {coin.iconUrl ? (
@@ -160,41 +224,40 @@ export function UserPortfolio() {
                     }}
                   />
                 ) : (
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple shadow-lg shadow-meme-purple/50' : 'bg-gradient-to-br from-white/10 to-white/5 backdrop-blur'} transition-all group-hover:scale-110`}>
                     {isMainToken ? '💧' : '🪙'}
                   </div>
                 )}
                 
                 <div>
-                  <div className="font-bold text-lg">{coin.symbol}</div>
+                  <div className="font-bold text-lg">{coin.name}</div>
                   <div className="text-xs text-gray-400">
-                    {isMainToken ? `$${suiPrice.toFixed(3)} per token` : coin.name}
+                    {pricePerToken > 0 ? `$${pricePerToken.toFixed(6)} per ${coin.symbol}` : coin.symbol}
                   </div>
                 </div>
               </div>
               
               <div className="text-right">
                 <div className="font-bold text-lg">
-                  {formatAmount(coin.balance, coin.decimals)}
+                  {formatAmount(coin.balance, coin.decimals)} {coin.symbol}
                 </div>
-                {isMainToken && totalValue > 0 && (
+                {totalValue > 0 && (
                   <div className="text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
                 )}
-                {isMainToken && (
-                  <Link
-                    href="/tokens"
-                    className="text-xs text-sui-blue hover:underline"
-                  >
-                    Trade →
-                  </Link>
-                )}
+                <Link
+                  href="/tokens"
+                  className="text-xs text-sui-blue hover:underline"
+                >
+                  Trade →
+                </Link>
               </div>
             </div>
           </div>
         );
       })}
+      </div>
       
       {/* Quick Actions */}
       <div className="mt-6 grid grid-cols-2 gap-3">

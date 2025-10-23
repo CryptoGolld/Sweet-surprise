@@ -100,15 +100,31 @@ export function useBondingCurves() {
               const typeParts = coinType.split('::');
               const ticker = typeParts[typeParts.length - 1] || 'UNKNOWN';
               
+              // Fetch CoinMetadata to get name, description, and icon
+              let name = ticker;
+              let description = '';
+              let imageUrl = '';
+              
+              try {
+                const metadata = await client.getCoinMetadata({ coinType });
+                if (metadata) {
+                  name = metadata.name || ticker;
+                  description = metadata.description || '';
+                  imageUrl = metadata.iconUrl || '';
+                }
+              } catch (e) {
+                console.warn(`Failed to fetch metadata for ${ticker}:`, e);
+              }
+              
               curves.push({
                 id: curveId,
                 ticker,
-                name: ticker, // Will enhance later
-                description: '', // Will enhance later
-                imageUrl: '',
+                name,
+                description,
+                imageUrl,
                 creator: fields.creator || '0x0',
                 curveSupply: fields.token_supply || '0',
-                curveBalance: fields.sui_reserve?.fields?.value || '0',
+                curveBalance: fields.sui_reserve || '0', // Balance is stored directly as a number
                 graduated: fields.graduated || false,
                 createdAt: event.timestampMs ? parseInt(event.timestampMs) : Date.now(),
                 coinType,

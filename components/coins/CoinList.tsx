@@ -45,8 +45,9 @@ export function CoinList() {
         case 'marketcap':
           return Number(b.curveBalance) - Number(a.curveBalance);
         case 'progress':
-          const progressA = Number(a.curveSupply) / (737_000_000 * 1e9);
-          const progressB = Number(b.curveSupply) / (737_000_000 * 1e9);
+          // NOTE: curveSupply is already in whole tokens
+          const progressA = Number(a.curveSupply) / 737_000_000;
+          const progressB = Number(b.curveSupply) / 737_000_000;
           return progressB - progressA;
         case 'volume':
           return Number(b.curveSupply) - Number(a.curveSupply);

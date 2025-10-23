@@ -12,7 +12,8 @@ import {
   calculateTokensOut, 
   calculateSuiOut, 
   calculatePriceImpact,
-  formatTokenAmount 
+  formatTokenAmount,
+  calculateSpotPrice 
 } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
 
@@ -40,7 +41,8 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
   const tradePreview = useMemo(() => {
     if (!amount || parseFloat(amount) <= 0) return null;
     
-    const currentSupply = Number(curve.curveSupply) / 1e9; // tokens in whole units
+    // NOTE: curve.curveSupply is already in whole tokens
+    const currentSupply = Number(curve.curveSupply);
     const inputAmount = parseFloat(amount);
     
     if (mode === 'buy') {
@@ -78,10 +80,16 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
 
   if (!isOpen) return null;
 
+  // NOTE: curve.curveSupply is in WHOLE TOKENS, not smallest units
   const progress = calculatePercentage(
     curve.curveSupply,
-    BONDING_CURVE.MAX_CURVE_SUPPLY * 1e9
+    BONDING_CURVE.MAX_CURVE_SUPPLY.toString()
   );
+  
+  // Calculate volume in USD (SUILFG_MEMEFI traded, not token count)
+  // curve.curveBalance is in MIST (smallest units), so divide by 1e9
+  const volumeInSUILFG = Number(curve.curveBalance) / 1e9;
+  const volumeUsd = volumeInSUILFG * suiPrice;
 
   async function handleTrade() {
     if (!currentAccount) {
@@ -270,11 +278,15 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Tokens Sold</span>
-                  <span>{formatAmount(curve.curveSupply, 9)}</span>
+                  <span>{Number(curve.curveSupply).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Max Supply (Curve)</span>
-                  <span>{(BONDING_CURVE.MAX_CURVE_SUPPLY / 1e9).toLocaleString()}</span>
+                  <span>{BONDING_CURVE.MAX_CURVE_SUPPLY.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">24h Volume</span>
+                  <span className="text-meme-purple font-bold">{formatUSD(volumeUsd)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">SUI Collected</span>
@@ -291,7 +303,7 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
             {/* Info */}
             <div className="text-xs text-gray-400 space-y-1 bg-white/5 rounded-lg p-3">
               <p>• Fair launch bonding curve</p>
-              <p>• {BONDING_CURVE.MAX_CURVE_SUPPLY / 1e9}M tokens on curve</p>
+              <p>• {BONDING_CURVE.MAX_CURVE_SUPPLY.toLocaleString()} tokens on curve</p>
               <p>• Graduates at {BONDING_CURVE.TARGET_SUI.toLocaleString()} SUI</p>
               <p>• Auto-creates Cetus LP</p>
             </div>
