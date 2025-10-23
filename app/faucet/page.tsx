@@ -1,11 +1,12 @@
 'use client';
 
 import { Header } from '@/components/Header';
+import { BottomNav } from '@/components/BottomNav';
 import { FaucetClaim } from '@/components/faucet/FaucetClaim';
 
 export default function FaucetPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 md:pb-0">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -33,6 +34,8 @@ export default function FaucetPage() {
           </div>
         </div>
       </main>
+      
+      <BottomNav />
     </div>
   );
 }

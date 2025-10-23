@@ -1,11 +1,12 @@
 'use client';
 
 import { Header } from '@/components/Header';
+import { BottomNav } from '@/components/BottomNav';
 import { CoinList } from '@/components/coins/CoinList';
 
 export default function TokensPage() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 md:pb-0">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -20,6 +21,8 @@ export default function TokensPage() {
         
         <CoinList />
       </main>
+      
+      <BottomNav />
     </div>
   );
 }

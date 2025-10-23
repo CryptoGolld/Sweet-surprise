@@ -286,6 +286,9 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       
       setStatus('Finding your SUILFG_MEMEFI coins...');
       
+      // Wait a bit longer for indexing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       // Get user's SUILFG_MEMEFI coins
       const client = new SuiClient({ url: getFullnodeUrl('testnet') });
       const coins = await client.getCoins({
@@ -293,8 +296,8 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         coinType: COIN_TYPES.SUILFG_MEMEFI,
       });
       
-      if (!coins.data.length) {
-        throw new Error('No SUILFG_MEMEFI tokens found. Please claim from faucet first.');
+      if (!coins.data || coins.data.length === 0) {
+        throw new Error(`No SUILFG_MEMEFI tokens found. You have ${coins.data?.length || 0} coin objects. Please claim from faucet first.`);
       }
       
       // Use first coin
