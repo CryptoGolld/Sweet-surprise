@@ -25,7 +25,8 @@ export function CoinCard({ curve }: CoinCardProps) {
   const age = Math.floor((Date.now() - curve.createdAt) / (1000 * 60)); // minutes
 
   // Calculate Market Cap using bonding curve formula
-  const tokensSoldInWholeUnits = Number(curve.curveSupply) / 1e9;
+  // NOTE: curve.curveSupply is already in WHOLE TOKENS from the contract
+  const tokensSoldInWholeUnits = Number(curve.curveSupply);
   
   // Use bonding curve math to calculate real market cap
   let marketCapSui: number;

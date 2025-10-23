@@ -41,7 +41,8 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
   const tradePreview = useMemo(() => {
     if (!amount || parseFloat(amount) <= 0) return null;
     
-    const currentSupply = Number(curve.curveSupply) / 1e9; // tokens in whole units
+    // NOTE: curve.curveSupply is already in whole tokens
+    const currentSupply = Number(curve.curveSupply);
     const inputAmount = parseFloat(amount);
     
     if (mode === 'buy') {
@@ -79,13 +80,15 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
 
   if (!isOpen) return null;
 
+  // NOTE: curve.curveSupply is in WHOLE TOKENS, not smallest units
   const progress = calculatePercentage(
     curve.curveSupply,
-    BONDING_CURVE.MAX_CURVE_SUPPLY * 1e9
+    BONDING_CURVE.MAX_CURVE_SUPPLY.toString()
   );
   
   // Calculate volume in USD (SUILFG_MEMEFI traded, not token count)
-  const volumeInSUILFG = Number(curve.curveBalance) / 1e9; // Convert from MIST
+  // curve.curveBalance is in MIST (smallest units), so divide by 1e9
+  const volumeInSUILFG = Number(curve.curveBalance) / 1e9;
   const volumeUsd = volumeInSUILFG * suiPrice;
 
   async function handleTrade() {
@@ -275,7 +278,7 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Tokens Sold</span>
-                  <span>{formatAmount(curve.curveSupply, 9)}</span>
+                  <span>{Number(curve.curveSupply).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Max Supply (Curve)</span>
