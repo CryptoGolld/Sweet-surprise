@@ -4,9 +4,11 @@ import { Header } from '@/components/Header';
 import { Hero } from '@/components/Hero';
 import Link from 'next/link';
 
+import { BottomNav } from '@/components/BottomNav';
+
 export default function Home() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 md:pb-0">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -135,6 +137,8 @@ export default function Home() {
           </p>
         </div>
       </footer>
+      
+      <BottomNav />
     </div>
   );
 }

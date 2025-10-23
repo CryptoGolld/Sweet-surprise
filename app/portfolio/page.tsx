@@ -1,6 +1,7 @@
 'use client';
 
 import { Header } from '@/components/Header';
+import { BottomNav } from '@/components/BottomNav';
 import { UserPortfolio } from '@/components/portfolio/UserPortfolio';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 
@@ -8,7 +9,7 @@ export default function PortfolioPage() {
   const account = useCurrentAccount();
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 md:pb-0">
       <Header />
       
       <main className="container mx-auto px-4 py-8">
@@ -35,6 +36,8 @@ export default function PortfolioPage() {
           </div>
         )}
       </main>
+      
+      <BottomNav />
     </div>
   );
 }

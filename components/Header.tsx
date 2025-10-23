@@ -9,27 +9,27 @@ import { useCurrentAccount } from '@mysten/dapp-kit';
 
 export function Header() {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const account = useCurrentAccount();
   const pathname = usePathname();
   
   const isActive = (path: string) => pathname === path;
+  const isHomePage = pathname === '/';
   
   return (
     <>
       <header className="border-b border-white/10 bg-sui-dark/50 backdrop-blur-lg sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
+        <div className={`container mx-auto px-4 transition-all ${isHomePage ? 'py-4' : 'py-2'}`}>
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="w-12 h-12 bg-gradient-to-br from-meme-pink via-meme-purple to-sui-blue rounded-xl flex items-center justify-center font-bold text-2xl">
+            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <div className={`bg-gradient-to-br from-meme-pink via-meme-purple to-sui-blue rounded-xl flex items-center justify-center font-bold transition-all ${isHomePage ? 'w-12 h-12 text-2xl' : 'w-8 h-8 text-lg'}`}>
                 🚀
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gradient">
+                <h1 className={`font-bold text-gradient transition-all ${isHomePage ? 'text-2xl' : 'text-lg'}`}>
                   SuiLFG MemeFi
                 </h1>
-                <p className="text-xs text-gray-400">Testnet Campaign</p>
+                {isHomePage && <p className="text-xs text-gray-400">Testnet Campaign</p>}
               </div>
             </Link>
 
@@ -56,65 +56,19 @@ export function Header() {
             </nav>
 
             {/* Actions */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 md:gap-4">
               {account && (
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="hidden sm:block px-6 py-2 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
+                  className="hidden md:block px-4 md:px-6 py-2 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold text-sm md:text-base hover:scale-105 transition-transform"
                 >
-                  + Create Coin
+                  + Create
                 </button>
               )}
               
               <ConnectButton />
-              
-              {/* Mobile Menu Button */}
-              <button
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="md:hidden text-2xl"
-              >
-                {showMobileMenu ? '✕' : '☰'}
-              </button>
             </div>
           </div>
-          
-          {/* Mobile Menu */}
-          {showMobileMenu && (
-            <div className="md:hidden border-t border-white/10 py-4 space-y-2">
-              <Link 
-                href="/tokens" 
-                onClick={() => setShowMobileMenu(false)}
-                className={`block px-4 py-2 rounded-lg transition-colors ${isActive('/tokens') ? 'bg-white/10 text-gradient font-semibold' : 'hover:bg-white/5'}`}
-              >
-                🔥 Tokens
-              </Link>
-              <Link 
-                href="/faucet" 
-                onClick={() => setShowMobileMenu(false)}
-                className={`block px-4 py-2 rounded-lg transition-colors ${isActive('/faucet') ? 'bg-white/10 text-gradient font-semibold' : 'hover:bg-white/5'}`}
-              >
-                💧 Faucet
-              </Link>
-              <Link 
-                href="/portfolio" 
-                onClick={() => setShowMobileMenu(false)}
-                className={`block px-4 py-2 rounded-lg transition-colors ${isActive('/portfolio') ? 'bg-white/10 text-gradient font-semibold' : 'hover:bg-white/5'}`}
-              >
-                💼 Portfolio
-              </Link>
-              {account && (
-                <button
-                  onClick={() => {
-                    setShowCreateModal(true);
-                    setShowMobileMenu(false);
-                  }}
-                  className="w-full px-4 py-2 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold"
-                >
-                  + Create Coin
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </header>
       

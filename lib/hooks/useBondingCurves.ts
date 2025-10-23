@@ -32,81 +32,91 @@ export function useBondingCurves() {
         
         // Show debug toast on mobile
         toast.info('🔍 Fetching coins...', {
-          description: `Querying: ${CONTRACTS.PLATFORM_PACKAGE}`,
+          description: `Querying Created events`,
           duration: 3000,
         });
         
-        // Query CurveCreated events
+        // Query Created events
         const events = await client.queryEvents({
           query: {
-            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::CurveCreated`,
+            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
           },
           limit: 50,
           order: 'descending',
         });
         
-        console.log(`✅ Found ${events.data.length} CurveCreated events`);
+        console.log(`✅ Found ${events.data.length} Created events`);
         
-        // Show results toast
         if (events.data.length === 0) {
-          toast.warning('No CurveCreated events found', {
-            description: 'No coins have been created yet on this platform',
+          toast.warning('No coins found', {
+            description: 'Create the first memecoin!',
             duration: 5000,
           });
-        } else {
-          toast.success(`✅ Found ${events.data.length} coins!`, {
-            description: 'Loading curve data...',
-            duration: 3000,
-          });
+          return [];
         }
+        
+        toast.success(`✅ Found ${events.data.length} events!`, {
+          description: 'Loading curve details...',
+          duration: 3000,
+        });
         
         const curves: BondingCurve[] = [];
         
         for (const event of events.data) {
-          const fields = event.parsedJson as any;
-          
-          // Fetch current curve state
-          let curveSupply = '0';
-          let curveBalance = '0';
-          let graduated = false;
-          let coinType = '';
-          
           try {
+            // Get the transaction details to find the created BondingCurve object
+            const txDetails = await client.getTransactionBlock({
+              digest: event.id.txDigest,
+              options: {
+                showObjectChanges: true,
+              },
+            });
+            
+            // Find the BondingCurve object that was created
+            const curveObj = txDetails.objectChanges?.find(
+              (obj: any) => obj.type === 'created' && obj.objectType?.includes('bonding_curve::BondingCurve')
+            );
+            
+            if (!curveObj) continue;
+            
+            const curveId = (curveObj as any).objectId;
+            
+            // Fetch the curve's current state
             const curveObject = await client.getObject({
-              id: fields.curve_id,
-              options: { showContent: true },
+              id: curveId,
+              options: { showContent: true, showType: true },
             });
             
             if (curveObject.data?.content?.dataType === 'moveObject') {
               const content = curveObject.data.content as any;
-              curveSupply = content.fields.curve_supply || '0';
-              curveBalance = content.fields.curve_balance || '0';
-              graduated = content.fields.graduated || false;
+              const fields = content.fields;
               
               // Extract coin type from object type
-              const objectType = curveObject.data.content.type;
-              const match = objectType.match(/<(.+)>/);
-              if (match) {
-                coinType = match[1];
-              }
+              const fullObjectType = curveObject.data.content.type;
+              const match = fullObjectType.match(/<(.+)>/);
+              const coinType = match ? match[1] : '';
+              
+              // Get ticker from coin type (last part)
+              const typeParts = coinType.split('::');
+              const ticker = typeParts[typeParts.length - 1] || 'UNKNOWN';
+              
+              curves.push({
+                id: curveId,
+                ticker,
+                name: ticker, // Will enhance later
+                description: '', // Will enhance later
+                imageUrl: '',
+                creator: fields.creator || '0x0',
+                curveSupply: fields.token_supply || '0',
+                curveBalance: fields.sui_reserve?.fields?.value || '0',
+                graduated: fields.graduated || false,
+                createdAt: event.timestampMs ? parseInt(event.timestampMs) : Date.now(),
+                coinType,
+              });
             }
           } catch (error) {
-            console.warn(`Failed to fetch curve ${fields.curve_id}:`, error);
+            console.warn(`Failed to process event:`, error);
           }
-          
-          curves.push({
-            id: fields.curve_id,
-            ticker: fields.ticker || 'UNKNOWN',
-            name: fields.name || 'Unknown Coin',
-            description: fields.description || '',
-            imageUrl: fields.image_url || '',
-            creator: fields.creator,
-            curveSupply,
-            curveBalance,
-            graduated,
-            createdAt: event.timestampMs ? parseInt(event.timestampMs) : Date.now(),
-            coinType,
-          });
         }
         
         console.log(`📊 Loaded ${curves.length} bonding curves`);
