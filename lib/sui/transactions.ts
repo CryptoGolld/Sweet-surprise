@@ -50,8 +50,12 @@ export async function createCoinTransaction(params: {
   
   const { modules, dependencies, moduleName, structName } = result;
   
-  // 2. Build transaction
+  // 2. Build transaction with explicit gas budget
   const tx = new Transaction();
+  
+  // Set gas budget: 0.5 SUI for publishing (500,000,000 MIST)
+  // Publishing packages is expensive!
+  tx.setGasBudget(500_000_000);
   
   // 2a. Publish the package and get UpgradeCap
   const [upgradeCap] = tx.publish({
@@ -86,6 +90,9 @@ export function createCurveTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
+  // Set gas budget: 0.2 SUI for curve creation (200,000,000 MIST)
+  tx.setGasBudget(200_000_000);
+  
   const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
   
   tx.moveCall({
@@ -115,6 +122,9 @@ export function buyTokensTransaction(params: {
   recipient: string;
 }): Transaction {
   const tx = new Transaction();
+  
+  // Set gas budget: 0.1 SUI for buy (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
   
   const [receivedCoin] = tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
@@ -146,6 +156,9 @@ export function sellTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
+  // Set gas budget: 0.1 SUI for sell (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
+  
   const [receivedCoin] = tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
     typeArguments: [COIN_TYPES.SUILFG_MEMEFI],
@@ -168,6 +181,9 @@ export function sellTokensTransaction(params: {
  */
 export function graduateCurveTransaction(curveId: string): Transaction {
   const tx = new Transaction();
+  
+  // Set gas budget: 0.1 SUI for graduation (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
   
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::try_graduate`,
