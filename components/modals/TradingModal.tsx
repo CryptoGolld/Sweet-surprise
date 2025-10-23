@@ -16,6 +16,8 @@ import {
   calculateSpotPrice 
 } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
+import { CandlestickChart } from '@/components/charts/CandlestickChart';
+import { useTradeHistory } from '@/lib/hooks/useTradeHistory';
 
 interface TradingModalProps {
   isOpen: boolean;
@@ -27,6 +29,7 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
   const { data: suiPrice = 1.0 } = useSuiPrice();
+  const { data: candleData = [] } = useTradeHistory(curve.coinType, curve.id);
   
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -251,7 +254,18 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           </button>
         </div>
 
-        <div className="p-6 grid md:grid-cols-2 gap-6">
+        <div className="p-6 space-y-6">
+          {/* Price Chart */}
+          <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <span>📊</span>
+              <span>Price Chart</span>
+              <span className="text-xs text-gray-400">(5min candles)</span>
+            </h3>
+            <CandlestickChart data={candleData} />
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
           {/* Left: Info */}
           <div className="space-y-6">
             {/* Description */}
@@ -454,6 +468,7 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
             <p className="text-xs text-center text-gray-400">
               Trade at your own risk. This is testnet only.
             </p>
+          </div>
           </div>
         </div>
       </div>
