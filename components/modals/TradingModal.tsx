@@ -201,6 +201,19 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           return;
         }
 
+        // Verify the amount is within the available balance
+        if (BigInt(amountInSmallest) > totalCoinBalance) {
+          toast.error('Insufficient coin balance', {
+            description: `Total in coins: ${formatAmount(totalCoinBalance.toString(), 9)}, Trying to sell: ${amount}`,
+          });
+          console.error('Balance mismatch:', {
+            reported: memeBalance,
+            actual: totalCoinBalance.toString(),
+            trying: amountInSmallest,
+          });
+          return;
+        }
+
         console.log('Sell transaction details:', {
           amount,
           amountInSmallest,
@@ -209,6 +222,7 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           numCoins: validCoins.length,
           coinBalances: validCoins.map(c => c.balance),
           coinIds: validCoins.map(c => c.coinObjectId),
+          match: amountInSmallest === totalCoinBalance.toString(),
         });
 
         // Build sell transaction - pass valid coin IDs only

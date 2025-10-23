@@ -180,15 +180,28 @@ export function sellTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
-  // Handle coin consolidation properly
-  const primaryCoinInput = tx.object(params.memeTokenCoinIds[0]);
+  // Log transaction details for debugging
+  console.log('Building sell transaction:', {
+    numCoins: params.memeTokenCoinIds.length,
+    tokensToSell: params.tokensToSell,
+    minSuiOut: params.minSuiOut,
+    coinIds: params.memeTokenCoinIds,
+  });
   
-  // If there are multiple coins, merge them into the first one
-  if (params.memeTokenCoinIds.length > 1) {
-    tx.mergeCoins(
-      primaryCoinInput,
-      params.memeTokenCoinIds.slice(1).map(id => tx.object(id))
-    );
+  // Strategy: Create coin references, merge if needed, then pass to moveCall
+  let coinArg;
+  
+  if (params.memeTokenCoinIds.length === 1) {
+    // Single coin - use it directly
+    coinArg = tx.object(params.memeTokenCoinIds[0]);
+  } else {
+    // Multiple coins - merge them all at once
+    const [first, ...rest] = params.memeTokenCoinIds;
+    coinArg = tx.object(first);
+    const restObjects = rest.map(id => tx.object(id));
+    
+    // Merge all at once (not in a loop)
+    tx.mergeCoins(coinArg, restObjects);
   }
   
   // The Move sell function expects:
@@ -202,7 +215,7 @@ export function sellTokensTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE),
       tx.object(params.curveId),
       tx.object(CONTRACTS.REFERRAL_REGISTRY),
-      primaryCoinInput, // Pass the merged coin directly
+      coinArg, // Pass the coin (single or merged)
       tx.pure.u64(params.tokensToSell),
       tx.pure.u64(params.minSuiOut),
       tx.pure.u64(deadlineMs),
