@@ -15,10 +15,7 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     
-    // Cetus CLMM imports for automatic pool creation with 100-year lock
-    use cetus_clmm::config::GlobalConfig;
-    use cetus_clmm::pool::{Self as cetus_pool, Pool};
-    use cetus_clmm::position::{Self as cetus_position, Position};
+    // Cetus pool creation handled via event-driven backend service
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
 
@@ -64,7 +61,7 @@ module suilfg_launch::bonding_curve {
     const E_NOT_WHITELISTED: u64 = 3;
     const E_NOT_GRADUATED: u64 = 4;
     const E_LP_ALREADY_SEEDED: u64 = 5;
-    const E_INVALID_CETUS_CONFIG: u64 = 6;
+    // Removed E_INVALID_CETUS_CONFIG (pool creation via events/SDK)
 
     fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
@@ -308,7 +305,7 @@ module suilfg_launch::bonding_curve {
         // Platform takes its cut (10% = 1,333 SUI)
         if (platform_cut > 0) {
             let platform_balance = balance::split(&mut curve.sui_reserve, platform_cut);
-            let platform_coin = coin::from_balance(platform_balance, ctx);
+            let mut platform_coin = coin::from_balance(platform_balance, ctx);
             
             // Creator payout comes FROM platform's cut (40 SUI from 1,333 SUI)
             if (creator_payout > 0 && creator_payout <= platform_cut) {
@@ -324,8 +321,9 @@ module suilfg_launch::bonding_curve {
         // Note: Remaining 12,000 SUI stays in reserve for LP seeding (90% of 13,333)
     }
 
-    /// Legacy function for manual pool creation (kept for backwards compatibility)
-    /// DEPRECATED: Use seed_pool_and_create_cetus_with_lock() instead
+    /// AUTOMATIC POOL CREATION (v0.0.6)
+    /// Prepares tokens and emits ReadyForAutomaticPool event
+    /// Backend service listens and creates Cetus pool automatically
     /// 
     /// SECURITY: Team allocation sent to treasury_address (from config)
     public entry fun seed_pool_prepare<T: drop + store>(
@@ -378,124 +376,8 @@ module suilfg_launch::bonding_curve {
         curve.lp_seeded = true;
     }
 
-    /// Creates Cetus pool with 100-year liquidity lock
-    /// This is the PRIMARY graduation function - fully automatic, on-chain
-    /// 
-    /// Steps:
-    /// 1. Mints team allocation (2M tokens)
-    /// 2. Creates Cetus CLMM pool
-    /// 3. Adds liquidity with 100-year lock (maximum trust)
-    /// 4. LP Position NFT sent to lp_recipient_address
-    /// 5. Platform earns 0.3% LP fees (permissionless collection)
-    ///
-    /// Parameters:
-    /// - cetus_global_config: Cetus protocol config object (validated against config!)
-    /// - bump_bps: Optional price bump (0-1000 bps), usually 0
-    /// - tick_lower/tick_upper: Liquidity range (typically full range)
-    /// 
-    /// SECURITY FEATURES:
-    /// 1. Team allocation sent to treasury_address (from config)
-    /// 2. Cetus config validated against admin-set address
-    /// This prevents ALL fund theft attacks!
-    public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
-        cfg: &PlatformConfig,
-        curve: &mut BondingCurve<T>,
-        cetus_global_config: &GlobalConfig,
-        bump_bps: u64,
-        tick_lower: u32,
-        tick_upper: u32,
-        clock: &Clock,
-        ctx: &mut TxContext
-    ) {
-        assert!(curve.graduated, E_NOT_GRADUATED);
-        assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
-        
-        // SECURITY: Validate Cetus config matches admin-approved address
-        let expected_cetus_config = platform_config::get_cetus_global_config_id(cfg);
-        let actual_cetus_config = object::id_address(cetus_global_config);
-        assert!(actual_cetus_config == expected_cetus_config, E_INVALID_CETUS_CONFIG);
-        
-        // 1. Mint team allocation (2M tokens)
-        // SECURITY: Always sent to treasury_address from config (admin controlled)
-        let team_allocation = platform_config::get_team_allocation_tokens(cfg);
-        let team_tokens = coin::mint(&mut curve.treasury, team_allocation, ctx);
-        let team_recipient = platform_config::get_treasury_address(cfg);
-        transfer::public_transfer(team_tokens, team_recipient);
-        
-        // Update token supply to reflect minted tokens
-        curve.token_supply = curve.token_supply + team_allocation;
-        
-        // 2. Calculate pool amounts
-        let total_sui_mist = balance::value(&curve.sui_reserve);
-        let bump_amount = (total_sui_mist * bump_bps) / 10000;
-        let sui_for_lp = total_sui_mist - bump_amount;
-        
-        let remaining_supply = TOTAL_SUPPLY - curve.token_supply;
-        let token_for_lp = remaining_supply;
-        
-        // 3. Mint tokens for LP
-        let lp_tokens = coin::mint(&mut curve.treasury, token_for_lp, ctx);
-        let lp_sui_balance = balance::split(&mut curve.sui_reserve, sui_for_lp);
-        let lp_sui_coin = coin::from_balance(lp_sui_balance, ctx);
-        
-        // 4. Create Cetus pool (0.3% fee tier)
-        let pool = cetus_pool::create_pool<SUI, T>(
-            cetus_global_config,
-            1000000,  // Initial sqrt price
-            ctx
-        );
-        
-        // 5. Add liquidity with 100-YEAR LOCK
-        let lock_duration_ms: u64 = 3_153_600_000_000; // 100 years
-        let lock_until = clock::timestamp_ms(clock) + lock_duration_ms;
-        
-        let position_nft = cetus_position::open_position_with_liquidity_with_lock<SUI, T>(
-            cetus_global_config,
-            &mut pool,
-            tick_lower,
-            tick_upper,
-            lp_sui_coin,
-            lp_tokens,
-            lock_until,
-            ctx
-        );
-        
-        // 6. Send LP Position NFT to configured recipient
-        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
-        transfer::public_transfer(position_nft, lp_recipient);
-        
-        // 7. Share the pool object publicly
-        transfer::public_share_object(pool);
-        
-        curve.lp_seeded = true;
-        
-        event::emit(PoolCreated {
-            token_type: type_name::get<T>(),
-            sui_amount: sui_for_lp,
-            token_amount: token_for_lp,
-            lock_until,
-            lp_recipient
-        });
-    }
-    
-    /// Collect LP fees from Cetus position (permissionless!)
-    /// Anyone can call this to send accumulated fees to lp_recipient
-    public entry fun collect_lp_fees<T: drop + store>(
-        cfg: &PlatformConfig,
-        pool: &mut Pool<SUI, T>,
-        position: &mut Position,
-        ctx: &mut TxContext
-    ) {
-        let (fee_sui, fee_token) = cetus_position::collect_fee<SUI, T>(
-            pool,
-            position,
-            ctx
-        );
-        
-        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
-        transfer::public_transfer(fee_sui, lp_recipient);
-        transfer::public_transfer(fee_token, lp_recipient);
-    }
+    // Removed: seed_pool_and_create_cetus_with_lock and collect_lp_fees
+    // Pool creation now handled by event-driven backend service
 
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
         // p(s) = base_price + (m_num/m_den) * s^2

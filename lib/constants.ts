@@ -6,14 +6,19 @@
 export const NETWORK = 'testnet' as const;
 
 export const CONTRACTS = {
-  // Platform package (v0.0.5 - with supply cap fix) - PRODUCTION
-  PLATFORM_PACKAGE: '0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047',
+  // Platform package v1.0.0 - WITH Cetus SDK integration (PUBLISHED BUT NEEDS TESTING)
+  // Note: Having VMVerificationOrDeserializationError, investigating...
+  PLATFORM_PACKAGE: '0xcd0f27ed92bf9350e7238c2121e3725e6b5d73bc30934f3d8e9ad399d56c495b',
+  
+  // OLD package (working) - use this for now
+  OLD_PLATFORM_PACKAGE: '0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047',
   
   // Faucet package (SUILFG_MEMEFI token)
   FAUCET_PACKAGE: '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81',
   
-  // Shared objects - UPDATED from testnet_production.json
-  PLATFORM_STATE: '0x7fca4d72dcf81fc27f432bddc2ba07cd1fddf6517327ad448d845b2d3e77ef9c',
+  // Shared objects - v1.0.0
+  PLATFORM_STATE: '0x6714378dba8bf876894e37d4d219e13c0c0d45f9bf054f48e05c10b0bc249f3b',
+  TICKER_REGISTRY: '0xfc79c8d6dd0610422c5e9b5fe84ba695f8816e8a27b6dcb978c1c866dba55cb0',
   FAUCET_OBJECT: '0xd5c81489322b9e74609be2986c02652390feba41f06e4a7fd936a2c312fb9dde',
   
   // Cetus integration (testnet)
