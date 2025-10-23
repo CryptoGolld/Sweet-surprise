@@ -4,6 +4,7 @@ import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
 import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
+import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
 import Link from 'next/link';
 
 interface CoinWithMetadata {
@@ -18,6 +19,7 @@ interface CoinWithMetadata {
 export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
+  const { data: suiPrice = 1.0 } = useSuiPrice();
 
   const { data: coins, isLoading } = useQuery({
     queryKey: ['user-portfolio', account?.address],
@@ -122,6 +124,12 @@ export function UserPortfolio() {
     <div className="space-y-3">
       {coins.map((coin) => {
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
+        const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
+        
+        // For SUILFG_MEMEFI, use real-time SUI price
+        // For other tokens, show balance only (no USD value yet)
+        const pricePerToken = isMainToken ? suiPrice : 0;
+        const totalValue = isMainToken ? balanceNum * suiPrice : 0;
 
         return (
           <div
@@ -152,7 +160,7 @@ export function UserPortfolio() {
                 <div>
                   <div className="font-bold text-lg">{coin.symbol}</div>
                   <div className="text-xs text-gray-400">
-                    {isMainToken ? 'Platform Token' : coin.name}
+                    {isMainToken ? `$${suiPrice.toFixed(3)} per token` : coin.name}
                   </div>
                 </div>
               </div>
@@ -161,6 +169,11 @@ export function UserPortfolio() {
                 <div className="font-bold text-lg">
                   {formatAmount(coin.balance, 2)}
                 </div>
+                {isMainToken && totalValue > 0 && (
+                  <div className="text-sm text-meme-purple font-semibold">
+                    {formatUSD(totalValue)}
+                  </div>
+                )}
                 {isMainToken && (
                   <Link
                     href="/tokens"
