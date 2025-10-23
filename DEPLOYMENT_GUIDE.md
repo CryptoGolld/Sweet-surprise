@@ -1,35 +1,93 @@
-# SuiLFG Launch - Testnet Deployment Guide
+# 🚀 SuiLFG MemeFi - Deployment Guide
 
-## Pre-Deployment Checklist
+Complete guide for deploying the SuiLFG MemeFi platform to production.
 
-### 1. Contract Review
-- ✅ All files compile without errors
-- ✅ All parameters correctly set
-- ✅ No syntax errors
-- ✅ Dependencies properly configured
+---
 
-### 2. Required Tools
+## 📋 Overview
+
+The platform consists of two main components:
+1. **Frontend** - Next.js app deployed on Vercel
+2. **Compilation Service** - Node.js API on Ubuntu server
+
+---
+
+## 🌐 Frontend Deployment (Vercel)
+
+### Prerequisites
+- GitHub account
+- Vercel account (free tier works)
+- Repository pushed to GitHub
+
+### Quick Deploy
+
+**Method 1: Vercel Dashboard**
+1. Go to [vercel.com/new](https://vercel.com/new)
+2. Import `CryptoGolld/Sweet-surprise`
+3. Select branch: `cursor/install-sui-cli-and-login-burner-wallet-5a0f`
+4. Framework: Next.js (auto-detected)
+5. Add environment variables (see below)
+6. Click "Deploy"
+
+**Method 2: Vercel CLI**
 ```bash
-# Install Sui CLI (if not already installed)
-cargo install --locked --git https://github.com/MystenLabs/sui.git --branch testnet sui
+npm install -g vercel
+vercel login
+vercel --prod
+```
 
-# Verify installation
+### Environment Variables
+
+Add these in Vercel Dashboard → Settings → Environment Variables:
+
+```env
+# Required
+NEXT_PUBLIC_NETWORK=testnet
+NEXT_PUBLIC_PLATFORM_PACKAGE=0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047
+
+# Optional (defaults to 13.60.235.109:3001)
+COMPILE_SERVICE_URL=http://YOUR_UBUNTU_IP:3001
+```
+
+### Vercel Build Settings
+
+- **Framework:** Next.js
+- **Build Command:** `npm run build` (default)
+- **Output Directory:** `.next` (default)
+- **Install Command:** `npm install` (uses .npmrc)
+- **Node Version:** 18.x or 20.x
+
+---
+
+## 🖥️ Compilation Service Deployment (Ubuntu)
+
+### Server Requirements
+- **OS:** Ubuntu 22.04 LTS
+- **RAM:** 2 GB minimum
+- **CPU:** 1 core minimum
+- **Disk:** 10 GB free space
+- **Provider:** AWS, Hetzner, DigitalOcean, Linode, etc.
+
+### Prerequisites
+
+**1. Install Node.js:**
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version  # Should be 18+
+```
+
+**2. Install Sui CLI:**
+```bash
+curl -L https://github.com/MystenLabs/sui/releases/download/testnet-v1.42.2/sui-testnet-v1.42.2-ubuntu-x86_64.tgz -o sui.tgz
+tar -xzf sui.tgz
+sudo mv sui-testnet-*/sui /usr/local/bin/
 sui --version
 ```
 
-### 3. Set Up Sui Wallet
+**3. Install PM2:**
 ```bash
-# Create new wallet or import existing
-sui client new-address ed25519
-
-# Get testnet SUI from faucet
-curl --location --request POST 'https://faucet.testnet.sui.io/gas' \
---header 'Content-Type: application/json' \
---data-raw '{
-    "FixedAmountRequest": {
-        "recipient": "YOUR_ADDRESS"
-    }
-}'
+sudo npm install -g pm2
 ```
 
 ## Deployment Steps
