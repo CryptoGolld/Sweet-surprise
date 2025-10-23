@@ -116,7 +116,7 @@ export default function Home() {
             
             <div className="text-center">
               <div className="text-3xl font-bold text-gradient mb-2">Free</div>
-              <p className="text-gray-400">Only gas needed (~0.1 SUI)</p>
+              <p className="text-gray-400">Just gas fees</p>
             </div>
             
             <div className="text-center">
