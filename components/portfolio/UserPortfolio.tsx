@@ -147,7 +147,8 @@ export function UserPortfolio() {
     if (isMainToken) {
       totalValue = balanceNum * suiPrice;
     } else if (curve) {
-      const currentSupply = Number(curve.curveSupply) / 1e9;
+      // NOTE: curve.curveSupply is already in whole tokens from contract
+      const currentSupply = Number(curve.curveSupply);
       const pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
       totalValue = balanceNum * pricePerToken;
     }
@@ -195,7 +196,8 @@ export function UserPortfolio() {
           totalValue = balanceNum * suiPrice;
         } else if (curve) {
           // For meme tokens, calculate current spot price from bonding curve
-          const currentSupply = Number(curve.curveSupply) / 1e9;
+          // NOTE: curve.curveSupply is already in whole tokens from contract
+          const currentSupply = Number(curve.curveSupply);
           pricePerToken = calculateSpotPrice(currentSupply) * suiPrice; // Convert to USD
           totalValue = balanceNum * pricePerToken;
         }
