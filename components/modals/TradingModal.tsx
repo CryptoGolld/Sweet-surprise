@@ -1,12 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { BondingCurve } from '@/lib/hooks/useBondingCurves';
 import { useCoinBalance } from '@/lib/hooks/useCoins';
 import { buyTokensTransaction, sellTokensTransaction } from '@/lib/sui/transactions';
 import { formatAmount, parseAmount, calculatePercentage, getExplorerLink } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
+import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
+import { 
+  calculateTokensOut, 
+  calculateSuiOut, 
+  calculatePriceImpact,
+  formatTokenAmount 
+} from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
 
 interface TradingModalProps {
@@ -18,6 +25,7 @@ interface TradingModalProps {
 export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
+  const { data: suiPrice = 1.0 } = useSuiPrice();
   
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -27,6 +35,40 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
   
   // Get user's memecoin balance
   const { balance: memeBalance, coins: memeCoins } = useCoinBalance(curve.coinType);
+  
+  // Calculate trade preview
+  const tradePreview = useMemo(() => {
+    if (!amount || parseFloat(amount) <= 0) return null;
+    
+    const currentSupply = Number(curve.curveSupply) / 1e9; // tokens in whole units
+    const inputAmount = parseFloat(amount);
+    
+    if (mode === 'buy') {
+      // Calculate how many tokens user will get
+      const tokensOut = calculateTokensOut(currentSupply, inputAmount);
+      const priceImpact = calculatePriceImpact(currentSupply, tokensOut);
+      const costUsd = inputAmount * suiPrice;
+      
+      return {
+        input: inputAmount,
+        output: tokensOut,
+        priceImpact,
+        usdValue: costUsd,
+      };
+    } else {
+      // Calculate how much SUI user will get
+      const suiOut = calculateSuiOut(currentSupply, inputAmount);
+      const priceImpact = calculatePriceImpact(currentSupply - inputAmount, inputAmount);
+      const valueUsd = suiOut * suiPrice;
+      
+      return {
+        input: inputAmount,
+        output: suiOut,
+        priceImpact: -priceImpact, // Negative because selling
+        usdValue: valueUsd,
+      };
+    }
+  }, [amount, mode, curve.curveSupply, suiPrice]);
 
   useEffect(() => {
     if (isOpen) {
@@ -326,20 +368,55 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
               </div>
             </div>
 
-            {/* Estimate (simplified - can add price calculation later) */}
-            {amount && parseFloat(amount) > 0 && (
-              <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-sm">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-400">You {mode === 'buy' ? 'pay' : 'receive'}</span>
-                  <span className="font-bold">{amount} {mode === 'buy' ? 'SUILFG' : curve.ticker}</span>
+            {/* Trade Preview */}
+            {tradePreview && (
+              <div className="bg-gradient-to-br from-meme-purple/10 to-sui-blue/10 border border-meme-purple/30 rounded-lg p-4">
+                <div className="text-sm font-semibold text-meme-purple mb-3">💎 Trade Preview</div>
+                
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">You {mode === 'buy' ? 'pay' : 'sell'}:</span>
+                    <span className="font-semibold">
+                      {tradePreview.input.toFixed(2)} {mode === 'buy' ? 'SUILFG' : curve.ticker}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">You {mode === 'buy' ? 'receive' : 'get'}:</span>
+                    <span className="font-bold text-white text-base">
+                      {mode === 'buy' 
+                        ? `${formatTokenAmount(tradePreview.output)} ${curve.ticker}`
+                        : `${tradePreview.output.toFixed(4)} SUILFG`
+                      }
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">USD Value:</span>
+                    <span className="font-semibold text-meme-purple">
+                      {formatUSD(tradePreview.usdValue)}
+                    </span>
+                  </div>
+                  
+                  <div className="border-t border-white/10 pt-2 mt-2 flex justify-between">
+                    <span className="text-gray-400">Price Impact:</span>
+                    <span className={`font-semibold ${
+                      Math.abs(tradePreview.priceImpact) > 5 
+                        ? 'text-red-400' 
+                        : Math.abs(tradePreview.priceImpact) > 2 
+                        ? 'text-yellow-400' 
+                        : 'text-green-400'
+                    }`}>
+                      {tradePreview.priceImpact > 0 ? '+' : ''}{tradePreview.priceImpact.toFixed(2)}%
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Est. {mode === 'buy' ? 'receive' : 'get'}</span>
-                  <span className="font-bold">~? {mode === 'buy' ? curve.ticker : 'SUILFG'}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  * Actual amount depends on bonding curve math
-                </p>
+                
+                {Math.abs(tradePreview.priceImpact) > 5 && (
+                  <div className="mt-3 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+                    ⚠️ High price impact! Consider a smaller amount.
+                  </div>
+                )}
               </div>
             )}
 
