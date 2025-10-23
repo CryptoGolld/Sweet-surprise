@@ -27,6 +27,8 @@ export function useBondingCurves() {
     queryKey: ['bonding-curves'],
     queryFn: async (): Promise<BondingCurve[]> => {
       try {
+        console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
+        
         // Query CurveCreated events
         const events = await client.queryEvents({
           query: {
@@ -35,6 +37,8 @@ export function useBondingCurves() {
           limit: 50,
           order: 'descending',
         });
+        
+        console.log(`✅ Found ${events.data.length} CurveCreated events`);
         
         const curves: BondingCurve[] = [];
         
@@ -85,13 +89,15 @@ export function useBondingCurves() {
           });
         }
         
+        console.log(`📊 Loaded ${curves.length} bonding curves`);
         return curves;
       } catch (error) {
-        console.error('Failed to fetch bonding curves:', error);
-        return [];
+        console.error('❌ Failed to fetch bonding curves:', error);
+        throw error; // Re-throw so the error UI shows
       }
     },
     refetchInterval: 10000, // Refresh every 10 seconds
+    retry: 3, // Retry 3 times on failure
   });
 }
 
