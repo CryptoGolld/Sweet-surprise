@@ -23,7 +23,7 @@ export const CONTRACTS = {
 
 export const COIN_TYPES = {
   SUI: '0x2::sui::SUI',
-  SUILFG_MEMEFI: `${CONTRACTS.FAUCET_PACKAGE}::faucet::SUILFG_MEMEFI`,
+  SUILFG_MEMEFI: `${CONTRACTS.FAUCET_PACKAGE}::suilfg_memefi::SUILFG_MEMEFI`,
 } as const;
 
 // Bonding curve constants (from contract)
