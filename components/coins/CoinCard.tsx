@@ -25,86 +25,98 @@ export function CoinCard({ curve }: CoinCardProps) {
     <>
       <div
         onClick={() => setShowTrading(true)}
-        className="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:bg-white/10 transition-all hover:scale-[1.02] hover:border-meme-purple/50 cursor-pointer card-shine group"
+        className="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:bg-white/10 transition-all hover:scale-[1.01] hover:border-meme-purple/50 hover:shadow-xl hover:shadow-meme-purple/10 cursor-pointer group"
       >
         {/* Image */}
-        <div className="aspect-square bg-gradient-to-br from-meme-pink/20 via-meme-purple/20 to-sui-blue/20 flex items-center justify-center text-6xl relative overflow-hidden">
+        <div className="relative aspect-square bg-gradient-to-br from-meme-pink/20 via-meme-purple/20 to-sui-blue/20 flex items-center justify-center overflow-hidden">
           {curve.imageUrl ? (
             <img
               src={curve.imageUrl}
               alt={curve.ticker}
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement!.innerHTML = '<span class="animate-float text-6xl">🚀</span>';
+                e.currentTarget.parentElement!.innerHTML = '<div class="flex items-center justify-center w-full h-full"><span class="text-6xl">🚀</span></div>';
               }}
             />
           ) : (
-            <span className="animate-float">🚀</span>
+            <span className="text-6xl">🚀</span>
           )}
           
           {/* Status badge */}
-          {curve.graduated ? (
-            <div className="absolute top-2 right-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-lg">
-              🎓 Graduated
+          <div className="absolute top-2 right-2">
+            {curve.graduated ? (
+              <div className="bg-green-500/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-bold shadow-lg flex items-center gap-1">
+                🎓 <span className="hidden sm:inline">Graduated</span>
+              </div>
+            ) : (
+              <div className="bg-meme-purple/90 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-xs font-bold shadow-lg flex items-center gap-1">
+                🔥 <span className="hidden sm:inline">Live</span>
+              </div>
+            )}
+          </div>
+
+          {/* Quick stats overlay */}
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="text-xs text-white/90 font-medium">
+              {progress.toFixed(1)}% to graduation
             </div>
-          ) : (
-            <div className="absolute top-2 right-2 bg-blue-500/80 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm font-bold shadow-lg">
-              🔥 Trading
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4">
+          {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="min-w-0 flex-1">
-              <h3 className="text-xl font-bold truncate">${curve.ticker}</h3>
-              <p className="text-sm text-gray-400 truncate">{curve.name}</p>
+              <h3 className="text-lg font-bold truncate mb-0.5">${curve.ticker}</h3>
+              <p className="text-xs text-gray-400 truncate">{curve.name || 'Untitled'}</p>
             </div>
-            <div className="text-right ml-4">
-              <div className="text-lg font-bold text-sui-blue">{marketCap}</div>
-              <div className="text-xs text-gray-400">Ⓢ Collected</div>
+            <div className="text-right ml-3 flex-shrink-0">
+              <div className="text-sm font-bold text-meme-purple">{marketCap}</div>
+              <div className="text-xs text-gray-400">SUILFG</div>
             </div>
           </div>
 
           {/* Description */}
           {curve.description && (
-            <p className="text-sm text-gray-300 mb-4 line-clamp-2">
+            <p className="text-xs text-gray-300 mb-3 line-clamp-2 leading-relaxed">
               {curve.description}
             </p>
           )}
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-white/5 rounded-lg p-2 text-center">
-              <div className="text-sm font-bold">{tokensTraded}</div>
-              <div className="text-xs text-gray-400">Tokens Traded</div>
-            </div>
-            <div className="bg-white/5 rounded-lg p-2 text-center">
-              <div className="text-sm font-bold">{progress.toFixed(1)}%</div>
-              <div className="text-xs text-gray-400">Progress</div>
-            </div>
-          </div>
-
           {/* Progress bar */}
           <div className="mb-3">
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>Graduation</span>
-              <span>{progress.toFixed(2)}%</span>
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className="text-gray-400">Bonding Curve</span>
+              <span className="font-semibold text-meme-purple">{progress.toFixed(1)}%</span>
             </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-meme-pink via-meme-purple to-sui-blue transition-all duration-500"
+                className="h-full bg-gradient-to-r from-meme-pink via-meme-purple to-sui-blue transition-all duration-500 shadow-sm shadow-meme-purple/50"
                 style={{ width: `${Math.min(100, progress)}%` }}
               />
             </div>
           </div>
 
-          {/* Creator & Date */}
-          <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-white/10">
-            <span>by {truncateAddress(curve.creator)}</span>
-            <span>{new Date(curve.createdAt).toLocaleDateString()}</span>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-xs text-gray-400 mb-0.5">Volume</div>
+              <div className="text-sm font-bold">{tokensTraded}</div>
+            </div>
+            <div className="bg-white/5 rounded-lg p-2">
+              <div className="text-xs text-gray-400 mb-0.5">Created</div>
+              <div className="text-sm font-bold">{new Date(curve.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-2 border-t border-white/10">
+            <span className="text-xs text-gray-400">by {truncateAddress(curve.creator)}</span>
+            <button className="text-xs font-semibold text-meme-purple hover:text-meme-pink transition-colors">
+              Trade →
+            </button>
           </div>
         </div>
       </div>
