@@ -307,11 +307,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       setStatus('Creating buy transaction...');
       const buyTx = buyTokensTransaction({
         curveId: curveData.curveId,
+        coinType: curveData.coinType,
         paymentCoinId: paymentCoin.coinObjectId,
-        amountIn: amountInMist.toString(),
-        minOut: '0', // Accept any amount (user accepts slippage)
-        maxIn: amountInMist.toString(),
-        recipient: currentAccount!.address,
+        maxSuiIn: amountInMist.toString(),
+        minTokensOut: '0', // Accept any amount (user accepts slippage)
       });
       
       setStatus('Please sign to buy...');

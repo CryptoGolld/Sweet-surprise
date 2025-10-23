@@ -39,8 +39,12 @@ export function FaucetClaim() {
 
         if (result.results?.[0]?.returnValues?.[0]) {
           const bytes = result.results[0].returnValues[0][0];
-          const timeMs = Number(BigInt('0x' + Buffer.from(bytes).toString('hex')));
-          setTimeUntilClaim(timeMs);
+          // Decode u64 from little-endian bytes
+          let timeMs = 0n;
+          for (let i = 0; i < bytes.length && i < 8; i++) {
+            timeMs |= BigInt(bytes[i]) << BigInt(i * 8);
+          }
+          setTimeUntilClaim(Number(timeMs));
         }
       } catch (error) {
         console.error('Failed to check claim time:', error);

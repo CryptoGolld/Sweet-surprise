@@ -14,6 +14,8 @@ export const CONTRACTS = {
   
   // Shared objects - UPDATED from testnet_production.json
   PLATFORM_STATE: '0x7fca4d72dcf81fc27f432bddc2ba07cd1fddf6517327ad448d845b2d3e77ef9c',
+  REFERRAL_REGISTRY: '0xf2d402107eb02d4ac5376e42cfcc09412cf968956ce66c31444621d34fc8828d',
+  TICKER_REGISTRY: '0x3bc08244a681e5fa1d125293ebd66c7017605d0c6d1820f4f9e5e1a7961a94e3',
   FAUCET_OBJECT: '0xd5c81489322b9e74609be2986c02652390feba41f06e4a7fd936a2c312fb9dde',
   
   // Cetus integration (testnet)

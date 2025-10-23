@@ -6,13 +6,22 @@ import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
 import Link from 'next/link';
 
+interface CoinWithMetadata {
+  type: string;
+  balance: string;
+  symbol: string;
+  name: string;
+  iconUrl?: string;
+  decimals: number;
+}
+
 export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
 
   const { data: coins, isLoading } = useQuery({
     queryKey: ['user-portfolio', account?.address],
-    queryFn: async () => {
+    queryFn: async (): Promise<CoinWithMetadata[]> => {
       if (!account?.address) return [];
 
       // Get all coins owned by user
@@ -29,10 +38,36 @@ export function UserPortfolio() {
         coinMap.set(coin.coinType, existing);
       }
 
-      return Array.from(coinMap.entries()).map(([type, data]) => ({
-        type,
-        balance: data.balance.toString(),
-      }));
+      // Fetch metadata for each coin type
+      const coinsWithMetadata: CoinWithMetadata[] = [];
+      
+      for (const [type, data] of coinMap.entries()) {
+        try {
+          // Try to get coin metadata
+          const metadata = await client.getCoinMetadata({ coinType: type });
+          
+          coinsWithMetadata.push({
+            type,
+            balance: data.balance.toString(),
+            symbol: metadata?.symbol || type.split('::').pop() || 'UNKNOWN',
+            name: metadata?.name || 'Unknown Token',
+            iconUrl: metadata?.iconUrl || undefined,
+            decimals: metadata?.decimals || 9,
+          });
+        } catch (error) {
+          // If metadata fetch fails, use default values
+          const parts = type.split('::');
+          coinsWithMetadata.push({
+            type,
+            balance: data.balance.toString(),
+            symbol: parts[parts.length - 1] || 'UNKNOWN',
+            name: parts[parts.length - 1] || 'Unknown Token',
+            decimals: 9,
+          });
+        }
+      }
+
+      return coinsWithMetadata;
     },
     enabled: !!account?.address,
     refetchInterval: 10000,
@@ -86,11 +121,7 @@ export function UserPortfolio() {
   return (
     <div className="space-y-3">
       {coins.map((coin) => {
-        // Extract symbol from type
-        const parts = coin.type.split('::');
-        const symbol = parts[parts.length - 1] || 'UNKNOWN';
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
-        const balanceNum = Number(coin.balance) / 1e9;
 
         return (
           <div
@@ -99,12 +130,30 @@ export function UserPortfolio() {
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}`}>
-                  {isMainToken ? '💧' : '🪙'}
-                </div>
+                {/* Token Image */}
+                {coin.iconUrl ? (
+                  <img
+                    src={coin.iconUrl}
+                    alt={coin.symbol}
+                    className="w-12 h-12 rounded-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      const parent = e.currentTarget.parentElement!;
+                      const emoji = isMainToken ? '💧' : '🪙';
+                      parent.innerHTML = `<div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}">${emoji}</div>`;
+                    }}
+                  />
+                ) : (
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}`}>
+                    {isMainToken ? '💧' : '🪙'}
+                  </div>
+                )}
+                
                 <div>
-                  <div className="font-bold text-lg">{symbol}</div>
-                  {isMainToken && <div className="text-xs text-gray-400">Platform Token</div>}
+                  <div className="font-bold text-lg">{coin.symbol}</div>
+                  <div className="text-xs text-gray-400">
+                    {isMainToken ? 'Platform Token' : coin.name}
+                  </div>
                 </div>
               </div>
               

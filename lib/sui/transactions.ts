@@ -99,7 +99,7 @@ export function createCurveTransaction(params: {
     typeArguments: [coinType],
     arguments: [
       tx.object(CONTRACTS.PLATFORM_STATE),
-      tx.object('0x3bc08244a681e5fa1d125293ebd66c7017605d0c6d1820f4f9e5e1a7961a94e3'), // TickerRegistry
+      tx.object(CONTRACTS.TICKER_REGISTRY),
       tx.object(params.treasuryCapId),
       tx.object(params.metadataId),
       tx.object('0x6'), // Clock
@@ -114,31 +114,36 @@ export function createCurveTransaction(params: {
  */
 export function buyTokensTransaction(params: {
   curveId: string;
+  coinType: string;
   paymentCoinId: string;
-  amountIn: string;
-  minOut: string;
-  maxIn: string;
-  recipient: string;
+  maxSuiIn: string;
+  minTokensOut: string;
 }): Transaction {
   const tx = new Transaction();
   
   // Set gas budget: 0.1 SUI for buy (100,000,000 MIST)
   tx.setGasBudget(100_000_000);
   
-  const [receivedCoin] = tx.moveCall({
+  // Deadline: 5 minutes from now
+  const deadlineMs = Date.now() + 300000;
+  
+  tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
-    typeArguments: [COIN_TYPES.SUILFG_MEMEFI],
+    typeArguments: [params.coinType],
     arguments: [
-      tx.object(params.curveId),
-      tx.object(params.paymentCoinId),
-      tx.pure(bcs.u64().serialize(params.amountIn).toBytes()),
-      tx.pure(bcs.u64().serialize(params.minOut).toBytes()),
-      tx.pure(bcs.u64().serialize(params.maxIn).toBytes()),
-      tx.object('0x6'), // Clock
+      tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
+      tx.object(params.curveId), // curve: &mut BondingCurve<T>
+      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
+      tx.object(params.paymentCoinId), // payment: Coin<SUILFG_MEMEFI>
+      tx.pure(bcs.u64().serialize(params.maxSuiIn).toBytes()), // max_sui_in: u64
+      tx.pure(bcs.u64().serialize(params.minTokensOut).toBytes()), // min_tokens_out: u64
+      tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
+      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
+      tx.object('0x6'), // clk: &Clock
     ],
   });
   
-  tx.transferObjects([receivedCoin], params.recipient);
+  // Note: buy is an entry function, tokens are auto-transferred to sender
   
   return tx;
 }
@@ -148,29 +153,36 @@ export function buyTokensTransaction(params: {
  */
 export function sellTokensTransaction(params: {
   curveId: string;
+  coinType: string;
   memeTokenCoinId: string;
-  amountIn: string;
-  minOut: string;
-  recipient: string;
+  tokensToSell: string;
+  minSuiOut: string;
 }): Transaction {
   const tx = new Transaction();
   
   // Set gas budget: 0.1 SUI for sell (100,000,000 MIST)
   tx.setGasBudget(100_000_000);
   
-  const [receivedCoin] = tx.moveCall({
+  // Deadline: 5 minutes from now
+  const deadlineMs = Date.now() + 300000;
+  
+  tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
-    typeArguments: [COIN_TYPES.SUILFG_MEMEFI],
+    typeArguments: [params.coinType],
     arguments: [
-      tx.object(params.curveId),
-      tx.object(params.memeTokenCoinId),
-      tx.pure(bcs.u64().serialize(params.amountIn).toBytes()),
-      tx.pure(bcs.u64().serialize(params.minOut).toBytes()),
-      tx.object('0x6'), // Clock
+      tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
+      tx.object(params.curveId), // curve: &mut BondingCurve<T>
+      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
+      tx.object(params.memeTokenCoinId), // payment: Coin<T>
+      tx.pure(bcs.u64().serialize(params.tokensToSell).toBytes()), // tokens_to_sell: u64
+      tx.pure(bcs.u64().serialize(params.minSuiOut).toBytes()), // min_sui_out: u64
+      tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
+      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
+      tx.object('0x6'), // clk: &Clock
     ],
   });
   
-  tx.transferObjects([receivedCoin], params.recipient);
+  // Note: sell is an entry function, SUI is auto-transferred to sender
   
   return tx;
 }
