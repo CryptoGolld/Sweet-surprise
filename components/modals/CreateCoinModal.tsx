@@ -17,9 +17,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   
   // UI State
-  const [currentStep, setCurrentStep] = useState(1); // 1 or 2
+  const [currentStep, setCurrentStep] = useState(1); // 1, 2, or 3
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('');
+  const [buyAmount, setBuyAmount] = useState('');
   
   // Form Data
   const [formData, setFormData] = useState({
@@ -40,6 +41,12 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     treasuryCapId: string;
     metadataId: string;
     publishDigest: string;
+  } | null>(null);
+  
+  // Bonding Curve Data (from step 2)
+  const [curveData, setCurveData] = useState<{
+    curveId: string;
+    curveDigest: string;
   } | null>(null);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -205,33 +212,43 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         throw new Error('Curve creation failed - no digest returned');
       }
       
-      // Success!
-      toast.success('🎉 Coin published successfully!', {
-        description: `${formData.ticker} is now live on SuiLFG MemeFi`,
-        action: {
-          label: 'View',
-          onClick: () => window.open(getExplorerLink(curveResult.digest, 'txblock'), '_blank'),
+      // Wait for curve creation to be indexed
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Get the curve ID from transaction
+      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      const curveDetails = await client.getTransactionBlock({
+        digest: curveResult.digest,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
         },
-        duration: 8000,
       });
       
-      // Reset and close
-      setFormData({
-        ticker: '',
-        name: '',
-        description: '',
-        imageUrl: '',
-        twitter: '',
-        telegram: '',
-        website: '',
+      // Find the created BondingCurve object
+      const curveObj = curveDetails.objectChanges?.find(
+        (obj: any) => obj.type === 'created' && obj.objectType?.includes('BondingCurve')
+      );
+      
+      if (!curveObj) {
+        throw new Error('Failed to find bonding curve object');
+      }
+      
+      const curveId = (curveObj as any).objectId;
+      
+      // Save curve data and move to step 3 (optional initial buy)
+      setCurveData({
+        curveId,
+        curveDigest: curveResult.digest,
       });
-      setPublishedData(null);
-      setCurrentStep(1);
+      
+      setCurrentStep(3);
       setStatus('');
-      onClose();
       
-      // Reload to show new coin
-      setTimeout(() => window.location.reload(), 2000);
+      toast.success('✅ Step 2 Complete!', {
+        description: 'Coin published! Optionally buy initial tokens now.',
+        duration: 4000,
+      });
       
     } catch (error: any) {
       console.error('Step 2 failed:', error);
@@ -246,10 +263,124 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     }
   }
 
+  // Step 3: Initial Buy (Optional)
+  async function handleStep3(e: FormEvent) {
+    e.preventDefault();
+    
+    if (!publishedData || !curveData) {
+      toast.error('Missing data. Please restart.');
+      return;
+    }
+    
+    if (!buyAmount || parseFloat(buyAmount) <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      const { getFullnodeUrl, SuiClient } = await import('@mysten/sui/client');
+      const { buyTokensTransaction } = await import('@/lib/sui/transactions');
+      const { COIN_TYPES } = await import('@/lib/constants');
+      
+      setStatus('Finding your SUILFG_MEMEFI coins...');
+      
+      // Get user's SUILFG_MEMEFI coins
+      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      const coins = await client.getCoins({
+        owner: currentAccount!.address,
+        coinType: COIN_TYPES.SUILFG_MEMEFI,
+      });
+      
+      if (!coins.data.length) {
+        throw new Error('No SUILFG_MEMEFI tokens found. Please claim from faucet first.');
+      }
+      
+      // Use first coin
+      const paymentCoin = coins.data[0];
+      const amountInMist = BigInt(Math.floor(parseFloat(buyAmount) * 1_000_000_000));
+      
+      setStatus('Creating buy transaction...');
+      const buyTx = buyTokensTransaction({
+        curveId: curveData.curveId,
+        paymentCoinId: paymentCoin.coinObjectId,
+        amountIn: amountInMist.toString(),
+        minOut: '0', // Accept any amount (user accepts slippage)
+        maxIn: amountInMist.toString(),
+        recipient: currentAccount!.address,
+      });
+      
+      setStatus('Please sign to buy...');
+      const buyResult = await signAndExecute({
+        transaction: buyTx,
+      });
+      
+      if (!buyResult.digest) {
+        throw new Error('Buy failed - no digest returned');
+      }
+      
+      // Success!
+      toast.success('🎉 Initial purchase complete!', {
+        description: `Successfully bought ${formData.ticker} tokens`,
+        action: {
+          label: 'View',
+          onClick: () => window.open(getExplorerLink(buyResult.digest, 'txblock'), '_blank'),
+        },
+        duration: 8000,
+      });
+      
+      // Reset and close
+      handleFinish();
+      
+    } catch (error: any) {
+      console.error('Initial buy failed:', error);
+      
+      toast.error('Failed to buy tokens', {
+        description: error.message || 'You can still buy later from the tokens page',
+        duration: 6000,
+      });
+      setStatus('');
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+  
+  function handleSkipBuy() {
+    toast.success('🎉 Coin launched successfully!', {
+      description: `${formData.ticker} is now live on SuiLFG MemeFi`,
+      duration: 6000,
+    });
+    handleFinish();
+  }
+  
+  function handleFinish() {
+    setFormData({
+      ticker: '',
+      name: '',
+      description: '',
+      imageUrl: '',
+      twitter: '',
+      telegram: '',
+      website: '',
+    });
+    setPublishedData(null);
+    setCurveData(null);
+    setBuyAmount('');
+    setCurrentStep(1);
+    setStatus('');
+    onClose();
+    
+    // Reload to show new coin
+    setTimeout(() => window.location.reload(), 2000);
+  }
+
   function handleClose() {
     if (!isProcessing) {
       setCurrentStep(1);
       setPublishedData(null);
+      setCurveData(null);
+      setBuyAmount('');
       setStatus('');
       setFormData({
         ticker: '',
@@ -281,9 +412,9 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
           </div>
           
           {/* Step Indicator */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                 currentStep === 1 
                   ? 'bg-gradient-to-r from-meme-pink to-meme-purple text-white' 
                   : publishedData 
@@ -292,23 +423,40 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               }`}>
                 {publishedData ? '✓' : '1'}
               </div>
-              <span className={currentStep === 1 ? 'font-semibold' : 'text-gray-400'}>
-                Create Coin
+              <span className={`text-sm ${currentStep === 1 ? 'font-semibold' : 'text-gray-400'}`}>
+                Create
               </span>
             </div>
             
             <div className="flex-1 h-px bg-white/20"></div>
             
             <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                 currentStep === 2 
+                  ? 'bg-gradient-to-r from-meme-pink to-meme-purple text-white' 
+                  : curveData
+                  ? 'bg-green-500 text-white'
+                  : 'bg-white/10 text-gray-400'
+              }`}>
+                {curveData ? '✓' : '2'}
+              </div>
+              <span className={`text-sm ${currentStep === 2 ? 'font-semibold' : 'text-gray-400'}`}>
+                Publish
+              </span>
+            </div>
+            
+            <div className="flex-1 h-px bg-white/20"></div>
+            
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                currentStep === 3 
                   ? 'bg-gradient-to-r from-meme-pink to-meme-purple text-white' 
                   : 'bg-white/10 text-gray-400'
               }`}>
-                2
+                3
               </div>
-              <span className={currentStep === 2 ? 'font-semibold' : 'text-gray-400'}>
-                Publish
+              <span className={`text-sm ${currentStep === 3 ? 'font-semibold' : 'text-gray-400'}`}>
+                Buy (Optional)
               </span>
             </div>
           </div>
@@ -491,6 +639,86 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
                 className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
               >
                 {isProcessing ? (status || '⏳ Publishing...') : '📢 Publish to Curve'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Step 3: Initial Buy (Optional) */}
+        {currentStep === 3 && publishedData && curveData && (
+          <form onSubmit={handleStep3} className="p-6 space-y-6">
+            {/* Success Info */}
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
+              <p className="font-semibold text-green-400">🎉 Coin Published Successfully!</p>
+              <div className="text-sm space-y-1 text-gray-300">
+                <p><span className="text-gray-400">Ticker:</span> {formData.ticker}</p>
+                <p><span className="text-gray-400">Name:</span> {formData.name}</p>
+                <p className="text-xs text-gray-400 break-all">
+                  Curve: {curveData.curveId.slice(0, 20)}...
+                </p>
+              </div>
+              <a
+                href={getExplorerLink(curveData.curveDigest, 'txblock')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-sui-blue hover:underline"
+              >
+                View on Explorer →
+              </a>
+            </div>
+
+            {/* Buy Form */}
+            <div className="bg-white/5 border border-white/10 rounded-lg p-6">
+              <h3 className="font-bold text-lg mb-4">💰 Buy Initial Tokens (Optional)</h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Support your coin with an initial purchase
+              </p>
+              
+              <div>
+                <label className="block text-sm font-semibold mb-2">
+                  Amount (SUILFG_MEMEFI)
+                </label>
+                <input
+                  type="number"
+                  placeholder="100"
+                  step="0.1"
+                  min="0"
+                  value={buyAmount}
+                  onChange={(e) => setBuyAmount(e.target.value)}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  You'll receive tokens based on the bonding curve price
+                </p>
+              </div>
+            </div>
+
+            {/* Info box */}
+            <div className="bg-sui-blue/10 border border-sui-blue/30 rounded-lg p-4 space-y-2 text-sm">
+              <p className="font-semibold text-sui-blue">ℹ️ Optional Step</p>
+              <ul className="space-y-1 text-gray-300 list-disc list-inside">
+                <li>Show confidence in your coin with an initial buy</li>
+                <li>You can always buy later from the tokens page</li>
+                <li>Gas cost: ~0.1 SUI</li>
+              </ul>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-4 pt-2">
+              <button
+                type="button"
+                onClick={handleSkipBuy}
+                disabled={isProcessing}
+                className="flex-1 px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Skip → Finish
+              </button>
+              <button
+                type="submit"
+                disabled={isProcessing || !currentAccount || !buyAmount}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {isProcessing ? (status || '⏳ Buying...') : '💰 Buy & Finish'}
               </button>
             </div>
           </form>
