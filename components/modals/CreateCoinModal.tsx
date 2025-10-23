@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
-import { createCoinTransaction } from '@/lib/sui/transactions';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
 
@@ -13,7 +13,10 @@ interface CreateCoinModalProps {
 
 export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const currentAccount = useCurrentAccount();
-  const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
+  const [isCreating, setIsCreating] = useState(false);
+  const [status, setStatus] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
   
   const [formData, setFormData] = useState({
     ticker: '',
@@ -52,7 +55,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     
     if (!currentAccount) {
@@ -65,63 +68,146 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       return;
     }
 
+    setIsCreating(true);
+    
     try {
-      const socials = [
-        formData.twitter,
-        formData.telegram,
-        formData.website,
-      ].filter(Boolean);
-      
-      const tx = createCoinTransaction({
+      // Step 1: Compile on backend
+      setStatus('Compiling package...');
+      const { transaction: publishTx, moduleName, structName } = await createCoinTransaction({
         ticker: formData.ticker.toUpperCase(),
         name: formData.name,
         description: formData.description,
-        imageUrl: formData.imageUrl,
-        socials,
       });
-
-      signAndExecute(
-        {
-          transaction: tx,
+      
+      // Step 2: User signs to publish (they pay gas!)
+      setStatus('Please sign to publish package...');
+      const publishResult = await signAndExecute({
+        transaction: publishTx,
+      });
+      
+      // Check if transaction succeeded
+      const digest = publishResult.digest;
+      if (!digest) {
+        throw new Error('Package publish failed - no digest returned');
+      }
+      
+      // Wait a moment for indexing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Fetch full transaction details from RPC
+      const { getFullnodeUrl, SuiClient } = await import('@mysten/sui/client');
+      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      const txDetails = await client.getTransactionBlock({
+        digest,
+        options: {
+          showEffects: true,
+          showObjectChanges: true,
         },
-        {
-          onSuccess: (result) => {
-            toast.success('Coin created successfully!', {
-              description: 'View on explorer',
-              action: {
-                label: 'View',
-                onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank'),
-              },
-            });
-            
-            // Reset form
-            setFormData({
-              ticker: '',
-              name: '',
-              description: '',
-              imageUrl: '',
-              twitter: '',
-              telegram: '',
-              website: '',
-            });
-            
-            onClose();
-            
-            // Reload after a delay to show new coin
-            setTimeout(() => window.location.reload(), 2000);
-          },
-          onError: (error) => {
-            console.error('Failed to create coin:', error);
-            toast.error('Failed to create coin', {
-              description: error.message || 'Please try again',
-            });
-          },
-        }
-      );
-    } catch (error: any) {
-      toast.error('Failed to build transaction', {
-        description: error.message,
       });
+      
+      if (txDetails.effects?.status?.status !== 'success') {
+        throw new Error('Package publish failed');
+      }
+      
+      // Step 3: Extract package ID and objects
+      const publishedObj = txDetails.objectChanges?.find(
+        (obj: any) => obj.type === 'published'
+      );
+      const treasuryCapObj = txDetails.objectChanges?.find(
+        (obj: any) => obj.type === 'created' && obj.objectType?.includes('TreasuryCap')
+      );
+      const metadataObj = txDetails.objectChanges?.find(
+        (obj: any) => obj.type === 'created' && obj.objectType?.includes('CoinMetadata')
+      );
+      
+      if (!publishedObj || !treasuryCapObj || !metadataObj) {
+        throw new Error('Failed to find published objects');
+      }
+      
+      const packageId = (publishedObj as any).packageId;
+      const treasuryCapId = (treasuryCapObj as any).objectId;
+      const metadataId = (metadataObj as any).objectId;
+      
+      // Step 4: Create bonding curve
+      setStatus('Creating bonding curve...');
+      const curveTx = createCurveTransaction({
+        packageId,
+        moduleName,
+        structName,
+        treasuryCapId,
+        metadataId,
+      });
+      
+      const curveResult = await signAndExecute({
+        transaction: curveTx,
+      });
+      
+      if (!curveResult.digest) {
+        throw new Error('Curve creation failed - no digest returned');
+      }
+      
+      // Success!
+      toast.success('🎉 Coin created successfully!', {
+        description: `${formData.ticker} is now live on SuiLFG MemeFi`,
+        action: {
+          label: 'View',
+          onClick: () => window.open(getExplorerLink(curveResult.digest, 'txblock'), '_blank'),
+        },
+        duration: 8000,
+      });
+      
+      // Reset form
+      setFormData({
+        ticker: '',
+        name: '',
+        description: '',
+        imageUrl: '',
+        twitter: '',
+        telegram: '',
+        website: '',
+      });
+      
+      setStatus('');
+      onClose();
+      
+      // Reload after a delay to show new coin
+      setTimeout(() => window.location.reload(), 2000);
+      
+    } catch (error: any) {
+      console.error('Failed to create coin:', error);
+      
+      // Build detailed error log for mobile debugging
+      const debugInfo = {
+        error: error.message || error.toString(),
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+        ticker: formData.ticker,
+        name: formData.name,
+      };
+      
+      const debugLog = JSON.stringify(debugInfo, null, 2);
+      setErrorDetails(debugLog);
+      
+      toast.error('Failed to create coin', {
+        description: (
+          <div>
+            <p className="mb-2">{error.message || 'Please try again'}</p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(debugLog);
+                toast.success('Error details copied! 📋');
+              }}
+              className="px-3 py-1 bg-white/10 rounded text-xs hover:bg-white/20 transition-colors"
+            >
+              📋 Copy Error Details
+            </button>
+          </div>
+        ),
+        duration: 10000,
+      });
+      setStatus('');
+    } finally {
+      setIsCreating(false);
     }
   }
 
@@ -246,7 +332,6 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               <li>737M tokens available for trading</li>
               <li>Graduates at 13K SUI collected</li>
               <li>Auto-creates Cetus liquidity pool</li>
-              <li>No presales, no team allocation on curve</li>
             </ul>
           </div>
 
@@ -255,17 +340,17 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
             <button
               type="button"
               onClick={onClose}
-              disabled={isPending}
+              disabled={isCreating}
               className="flex-1 px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isPending || !currentAccount}
+              disabled={isCreating || !currentAccount}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
             >
-              {isPending ? '🚀 Creating...' : '🚀 Create Coin'}
+              {isCreating ? (status || '🚀 Creating...') : '🚀 Create Coin'}
             </button>
           </div>
         </form>

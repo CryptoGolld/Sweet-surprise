@@ -6,15 +6,15 @@
 export const NETWORK = 'testnet' as const;
 
 export const CONTRACTS = {
-  // Platform package (v0.0.5 - with supply cap fix)
-  PLATFORM_PACKAGE: '0x39d07cf0e87e2f2c3cb1807b30ae49ba1e786d587b98ede8e36c7f23833e1de3',
+  // Platform package (v0.0.5 - with supply cap fix) - PRODUCTION
+  PLATFORM_PACKAGE: '0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047',
   
   // Faucet package (SUILFG_MEMEFI token)
   FAUCET_PACKAGE: '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81',
   
-  // Shared objects
-  PLATFORM_STATE: '0xa7dc3d82efc298e1f3c7f3b12b43b8cc1f8e7e6adfdfca6e8f99df1df9e0c29e',
-  FAUCET_OBJECT: '0x3ca9a86de98ae1f18d94c2d98db28d9d1b0fb2d5c1e57e8e0f90f2deefbf1bc4',
+  // Shared objects - UPDATED from testnet_production.json
+  PLATFORM_STATE: '0x7fca4d72dcf81fc27f432bddc2ba07cd1fddf6517327ad448d845b2d3e77ef9c',
+  FAUCET_OBJECT: '0xd5c81489322b9e74609be2986c02652390feba41f06e4a7fd936a2c312fb9dde',
   
   // Cetus integration (testnet)
   CETUS_GLOBAL_CONFIG: '0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e',
