@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { ConnectButton } from './wallet/ConnectButton';
 import { CreateCoinModal } from './modals/CreateCoinModal';
 import { useCurrentAccount } from '@mysten/dapp-kit';
@@ -8,6 +10,9 @@ import { useCurrentAccount } from '@mysten/dapp-kit';
 export function Header() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const account = useCurrentAccount();
+  const pathname = usePathname();
+  
+  const isActive = (path: string) => pathname === path;
   
   return (
     <>
@@ -15,7 +20,7 @@ export function Header() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <div className="w-12 h-12 bg-gradient-to-br from-meme-pink via-meme-purple to-sui-blue rounded-xl flex items-center justify-center font-bold text-2xl">
                 🚀
               </div>
@@ -25,24 +30,28 @@ export function Header() {
                 </h1>
                 <p className="text-xs text-gray-400">Testnet Campaign</p>
               </div>
-            </a>
+            </Link>
 
             {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-8">
-              <a href="#coins" className="text-gray-300 hover:text-white transition-colors">
-                Coins
-              </a>
-              <a href="#portfolio" className="text-gray-300 hover:text-white transition-colors">
-                Portfolio
-              </a>
-              <a
-                href="https://suiscan.xyz/testnet"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-300 hover:text-white transition-colors"
+            <nav className="hidden md:flex items-center gap-6">
+              <Link 
+                href="/tokens" 
+                className={`transition-colors ${isActive('/tokens') ? 'text-gradient font-semibold' : 'text-gray-300 hover:text-white'}`}
               >
-                Explorer ↗
-              </a>
+                🔥 Tokens
+              </Link>
+              <Link 
+                href="/faucet" 
+                className={`transition-colors ${isActive('/faucet') ? 'text-gradient font-semibold' : 'text-gray-300 hover:text-white'}`}
+              >
+                💧 Faucet
+              </Link>
+              <Link 
+                href="/portfolio" 
+                className={`transition-colors ${isActive('/portfolio') ? 'text-gradient font-semibold' : 'text-gray-300 hover:text-white'}`}
+              >
+                💼 Portfolio
+              </Link>
             </nav>
 
             {/* Actions */}
