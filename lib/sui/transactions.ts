@@ -172,6 +172,12 @@ export function sellTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
+  // Split the exact amount of tokens to sell from the coin
+  // The meme token coin might have more balance than tokensToSell
+  const tokensToSellCoin = tx.splitCoins(tx.object(params.memeTokenCoinId), [
+    tx.pure.u64(params.tokensToSell)
+  ]);
+  
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
     typeArguments: [params.coinType],
@@ -179,7 +185,7 @@ export function sellTokensTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
       tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      tx.object(params.memeTokenCoinId), // payment: Coin<T>
+      tokensToSellCoin, // payment: Coin<T> - split to exact amount
       tx.pure(bcs.u64().serialize(params.tokensToSell).toBytes()), // tokens_to_sell: u64
       tx.pure(bcs.u64().serialize(params.minSuiOut).toBytes()), // min_sui_out: u64
       tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
