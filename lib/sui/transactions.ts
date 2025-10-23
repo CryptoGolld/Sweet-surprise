@@ -14,6 +14,7 @@ export async function createCoinTransaction(params: {
   ticker: string;
   name: string;
   description: string;
+  senderAddress: string;
 }): Promise<{
   transaction: Transaction;
   moduleName: string;
@@ -56,12 +57,14 @@ export async function createCoinTransaction(params: {
   // Set gas budget: 0.1 SUI for publishing (100,000,000 MIST)
   tx.setGasBudget(100_000_000);
   
-  // 2a. Publish the package
-  // Note: UpgradeCap is automatically transferred to the sender by Sui
-  tx.publish({
+  // 2a. Publish the package and get UpgradeCap
+  const upgradeCap = tx.publish({
     modules: modules.map((m: number[]) => new Uint8Array(m)),
     dependencies: dependencies,
   });
+
+  // Transfer UpgradeCap to sender (they own the package!)
+  tx.transferObjects([upgradeCap], params.senderAddress);
 
   // Note: We can't create the curve in the same transaction because we need
   // the packageId, which we only get after publish executes.
