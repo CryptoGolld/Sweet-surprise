@@ -47,6 +47,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const [curveData, setCurveData] = useState<{
     curveId: string;
     curveDigest: string;
+    coinType: string;
   } | null>(null);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -236,10 +237,14 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       
       const curveId = (curveObj as any).objectId;
       
+      // Construct coin type
+      const coinType = `${publishedData.packageId}::${publishedData.moduleName}::${publishedData.structName}`;
+      
       // Save curve data and move to step 3 (optional initial buy)
       setCurveData({
         curveId,
         curveDigest: curveResult.digest,
+        coinType,
       });
       
       setCurrentStep(3);
