@@ -84,10 +84,9 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
     BONDING_CURVE.MAX_CURVE_SUPPLY * 1e9
   );
   
-  // Calculate volume in USD (approximate using spot price * tokens traded)
-  const tokensSoldInWholeUnits = Number(curve.curveSupply) / 1e9;
-  const spotPrice = calculateSpotPrice(tokensSoldInWholeUnits);
-  const volumeUsd = spotPrice * tokensSoldInWholeUnits * suiPrice;
+  // Calculate volume in USD (SUILFG_MEMEFI traded, not token count)
+  const volumeInSUILFG = Number(curve.curveBalance) / 1e9; // Convert from MIST
+  const volumeUsd = volumeInSUILFG * suiPrice;
 
   async function handleTrade() {
     if (!currentAccount) {

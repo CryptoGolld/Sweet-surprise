@@ -28,7 +28,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SuiProvider>{children}</SuiProvider>
+        <SuiProvider>
+          <div className="relative z-10">
+            {children}
+          </div>
+        </SuiProvider>
       </body>
     </html>
   );

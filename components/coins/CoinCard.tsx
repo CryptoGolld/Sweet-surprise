@@ -49,11 +49,7 @@ export function CoinCard({ curve }: CoinCardProps) {
   return (
     <>
       <Link 
-        href={`#trade-${curve.id}`}
-        onClick={(e) => {
-          e.preventDefault();
-          setShowTrading(true);
-        }}
+        href={`/tokens/${curve.id}`}
         className="block bg-white/5 border border-white/10 rounded-lg overflow-hidden transition-all hover:bg-white/10 hover:border-meme-purple/50 hover:shadow-lg hover:shadow-meme-purple/10 cursor-pointer"
       >
         {/* Compact Card View */}
