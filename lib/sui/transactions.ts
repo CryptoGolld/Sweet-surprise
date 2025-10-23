@@ -127,6 +127,12 @@ export function buyTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
+  // Split the exact payment amount from the coin to avoid maxSuiIn mismatch
+  // The payment coin might have more balance than maxSuiIn
+  const paymentCoin = tx.splitCoins(tx.object(params.paymentCoinId), [
+    tx.pure.u64(params.maxSuiIn)
+  ]);
+  
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
     typeArguments: [params.coinType],
@@ -134,7 +140,7 @@ export function buyTokensTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
       tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      tx.object(params.paymentCoinId), // payment: Coin<SUILFG_MEMEFI>
+      paymentCoin, // payment: Coin<SUILFG_MEMEFI> - split to exact amount
       tx.pure(bcs.u64().serialize(params.maxSuiIn).toBytes()), // max_sui_in: u64
       tx.pure(bcs.u64().serialize(params.minTokensOut).toBytes()), // min_tokens_out: u64
       tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64

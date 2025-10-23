@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
+import { useBondingCurves } from '@/lib/hooks/useBondingCurves';
 import Link from 'next/link';
 
 interface CoinWithMetadata {
@@ -20,6 +21,7 @@ export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const { data: suiPrice = 1.0 } = useSuiPrice();
+  const { data: bondingCurves = [] } = useBondingCurves();
 
   const { data: coins, isLoading } = useQuery({
     queryKey: ['user-portfolio', account?.address],
@@ -48,22 +50,28 @@ export function UserPortfolio() {
           // Try to get coin metadata
           const metadata = await client.getCoinMetadata({ coinType: type });
           
+          // Check if this coin has a bonding curve (for image URL)
+          const curve = bondingCurves.find(c => c.coinType === type);
+          
           coinsWithMetadata.push({
             type,
             balance: data.balance.toString(),
-            symbol: metadata?.symbol || type.split('::').pop() || 'UNKNOWN',
-            name: metadata?.name || 'Unknown Token',
-            iconUrl: metadata?.iconUrl || undefined,
+            symbol: metadata?.symbol || curve?.ticker || type.split('::').pop() || 'UNKNOWN',
+            name: metadata?.name || curve?.name || 'Unknown Token',
+            iconUrl: curve?.imageUrl || metadata?.iconUrl || undefined,
             decimals: metadata?.decimals || 9,
           });
         } catch (error) {
           // If metadata fetch fails, use default values
           const parts = type.split('::');
+          const curve = bondingCurves.find(c => c.coinType === type);
+          
           coinsWithMetadata.push({
             type,
             balance: data.balance.toString(),
-            symbol: parts[parts.length - 1] || 'UNKNOWN',
-            name: parts[parts.length - 1] || 'Unknown Token',
+            symbol: curve?.ticker || parts[parts.length - 1] || 'UNKNOWN',
+            name: curve?.name || parts[parts.length - 1] || 'Unknown Token',
+            iconUrl: curve?.imageUrl || undefined,
             decimals: 9,
           });
         }
@@ -167,7 +175,7 @@ export function UserPortfolio() {
               
               <div className="text-right">
                 <div className="font-bold text-lg">
-                  {formatAmount(coin.balance, 2)}
+                  {formatAmount(coin.balance, coin.decimals)}
                 </div>
                 {isMainToken && totalValue > 0 && (
                   <div className="text-sm text-meme-purple font-semibold">
