@@ -1,0 +1,209 @@
+/**
+ * Transaction building utilities
+ */
+
+import { Transaction } from '@mysten/sui/transactions';
+import { bcs } from '@mysten/sui/bcs';
+import { CONTRACTS, COIN_TYPES } from '../constants';
+
+/**
+ * Create a new memecoin by compiling on backend and publishing on frontend
+ * User signs and pays gas
+ */
+export async function createCoinTransaction(params: {
+  ticker: string;
+  name: string;
+  description: string;
+  senderAddress: string;
+}): Promise<{
+  transaction: Transaction;
+  moduleName: string;
+  structName: string;
+}> {
+  // 1. Call compilation service via Vercel proxy (avoids HTTPS->HTTP mixed content)
+  const compileUrl = '/api/compile-proxy';
+  
+  const response = await fetch(compileUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  });
+  
+  console.log('Compile response status:', response.status);
+  console.log('Compile response ok:', response.ok);
+  
+  if (!response.ok) {
+    let errorDetails;
+    try {
+      const error = await response.json();
+      errorDetails = error.details || error.error || `HTTP ${response.status}`;
+    } catch (e) {
+      errorDetails = `HTTP ${response.status}: ${response.statusText}`;
+    }
+    console.error('Compilation failed:', errorDetails);
+    throw new Error(errorDetails);
+  }
+  
+  const result = await response.json();
+  console.log('Compilation success:', { moduleName: result.moduleName, structName: result.structName });
+  
+  const { modules, dependencies, moduleName, structName } = result;
+  
+  // 2. Build transaction with explicit gas budget
+  const tx = new Transaction();
+  
+  // Set gas budget: 0.1 SUI for publishing (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
+  
+  // 2a. Publish the package and get UpgradeCap
+  const upgradeCap = tx.publish({
+    modules: modules.map((m: number[]) => new Uint8Array(m)),
+    dependencies: dependencies,
+  });
+
+  // Transfer UpgradeCap to sender (they own the package!)
+  tx.transferObjects([upgradeCap], params.senderAddress);
+
+  // Note: We can't create the curve in the same transaction because we need
+  // the packageId, which we only get after publish executes.
+  // User will need to sign twice: once to publish, once to create curve.
+  
+  return {
+    transaction: tx,
+    moduleName,
+    structName,
+  };
+}
+
+/**
+ * Create bonding curve after package is published
+ */
+export function createCurveTransaction(params: {
+  packageId: string;
+  moduleName: string;
+  structName: string;
+  treasuryCapId: string;
+  metadataId: string;
+}): Transaction {
+  const tx = new Transaction();
+  
+  // Set gas budget: 0.1 SUI for curve creation (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
+  
+  const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
+  
+  tx.moveCall({
+    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::create_new_meme_token`,
+    typeArguments: [coinType],
+    arguments: [
+      tx.object(CONTRACTS.PLATFORM_STATE),
+      tx.object(CONTRACTS.TICKER_REGISTRY),
+      tx.object(params.treasuryCapId),
+      tx.object(params.metadataId),
+      tx.object('0x6'), // Clock
+    ],
+  });
+  
+  return tx;
+}
+
+/**
+ * Buy tokens from bonding curve
+ */
+export function buyTokensTransaction(params: {
+  curveId: string;
+  coinType: string;
+  paymentCoinId: string;
+  maxSuiIn: string;
+  minTokensOut: string;
+}): Transaction {
+  const tx = new Transaction();
+  
+  // Set gas budget: 0.1 SUI for buy (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
+  
+  // Deadline: 5 minutes from now
+  const deadlineMs = Date.now() + 300000;
+  
+  tx.moveCall({
+    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
+    typeArguments: [params.coinType],
+    arguments: [
+      tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
+      tx.object(params.curveId), // curve: &mut BondingCurve<T>
+      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
+      tx.object(params.paymentCoinId), // payment: Coin<SUILFG_MEMEFI>
+      tx.pure(bcs.u64().serialize(params.maxSuiIn).toBytes()), // max_sui_in: u64
+      tx.pure(bcs.u64().serialize(params.minTokensOut).toBytes()), // min_tokens_out: u64
+      tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
+      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
+      tx.object('0x6'), // clk: &Clock
+    ],
+  });
+  
+  // Note: buy is an entry function, tokens are auto-transferred to sender
+  
+  return tx;
+}
+
+/**
+ * Sell tokens back to bonding curve
+ */
+export function sellTokensTransaction(params: {
+  curveId: string;
+  coinType: string;
+  memeTokenCoinId: string;
+  tokensToSell: string;
+  minSuiOut: string;
+}): Transaction {
+  const tx = new Transaction();
+  
+  // Set gas budget: 0.1 SUI for sell (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
+  
+  // Deadline: 5 minutes from now
+  const deadlineMs = Date.now() + 300000;
+  
+  tx.moveCall({
+    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
+    typeArguments: [params.coinType],
+    arguments: [
+      tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
+      tx.object(params.curveId), // curve: &mut BondingCurve<T>
+      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
+      tx.object(params.memeTokenCoinId), // payment: Coin<T>
+      tx.pure(bcs.u64().serialize(params.tokensToSell).toBytes()), // tokens_to_sell: u64
+      tx.pure(bcs.u64().serialize(params.minSuiOut).toBytes()), // min_sui_out: u64
+      tx.pure(bcs.u64().serialize(deadlineMs.toString()).toBytes()), // deadline_ts_ms: u64
+      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
+      tx.object('0x6'), // clk: &Clock
+    ],
+  });
+  
+  // Note: sell is an entry function, SUI is auto-transferred to sender
+  
+  return tx;
+}
+
+/**
+ * Graduate bonding curve
+ */
+export function graduateCurveTransaction(curveId: string): Transaction {
+  const tx = new Transaction();
+  
+  // Set gas budget: 0.1 SUI for graduation (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
+  
+  tx.moveCall({
+    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::try_graduate`,
+    typeArguments: [COIN_TYPES.SUILFG_MEMEFI],
+    arguments: [
+      tx.object(curveId),
+      tx.object('0x6'), // Clock
+    ],
+  });
+  
+  return tx;
+}

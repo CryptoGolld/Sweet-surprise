@@ -1,14 +1,13 @@
 [package]
 name = "suilfg_launch"
 version = "0.0.1"
-published-at = "0xf811c72078537cef0a525a37c790b61f9746b36445089e7ae3012fed43354ada"
-edition = "2024.beta"
+published-at = ""
+edition = "2024"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
-CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0" }
-
-[dev-dependencies]
+CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0", override = true }
 
 [addresses]
 suilfg_launch = "0x0"
+# Don't need to define cetus_clmm duplicate - provided by CetusClmm dependency

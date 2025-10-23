@@ -10,35 +10,21 @@ module suilfg_launch::bonding_curve {
     use std::vector;
     use std::u128;
     use std::u64;
-    use std::string;
-    use std::option::{Self as option, Option};
     use std::type_name::{Self, TypeName};
 
     use suilfg_launch::platform_config as platform_config;
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
-    use suilfg_launch::referral_registry::{Self, ReferralRegistry};
-    use suilfg_launch::ticker_registry::{Self as ticker_registry, TickerRegistry};
     
-    // Cetus CLMM imports for automatic pool creation
+    // Cetus CLMM imports for automatic pool creation with 100-year lock
     use cetus_clmm::config::GlobalConfig;
     use cetus_clmm::pool::{Self as cetus_pool, Pool};
-    use cetus_clmm::position::Position;
-    use cetus_clmm::pool_creator;
-    use cetus_clmm::factory::Pools;
-    
-    // Our custom LP locker for permanent lock with upgrade-safe flag
-    use suilfg_launch::lp_locker::{Self, LockedLPPosition};
+    use cetus_clmm::position::{Self as cetus_position, Position};
 
-    const TOTAL_SUPPLY: u64 = 1_000_000_000;  // 1B total supply
-    const MAX_CURVE_SUPPLY: u64 = 737_000_000;  // 737M tokens sold on curve at graduation
-    const CETUS_POOL_TOKENS: u64 = 207_000_000;  // 207M tokens for Cetus pool (20.7%)
-    const TEAM_ALLOCATION: u64 = 2_000_000;  // 2M team allocation (0.2%)
-    const BURNED_SUPPLY: u64 = 54_000_000;  // 54M never minted (5.4% - deflationary!)
-    // Total circulating after graduation: 946M (737M + 2M + 207M)
+    const TOTAL_SUPPLY: u64 = 1_000_000_000;
 
     public enum TradingStatus has copy, drop, store { Open, Frozen, WhitelistedExit }
 
-    public struct BondingCurve<phantom T: drop> has key, store {
+    public struct BondingCurve<phantom T: drop + store> has key, store {
         id: UID,
         status: TradingStatus,
         sui_reserve: Balance<SUI>,
@@ -56,24 +42,21 @@ module suilfg_launch::bonding_curve {
         graduated: bool,
         lp_seeded: bool,
         reward_paid: bool,
-        // LP fee recipient (changeable by admin)
-        lp_fee_recipient: address,
     }
 
     // TokenCoin removed; we mint/burn Coin<T> directly via TreasuryCap
 
     public struct Created has copy, drop { creator: address }
-    public struct Bought has copy, drop { buyer: address, amount_sui: u64, referrer: address }
-    public struct Sold has copy, drop { seller: address, amount_sui: u64, referrer: address }
+    public struct Bought has copy, drop { buyer: address, amount_sui: u64 }
+    public struct Sold has copy, drop { seller: address, amount_sui: u64 }
     public struct Graduated has copy, drop { creator: address, reward_sui: u64, treasury: address }
     public struct GraduationReady has copy, drop { creator: address, token_supply: u64, spot_price_sui_approx: u64 }
     public struct PoolCreated has copy, drop { 
         token_type: TypeName,
         sui_amount: u64,
         token_amount: u64,
-        pool_id: address,
-        locked_position_id: address,
-        lp_fee_recipient: address
+        lock_until: u64,
+        lp_recipient: address
     }
 
     const E_CREATION_PAUSED: u64 = 1;
@@ -81,17 +64,14 @@ module suilfg_launch::bonding_curve {
     const E_NOT_WHITELISTED: u64 = 3;
     const E_NOT_GRADUATED: u64 = 4;
     const E_LP_ALREADY_SEEDED: u64 = 5;
-    const E_SUPPLY_EXCEEDED: u64 = 6;
     const E_INVALID_CETUS_CONFIG: u64 = 6;
-    const E_INVALID_BURN_MANAGER: u64 = 7;
-    const E_TICKER_ALREADY_EXISTS: u64 = 8;
 
-    fun init_for_token<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
             sui_reserve: balance::zero<SUI>(),
-            token_supply: 0,  // Start at 0 (formula includes base_price to prevent division issues)
+            token_supply: 0,
             platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
             creator: creator,
@@ -104,18 +84,17 @@ module suilfg_launch::bonding_curve {
             graduated: false,
             lp_seeded: false,
             reward_paid: false,
-            lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
         }
     }
 
-    fun init_for_token_with_m<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, m_num: u64, m_den: u128, ctx: &mut TxContext): BondingCurve<T> {
+    fun init_for_token_with_m<T: drop + store>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, m_num: u64, m_den: u128, ctx: &mut TxContext): BondingCurve<T> {
         assert!(m_den > 0, 1101);
         assert!(m_num > 0, 1102);
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
             sui_reserve: balance::zero<SUI>(),
-            token_supply: 0,  // Start at 0 (formula includes base_price to prevent division issues)
+            token_supply: 0,
             platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
             creator: creator,
@@ -128,178 +107,45 @@ module suilfg_launch::bonding_curve {
             graduated: false,
             lp_seeded: false,
             reward_paid: false,
-            lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
         }
     }
 
-    public fun freeze_trading<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
-    public fun initiate_whitelisted_exit<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
+    public fun freeze_trading<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::Frozen; }
+    public fun initiate_whitelisted_exit<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>) { curve.status = TradingStatus::WhitelistedExit; }
 
-    public entry fun create_new_meme_token<T: drop>(
+    public entry fun create_new_meme_token<T: drop + store>(
         cfg: &PlatformConfig,
-        ticker_registry: &mut TickerRegistry,
         treasury: TreasuryCap<T>,
-        metadata: &coin::CoinMetadata<T>,
-        clock: &Clock,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
-        
-        // Get ticker symbol from metadata
-        let ticker_ascii = coin::get_symbol(metadata);
-        let ticker_str = string::from_ascii(ticker_ascii);
-        
-        // Check ticker availability (free claim via cooldown expiry or max lock period)
-        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
-        let is_claimable = ticker_registry::is_ticker_claimable(ticker_registry, ticker_str, max_lock_ms, clock);
-        
-        // If ticker exists and is NOT claimable, it's taken (no fee bypass in simple version)
-        if (ticker_registry::contains(ticker_registry, ticker_str) && !is_claimable) {
-            abort E_TICKER_ALREADY_EXISTS
-        };
-        
         let creator_addr = sender(ctx);
         let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
-        let curve_id = object::id(&curve);
-        
-        // Register ticker with current timestamp
-        let now = clock::timestamp_ms(clock);
-        let cooldown_ends = now + max_lock_ms;
-        
-        ticker_registry::mark_active_with_lock(
-            ticker_registry,
-            ticker_str,
-            curve_id,
-            now,
-            cooldown_ends
-        );
-        
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);
     }
 
-    public entry fun create_new_meme_token_with_m<T: drop>(
+    public entry fun create_new_meme_token_with_m<T: drop + store>(
         cfg: &PlatformConfig,
-        ticker_registry: &mut TickerRegistry,
         treasury: TreasuryCap<T>,
-        metadata: &coin::CoinMetadata<T>,
         m_num: u64,
         m_den: u128,
-        clock: &Clock,
         ctx: &mut TxContext
     ) {
         if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
-        
-        // Get ticker symbol from metadata
-        let ticker_ascii = coin::get_symbol(metadata);
-        let ticker_str = string::from_ascii(ticker_ascii);
-        
-        // Check ticker availability (free claim via cooldown expiry or max lock period)
-        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
-        let is_claimable = ticker_registry::is_ticker_claimable(ticker_registry, ticker_str, max_lock_ms, clock);
-        
-        // If ticker exists and is NOT claimable, it's taken (no fee bypass in simple version)
-        if (ticker_registry::contains(ticker_registry, ticker_str) && !is_claimable) {
-            abort E_TICKER_ALREADY_EXISTS
-        };
-        
         let creator_addr = sender(ctx);
         let mut curve = init_for_token_with_m<T>(cfg, creator_addr, treasury, m_num, m_den, ctx);
-        let curve_id = object::id(&curve);
-        
-        // Register ticker with current timestamp
-        let now = clock::timestamp_ms(clock);
-        let cooldown_ends = now + max_lock_ms;
-        
-        ticker_registry::mark_active_with_lock(
-            ticker_registry,
-            ticker_str,
-            curve_id,
-            now,
-            cooldown_ends
-        );
-        
         event::emit(Created { creator: creator_addr });
         transfer::share_object(curve);
     }
 
-    // Create with fee-based early ticker reuse (for graduated tokens on cooldown)
-    public entry fun create_new_meme_token_with_fee<T: drop>(
-        cfg: &PlatformConfig,
-        ticker_registry: &mut TickerRegistry,
-        treasury: TreasuryCap<T>,
-        metadata: &coin::CoinMetadata<T>,
-        mut reuse_fee_payment: Coin<SUI>,
-        clock: &Clock,
-        ctx: &mut TxContext
-    ) {
-        if (platform_config::get_creation_is_paused(cfg)) { abort E_CREATION_PAUSED; } else {};
-        
-        // Get ticker symbol from metadata
-        let ticker_ascii = coin::get_symbol(metadata);
-        let ticker_str = string::from_ascii(ticker_ascii);
-        
-        // Check if ticker exists and get required fee
-        let max_lock_ms = platform_config::get_ticker_max_lock_ms(cfg);
-        let is_claimable = ticker_registry::is_ticker_claimable(ticker_registry, ticker_str, max_lock_ms, clock);
-        
-        let creator_addr = sender(ctx);
-        let mut curve = init_for_token<T>(cfg, creator_addr, treasury, ctx);
-        let curve_id = object::id(&curve);
-        
-        let now = clock::timestamp_ms(clock);
-        let cooldown_ends = now + max_lock_ms;
-        
-        // Check if ticker exists (for reuse) or is new
-        let ticker_exists = ticker_registry::contains(ticker_registry, ticker_str);
-        
-        // If claimable for free, refund payment and proceed
-        if (is_claimable) {
-            transfer::public_transfer(reuse_fee_payment, sender(ctx));
-            
-            if (ticker_exists) {
-                // UPDATE existing ticker (preserves history)
-                ticker_registry::update_ticker_for_reuse(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
-            } else {
-                // New ticker - create fresh entry
-                ticker_registry::mark_active_with_lock(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
-            };
-        } else if (ticker_exists) {
-            // Ticker exists and NOT claimable - check if fee can bypass
-            let required_fee = ticker_registry::get_current_reuse_fee(ticker_registry, ticker_str);
-            let paid = coin::value(&reuse_fee_payment);
-            
-            if (paid < required_fee) {
-                // Not enough fee paid - abort
-                transfer::public_transfer(reuse_fee_payment, sender(ctx));
-                abort E_TICKER_ALREADY_EXISTS
-            };
-            
-            // Fee is sufficient - collect it to treasury
-            let treasury_addr = platform_config::get_treasury_address(cfg);
-            transfer::public_transfer(reuse_fee_payment, treasury_addr);
-            
-            // UPDATE existing ticker (preserves history) - NO REMOVAL!
-            ticker_registry::update_ticker_for_reuse(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
-        } else {
-            // Ticker doesn't exist - refund payment and create fresh
-            transfer::public_transfer(reuse_fee_payment, sender(ctx));
-            ticker_registry::mark_active_with_lock(ticker_registry, ticker_str, curve_id, now, cooldown_ends);
-        };
-        
-        event::emit(Created { creator: creator_addr });
-        transfer::share_object(curve);
-    }
-
-    public entry fun buy<T: drop>(
+    public entry fun buy<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
-        referral_registry: &mut ReferralRegistry,
         mut payment: Coin<SUI>,
         max_sui_in: u64,
         min_tokens_out: u64,
         deadline_ts_ms: u64,
-        referrer: Option<address>,
         clk: &Clock,
         ctx: &mut TxContext
     ) {
@@ -312,18 +158,6 @@ module suilfg_launch::bonding_curve {
 
         // Deadline check
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {}; // E_DEADLINE_EXPIRED
-        
-        let buyer = sender(ctx);
-        
-        // AUTO-REGISTER: Try to set referrer if provided and user has none
-        if (option::is_some(&referrer)) {
-            referral_registry::try_register(
-                referral_registry,
-                buyer,
-                *option::borrow(&referrer),
-                clock::timestamp_ms(clk)
-            );
-        };
 
         let gross_in = coin::value(&payment);
         if (gross_in > max_sui_in) { abort 5; }; // E_MAX_IN_EXCEEDED
@@ -339,32 +173,18 @@ module suilfg_launch::bonding_curve {
             };
         };
 
-        // Calculate fees
-        let trade_amount_after_first_fee = coin::value(&payment);
-        let platform_fee = trade_amount_after_first_fee * curve.platform_fee_bps / 10_000;
-        let creator_fee = trade_amount_after_first_fee * curve.creator_fee_bps / 10_000;
-        
-        // Calculate and pay referral reward (comes from platform's cut)
-        let referral_fee = calculate_and_pay_referral(
-            cfg,
-            referral_registry,
-            buyer,
-            trade_amount_after_first_fee,
-            &mut payment,
-            ctx
-        );
-        
-        // Platform gets: platform_fee - referral_fee
-        let actual_platform_fee = platform_fee - referral_fee;
-        
-        if (actual_platform_fee > 0) {
-            let fee_coin = coin::split(&mut payment, actual_platform_fee, ctx);
+        // Platform and creator fees based on trade size (excluding first_fee)
+        let platform_fee = coin::value(&payment) * curve.platform_fee_bps / 10_000;
+        let creator_fee = coin::value(&payment) * curve.creator_fee_bps / 10_000;
+
+        if (platform_fee > 0) {
+            let fee_coin = coin::split(&mut payment, platform_fee, ctx);
             transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
-        };
+        } else { };
         if (creator_fee > 0) {
             let fee_coin = coin::split(&mut payment, creator_fee, ctx);
             transfer::public_transfer(fee_coin, curve.creator);
-        };
+        } else { };
 
         // Remaining trade amount
         let trade_in = coin::value(&payment);
@@ -377,32 +197,13 @@ module suilfg_launch::bonding_curve {
         if (tokens_out < min_tokens_out || tokens_out == 0) { abort 6; }; // E_MIN_OUT_NOT_MET
 
         // Compute exact used amount for tokens_out and split refund
-        // If we hit supply cap (s2_clamped < s2_target), ALWAYS refund excess
-        // Otherwise, only refund if remaining > 0.001 SUI (dust threshold)
         let used_u128 = integrate_cost_u128(s1, s2_clamped, curve.m_num, curve.m_den, curve.base_price_mist);
         let used = narrow_u128_to_u64(used_u128);
-        let payment_value = coin::value(&payment);
-        
-        // Only calculate refund if we have more than needed
-        if (used < payment_value) {
-            let remaining = payment_value - used;
-            let hit_supply_cap = s2_clamped < s2_target;
-            let dust_threshold = 1_000_000; // 0.001 SUI
-            
-            if (hit_supply_cap) {
-                // Near graduation: ALWAYS refund excess, regardless of amount
-                if (remaining > 0) {
-                    let refund = coin::split(&mut payment, remaining, ctx);
-                    transfer::public_transfer(refund, sender(ctx));
-                };
-            } else {
-                // Normal case: only refund if > dust threshold
-                if (remaining > dust_threshold) {
-                    let refund = coin::split(&mut payment, remaining, ctx);
-                    transfer::public_transfer(refund, sender(ctx));
-                };
-            };
-        };
+        let remaining = coin::value(&payment) - used;
+        if (remaining > 0) {
+            let refund = coin::split(&mut payment, remaining, ctx);
+            transfer::public_transfer(refund, sender(ctx));
+        } else { };
 
         // Deposit used amount into reserve
         let deposit = coin::into_balance(payment);
@@ -411,49 +212,31 @@ module suilfg_launch::bonding_curve {
         // Mint tokens as Coin<T> to buyer and update supply
         curve.token_supply = s2_clamped;
         let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_out, ctx);
-        transfer::public_transfer(minted, buyer);
-        
-        let referrer_addr = if (option::is_some(&referral_registry::get_referrer(referral_registry, buyer))) {
-            *option::borrow(&referral_registry::get_referrer(referral_registry, buyer))
-        } else {
-            @0x0
-        };
-        event::emit(Bought { buyer, amount_sui: used, referrer: referrer_addr });
+        transfer::public_transfer(minted, sender(ctx));
+        event::emit(Bought { buyer: sender(ctx), amount_sui: used });
     }
 
-    public entry fun sell<T: drop>(
+    public entry fun sell<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
-        referral_registry: &mut ReferralRegistry,
         mut tokens: Coin<T>,
         amount_tokens: u64,
         min_sui_out: u64,
         deadline_ts_ms: u64,
-        referrer: Option<address>,
         clk: &Clock,
         ctx: &mut TxContext
     ) {
         // Only allow when open or whitelisted exit; if WL, enforce allowlist
-        let seller = sender(ctx);
         match (curve.status) {
             TradingStatus::Open => { },
             TradingStatus::Frozen => { abort E_TRADING_FROZEN; },
             TradingStatus::WhitelistedExit => {
-                if (!is_whitelisted(&curve.whitelist, seller)) { abort E_NOT_WHITELISTED; }
+                let user = sender(ctx);
+                if (!is_whitelisted(&curve.whitelist, user)) { abort E_NOT_WHITELISTED; }
             }
         };
 
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {}; // E_DEADLINE_EXPIRED
-        
-        // AUTO-REGISTER: Try to set referrer if provided (in case they received tokens)
-        if (option::is_some(&referrer)) {
-            referral_registry::try_register(
-                referral_registry,
-                seller,
-                *option::borrow(&referrer),
-                clock::timestamp_ms(clk)
-            );
-        };
 
         // Compute payout and fees
         let s1 = curve.token_supply;
@@ -464,19 +247,7 @@ module suilfg_launch::bonding_curve {
 
         let platform_fee = gross * curve.platform_fee_bps / 10_000;
         let creator_fee = gross * curve.creator_fee_bps / 10_000;
-        
-        // Calculate referral fee (comes from platform's cut)
-        let referral_bps = platform_config::get_referral_fee_bps(cfg);
-        let referrer_opt = referral_registry::get_referrer(referral_registry, seller);
-        let referral_fee = if (option::is_some(&referrer_opt)) {
-            gross * referral_bps / 10_000
-        } else {
-            0
-        };
-        
-        // Platform gets: platform_fee - referral_fee
-        let actual_platform_fee = platform_fee - referral_fee;
-        let net = gross - actual_platform_fee - creator_fee - referral_fee;
+        let net = gross - platform_fee - creator_fee;
 
         // Burn the tokens being sold; if needed, split first
         let val = coin::value(&tokens);
@@ -492,41 +263,24 @@ module suilfg_launch::bonding_curve {
         // Withdraw from reserve
         let payout_bal = balance::split(&mut curve.sui_reserve, net);
         let payout_coin = coin::from_balance(payout_bal, ctx);
-        transfer::public_transfer(payout_coin, seller);
+        transfer::public_transfer(payout_coin, sender(ctx));
 
-        // Pay referral reward if applicable
-        if (referral_fee > 0 && option::is_some(&referrer_opt)) {
-            let referrer = *option::borrow(&referrer_opt);
-            let ref_bal = balance::split(&mut curve.sui_reserve, referral_fee);
-            let ref_coin = coin::from_balance(ref_bal, ctx);
-            transfer::public_transfer(ref_coin, referrer);
-            
-            // Update stats
-            referral_registry::record_reward(referral_registry, referrer, referral_fee);
-        };
-
-        if (actual_platform_fee > 0) {
-            let fee_bal = balance::split(&mut curve.sui_reserve, actual_platform_fee);
+        if (platform_fee > 0) {
+            let fee_bal = balance::split(&mut curve.sui_reserve, platform_fee);
             let fee_coin = coin::from_balance(fee_bal, ctx);
             transfer::public_transfer(fee_coin, platform_config::get_treasury_address(cfg));
-        };
+        } else {};
         if (creator_fee > 0) {
             let fee_bal = balance::split(&mut curve.sui_reserve, creator_fee);
             let fee_coin = coin::from_balance(fee_bal, ctx);
             transfer::public_transfer(fee_coin, curve.creator);
-        };
+        } else {};
 
         curve.token_supply = curve.token_supply - amount_tokens;
-        
-        let referrer_addr = if (option::is_some(&referrer_opt)) {
-            *option::borrow(&referrer_opt)
-        } else {
-            @0x0
-        };
-        event::emit(Sold { seller, amount_sui: net, referrer: referrer_addr });
+        event::emit(Sold { seller: sender(ctx), amount_sui: net });
     }
 
-    public entry fun try_graduate<T: drop>(
+    public entry fun try_graduate<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         _ctx: &mut TxContext
@@ -541,7 +295,7 @@ module suilfg_launch::bonding_curve {
         event::emit(GraduationReady { creator: curve.creator, token_supply: curve.token_supply, spot_price_sui_approx: spot_u64 });
     }
 
-    public entry fun distribute_payouts<T: drop>(
+    public entry fun distribute_payouts<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         ctx: &mut TxContext
@@ -554,7 +308,7 @@ module suilfg_launch::bonding_curve {
         // Platform takes its cut (10% = 1,333 SUI)
         if (platform_cut > 0) {
             let platform_balance = balance::split(&mut curve.sui_reserve, platform_cut);
-            let mut platform_coin = coin::from_balance(platform_balance, ctx);
+            let platform_coin = coin::from_balance(platform_balance, ctx);
             
             // Creator payout comes FROM platform's cut (40 SUI from 1,333 SUI)
             if (creator_payout > 0 && creator_payout <= platform_cut) {
@@ -574,7 +328,7 @@ module suilfg_launch::bonding_curve {
     /// DEPRECATED: Use seed_pool_and_create_cetus_with_lock() instead
     /// 
     /// SECURITY: Team allocation sent to treasury_address (from config)
-    public entry fun seed_pool_prepare<T: drop>(
+    public entry fun seed_pool_prepare<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         bump_bps: u64,
@@ -624,37 +378,32 @@ module suilfg_launch::bonding_curve {
         curve.lp_seeded = true;
     }
 
-    /// Creates Cetus pool with PERMANENT LP burn (cannot be removed!)
+    /// Creates Cetus pool with 100-year liquidity lock
     /// This is the PRIMARY graduation function - fully automatic, on-chain
     /// 
     /// Steps:
     /// 1. Mints team allocation (2M tokens)
-    /// 2. Creates Cetus CLMM pool with initial liquidity
-    /// 3. BURNS the LP position permanently (maximum trust!)
-    /// 4. Stores CetusLPBurnProof for fee collection
-    /// 5. Platform earns LP fees forever (changeable recipient)
+    /// 2. Creates Cetus CLMM pool
+    /// 3. Adds liquidity with 100-year lock (maximum trust)
+    /// 4. LP Position NFT sent to lp_recipient_address
+    /// 5. Platform earns 0.3% LP fees (permissionless collection)
     ///
     /// Parameters:
-    /// - cetus_global_config: Cetus protocol config object (validated!)
-    /// - burn_manager: Cetus LP burn manager (validated!)
-    /// - pools: Cetus pools registry
-    /// - tick_spacing: Pool tick spacing (60 for 0.3% fee tier)
-    /// - coin_metadata: Token metadata for pool creation
+    /// - cetus_global_config: Cetus protocol config object (validated against config!)
+    /// - bump_bps: Optional price bump (0-1000 bps), usually 0
+    /// - tick_lower/tick_upper: Liquidity range (typically full range)
     /// 
     /// SECURITY FEATURES:
-    /// 1. Team allocation sent to treasury_address (admin controlled)
+    /// 1. Team allocation sent to treasury_address (from config)
     /// 2. Cetus config validated against admin-set address
-    /// 3. LP position PERMANENTLY BURNED - cannot rug!
-    /// 4. Fee recipient changeable for flexibility
-    public entry fun seed_pool_and_create_cetus_with_lock<T: drop>(
+    /// This prevents ALL fund theft attacks!
+    public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         cetus_global_config: &GlobalConfig,
-        pools: &mut Pools,
-        tick_spacing: u32,
-        initialize_sqrt_price: u128,
-        coin_metadata_sui: &coin::CoinMetadata<SUI>,
-        coin_metadata_token: &coin::CoinMetadata<T>,
+        bump_bps: u64,
+        tick_lower: u32,
+        tick_upper: u32,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
@@ -678,7 +427,8 @@ module suilfg_launch::bonding_curve {
         
         // 2. Calculate pool amounts
         let total_sui_mist = balance::value(&curve.sui_reserve);
-        let sui_for_lp = total_sui_mist; // Use all remaining reserve
+        let bump_amount = (total_sui_mist * bump_bps) / 10000;
+        let sui_for_lp = total_sui_mist - bump_amount;
         
         let remaining_supply = TOTAL_SUPPLY - curve.token_supply;
         let token_for_lp = remaining_supply;
@@ -688,108 +438,66 @@ module suilfg_launch::bonding_curve {
         let lp_sui_balance = balance::split(&mut curve.sui_reserve, sui_for_lp);
         let lp_sui_coin = coin::from_balance(lp_sui_balance, ctx);
         
-        // 4. Create Cetus pool with initial liquidity using pool_creator
-        // This automatically creates pool + adds liquidity in one transaction
-        let (tick_lower, tick_upper) = pool_creator::full_range_tick_range(tick_spacing);
-        
-        let (position_nft, refund_sui, refund_token) = pool_creator::create_pool_v2<SUI, T>(
+        // 4. Create Cetus pool (0.3% fee tier)
+        let pool = cetus_pool::create_pool<SUI, T>(
             cetus_global_config,
-            pools,
-            tick_spacing,
-            initialize_sqrt_price,
-            std::string::utf8(b"SuiLFG Pool"),
+            1000000,  // Initial sqrt price
+            ctx
+        );
+        
+        // 5. Add liquidity with 100-YEAR LOCK
+        let lock_duration_ms: u64 = 3_153_600_000_000; // 100 years
+        let lock_until = clock::timestamp_ms(clock) + lock_duration_ms;
+        
+        let position_nft = cetus_position::open_position_with_liquidity_with_lock<SUI, T>(
+            cetus_global_config,
+            &mut pool,
             tick_lower,
             tick_upper,
             lp_sui_coin,
             lp_tokens,
-            coin_metadata_sui,
-            coin_metadata_token,
-            true, // fix_amount_a (use all SUI)
-            clock,
+            lock_until,
             ctx
         );
         
-        // Handle refunds (should be minimal/zero for full range)
-        if (coin::value(&refund_sui) > 0) {
-            let refund_balance = coin::into_balance(refund_sui);
-            balance::join(&mut curve.sui_reserve, refund_balance);
-        } else {
-            coin::destroy_zero(refund_sui);
-        };
-        if (coin::value(&refund_token) > 0) {
-            coin::burn(&mut curve.treasury, refund_token);
-        } else {
-            coin::destroy_zero(refund_token);
-        };
+        // 6. Send LP Position NFT to configured recipient
+        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
+        transfer::public_transfer(position_nft, lp_recipient);
         
-        // 5. PERMANENTLY LOCK the LP position in our custom locker!
-        // This makes liquidity removal IMPOSSIBLE with upgrade-safe flag
-        let pool_id = @0x0; // Pool address will be in Cetus events
-        let locked_lp = lp_locker::lock_position_permanent<SUI, T>(
-            position_nft,
-            object::id_from_address(pool_id),
-            curve.lp_fee_recipient,
-            object::id(curve),
-            clock::timestamp_ms(clock),
-            ctx
-        );
-        
-        let locked_position_id = object::id_address(&locked_lp);
-        
-        // 6. Share the locked position object - anyone can verify it's permanently locked!
-        // Fees can still be collected via collect_lp_fees function
-        lp_locker::share_locked_position(locked_lp);
+        // 7. Share the pool object publicly
+        transfer::public_share_object(pool);
         
         curve.lp_seeded = true;
-        curve.token_supply = curve.token_supply + token_for_lp;
         
         event::emit(PoolCreated {
             token_type: type_name::get<T>(),
             sui_amount: sui_for_lp,
             token_amount: token_for_lp,
-            pool_id: @0x0, // Pool is shared, can be found via Cetus events
-            locked_position_id,
-            lp_fee_recipient: curve.lp_fee_recipient
+            lock_until,
+            lp_recipient
         });
     }
     
-    /// Collect LP fees from LOCKED Cetus position (permissionless!)
-    /// Anyone can call this to send accumulated fees to the changeable lp_fee_recipient
-    /// 
-    /// This works even though liquidity is permanently locked!
-    /// Note: The locked_lp object can be different from curve's original lock,
-    /// so anyone can collect fees from any locked position to its designated recipient.
-    public entry fun collect_lp_fees_from_locked_position<T: drop>(
-        locked_lp: &mut LockedLPPosition<SUI, T>,
-        cetus_config: &GlobalConfig,
+    /// Collect LP fees from Cetus position (permissionless!)
+    /// Anyone can call this to send accumulated fees to lp_recipient
+    public entry fun collect_lp_fees<T: drop + store>(
+        cfg: &PlatformConfig,
         pool: &mut Pool<SUI, T>,
+        position: &mut Position,
         ctx: &mut TxContext
     ) {
-        // Delegate to lp_locker module (which handles the actual collection)
-        lp_locker::collect_lp_fees<SUI, T>(
-            locked_lp,
-            cetus_config,
+        let (fee_sui, fee_token) = cetus_position::collect_fee<SUI, T>(
             pool,
+            position,
             ctx
         );
-    }
-    
-    /// Change the LP fee recipient address (admin only)
-    /// This allows flexibility while keeping liquidity permanently locked
-    public entry fun set_lp_fee_recipient<T: drop>(
-        _admin: &AdminCap,
-        curve: &mut BondingCurve<T>,
-        new_recipient: address
-    ) {
-        curve.lp_fee_recipient = new_recipient;
-    }
-    
-    /// View current LP fee recipient
-    public fun get_lp_fee_recipient<T: drop>(curve: &BondingCurve<T>): address {
-        curve.lp_fee_recipient
+        
+        let lp_recipient = platform_config::get_lp_recipient_address(cfg);
+        transfer::public_transfer(fee_sui, lp_recipient);
+        transfer::public_transfer(fee_token, lp_recipient);
     }
 
-    public fun spot_price_u128<T: drop>(curve: &BondingCurve<T>): u128 {
+    public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
         // p(s) = base_price + (m_num/m_den) * s^2
         let s = curve.token_supply;
         let s128 = (s as u128);
@@ -797,11 +505,11 @@ module suilfg_launch::bonding_curve {
         (curve.base_price_mist as u128) + quadratic_part
     }
 
-    public fun spot_price_u64<T: drop>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
+    public fun spot_price_u64<T: drop + store>(curve: &BondingCurve<T>): u64 { narrow_u128_to_u64(spot_price_u128(curve)) }
 
-    public fun minted_supply<T: drop>(curve: &BondingCurve<T>): u64 { curve.token_supply }
+    public fun minted_supply<T: drop + store>(curve: &BondingCurve<T>): u64 { curve.token_supply }
 
-    public entry fun withdraw_reserve_to_treasury<T: drop>(
+    public entry fun withdraw_reserve_to_treasury<T: drop + store>(
         _admin: &AdminCap,
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
@@ -813,7 +521,7 @@ module suilfg_launch::bonding_curve {
         transfer::public_transfer(c, platform_config::get_treasury_address(cfg));
     }
 
-    public entry fun withdraw_reserve_to<T: drop>(
+    public entry fun withdraw_reserve_to<T: drop + store>(
         _admin: &AdminCap,
         curve: &mut BondingCurve<T>,
         to: address,
@@ -825,7 +533,7 @@ module suilfg_launch::bonding_curve {
         transfer::public_transfer(c, to);
     }
 
-    public fun add_to_whitelist<T: drop>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
+    public fun add_to_whitelist<T: drop + store>(_admin: &AdminCap, curve: &mut BondingCurve<T>, user: address) {
         vector::push_back(&mut curve.whitelist, user);
     }
 
@@ -898,36 +606,4 @@ module suilfg_launch::bonding_curve {
     }
 
     fun min_u64(a: u64, b: u64): u64 { if (a < b) { a } else { b } }
-    
-    /// Calculate and pay referral reward (returns fee amount paid)
-    fun calculate_and_pay_referral(
-        cfg: &PlatformConfig,
-        referral_registry: &mut ReferralRegistry,
-        trader: address,
-        trade_amount: u64,
-        payment: &mut Coin<SUI>,
-        ctx: &mut TxContext
-    ): u64 {
-        // Check if trader has referrer on-chain
-        let referrer_opt = referral_registry::get_referrer(referral_registry, trader);
-        
-        if (option::is_none(&referrer_opt)) {
-            return 0  // No referrer, no fee
-        };
-        
-        let referrer = *option::borrow(&referrer_opt);
-        let referral_bps = platform_config::get_referral_fee_bps(cfg);
-        let referral_fee = trade_amount * referral_bps / 10_000;
-        
-        if (referral_fee > 0) {
-            // Pay referrer INSTANTLY
-            let referral_coin = coin::split(payment, referral_fee, ctx);
-            transfer::public_transfer(referral_coin, referrer);
-            
-            // Update stats
-            referral_registry::record_reward(referral_registry, referrer, referral_fee);
-        };
-        
-        referral_fee
-    }
 }

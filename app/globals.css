@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 15, 20, 25;
+  --background-end-rgb: 5, 10, 15;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-meme-pink via-meme-purple to-sui-blue bg-clip-text text-transparent;
+  }
+  
+  .gradient-border {
+    position: relative;
+    background: linear-gradient(90deg, #FF1694, #9945FF, #4DA2FF);
+    background-size: 200% 200%;
+    animation: gradient 3s ease infinite;
+  }
+  
+  .card-shine {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .card-shine::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+      45deg,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent
+    );
+    transform: rotate(45deg);
+    animation: shine 3s infinite;
+  }
+  
+  @keyframes shine {
+    0% {
+      transform: translateX(-100%) translateY(-100%) rotate(45deg);
+    }
+    100% {
+      transform: translateX(100%) translateY(100%) rotate(45deg);
+    }
+  }
+}

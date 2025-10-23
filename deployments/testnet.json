@@ -1,22 +1,18 @@
 {
   "network": "testnet",
-  "publisherAddress": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f",
-  "publishTxDigest": "6iZZmbeEKxRevSxversLS8Di3yspLFXusWDtcsoSirJQ",
-  "packageId": "0x78969a1ef8819e69bd93c08a8d75dc967283504cadb4e6d7be1044e80d985c54",
+  "publisherAddress": "0xbbec7691cbe5517fb78d39ae31aee0050cd720918f066db073e3114dad141193",
+  "publishTxDigest": "4ezMiZMBmgxQq4rGx9a5EZrzfRom4hFT6yG3eUidZofz",
+  "packageId": "0xfafa8675aefc386b4b1704b51db055753ff0f7fd084ee7d8c765632c30b402cd",
   "modules": [
     "bonding_curve",
-    "lp_locker",
     "platform_config",
-    "referral_registry",
     "ticker_registry"
   ],
   "objects": {
-    "PlatformConfig": "0x5b295aa4f90ee96c4375b492b1b156b8cb4c283143acf77883f6e92da3181859",
-    "AdminCap": "0xe93ec75662ba409f59910233c73f5b30a90131b143ec29d2f91df5527f1abc57",
-    "TickerRegistry": "0xcc4d42caae06c4ca57bddba89f45f7a744892db93edf2d11f3fac53511117ebf",
-    "ReferralRegistry": "0x49954dd62086dd302cc4c96e4b10d065cf1993f2ed72f8f83d275d048621151d",
-    "UpgradeCap": "0xe20a67a47ba80cc481a8c850cb310834af0c9859f2375cbf907f5ec2b04a9152"
+    "PlatformConfig": "0x49458dd8c6760042325cb0c7b90937c1f1b6443ee40a13c0522e786acf049785",
+    "AdminCap": "0x26109f8aeab202968912bde9625503629a4a0b1f72ce79f0877f530c60d07c87",
+    "TickerRegistry": "0x07eedd9a9a9a60944d394e0ac3dc6920f19ff8e271332475374f5aee2b12148a",
+    "UpgradeCap": "0xe7632663a295d9d86c575d2b0b7a73b8829bbb22dd08163f36ec9d2c38de2451"
   },
-  "version": 1,
-  "deployedAt": "2025-10-21T13:07:00Z"
+  "version": 1
 }
