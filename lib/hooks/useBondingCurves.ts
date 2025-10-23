@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { CONTRACTS } from '../constants';
+import { toast } from 'sonner';
 
 export interface BondingCurve {
   id: string;
@@ -90,9 +91,42 @@ export function useBondingCurves() {
         }
         
         console.log(`📊 Loaded ${curves.length} bonding curves`);
+        
+        // Final success toast
+        toast.success('📊 Coins loaded!', {
+          description: `${curves.length} coins available for trading`,
+          duration: 4000,
+        });
+        
         return curves;
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Failed to fetch bonding curves:', error);
+        
+        // Show detailed error toast for mobile debugging
+        const errorMsg = error.message || error.toString();
+        toast.error('❌ Failed to load coins', {
+          description: (
+            <div>
+              <p className="mb-2">{errorMsg}</p>
+              <button
+                onClick={() => {
+                  const debugInfo = {
+                    error: errorMsg,
+                    package: CONTRACTS.PLATFORM_PACKAGE,
+                    timestamp: new Date().toISOString(),
+                  };
+                  navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
+                  toast.success('Error details copied! 📋');
+                }}
+                className="px-3 py-1 bg-white/10 rounded text-xs hover:bg-white/20 transition-colors"
+              >
+                📋 Copy Error Details
+              </button>
+            </div>
+          ),
+          duration: 10000,
+        });
+        
         throw error; // Re-throw so the error UI shows
       }
     },
@@ -123,6 +157,29 @@ export function useBondingCurve(curveId: string) {
       let coinType = '';
       const objectType = curveObject.data.content.type;
       const match = objectType.match(/<(.+)>/);
+      if (match) {
+        coinType = match[1];
+      }
+      
+      return {
+        id: curveId,
+        ticker: fields.ticker || 'UNKNOWN',
+        name: fields.name || 'Unknown',
+        description: fields.description || '',
+        imageUrl: fields.image_url || '',
+        creator: fields.creator,
+        curveSupply: fields.curve_supply || '0',
+        curveBalance: fields.curve_balance || '0',
+        graduated: fields.graduated || false,
+        coinType,
+        ...fields,
+      };
+    },
+    enabled: !!curveId,
+    refetchInterval: 5000,
+  });
+}
+   const match = objectType.match(/<(.+)>/);
       if (match) {
         coinType = match[1];
       }
