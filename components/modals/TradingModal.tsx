@@ -73,15 +73,12 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
         }
 
         // Build buy transaction
-        const maxSlippage = (BigInt(amountInSmallest) * 102n) / 100n; // 2% slippage
-
         const tx = buyTokensTransaction({
           curveId: curve.id,
+          coinType: curve.coinType,
           paymentCoinId: paymentCoins[0].coinObjectId,
-          amountIn: amountInSmallest,
-          minOut: '0', // No minimum for now (can add slippage calculation)
-          maxIn: maxSlippage.toString(),
-          recipient: currentAccount.address,
+          maxSuiIn: amountInSmallest,
+          minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
 
         signAndExecute(
@@ -138,10 +135,10 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
         // Build sell transaction
         const tx = sellTokensTransaction({
           curveId: curve.id,
+          coinType: curve.coinType,
           memeTokenCoinId: memeCoins[0].coinObjectId,
-          amountIn: amountInSmallest,
-          minOut: '0',
-          recipient: currentAccount.address,
+          tokensToSell: amountInSmallest,
+          minSuiOut: '0',
         });
 
         signAndExecute(
