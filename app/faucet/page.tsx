@@ -27,7 +27,7 @@ export default function FaucetPage() {
             <ul className="space-y-2 text-sm text-gray-300">
               <li>• Trading currency for all memecoins on the platform</li>
               <li>• 9 decimals precision</li>
-              <li>• Faucet provides 1,000 tokens per claim</li>
+              <li>• Faucet provides 100 tokens every 6 hours</li>
               <li>• Testnet only - not real money</li>
             </ul>
           </div>

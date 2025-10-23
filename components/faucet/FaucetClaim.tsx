@@ -24,24 +24,22 @@ export function FaucetClaim() {
       const tx = new Transaction();
       tx.setGasBudget(100_000_000);
 
-      // Call faucet::claim function
-      const [coin] = tx.moveCall({
-        target: `${CONTRACTS.FAUCET_PACKAGE}::test_sui_faucet::claim`,
+      // Call faucet::claim function (entry function - no need to transfer)
+      tx.moveCall({
+        target: `${CONTRACTS.FAUCET_PACKAGE}::faucet::claim`,
         arguments: [
           tx.object(CONTRACTS.FAUCET_OBJECT),
+          tx.object('0x6'), // Clock
         ],
       });
-
-      // Transfer claimed tokens to user
-      tx.transferObjects([coin], currentAccount.address);
 
       const result = await signAndExecute({
         transaction: tx,
       });
 
       if (result.digest) {
-        toast.success('🎉 Claimed 1,000 SUILFG_MEMEFI!', {
-          description: 'Tokens have been sent to your wallet',
+        toast.success('🎉 Claimed 100 SUILFG_MEMEFI!', {
+          description: 'Tokens sent to your wallet. Can claim again in 6 hours.',
           action: {
             label: 'View',
             onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank'),
@@ -65,7 +63,7 @@ export function FaucetClaim() {
         <div className="text-6xl mb-4">💧</div>
         <h2 className="text-2xl font-bold mb-2">Claim Free Tokens</h2>
         <p className="text-gray-400">
-          Get 1,000 SUILFG_MEMEFI tokens to start trading
+          Get 100 SUILFG_MEMEFI tokens every 6 hours
         </p>
       </div>
 
@@ -75,7 +73,7 @@ export function FaucetClaim() {
           disabled={isClaiming}
           className="w-full px-6 py-4 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-bold text-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
         >
-          {isClaiming ? '⏳ Claiming...' : '💧 Claim 1,000 SUILFG_MEMEFI'}
+          {isClaiming ? '⏳ Claiming...' : '💧 Claim 100 SUILFG_MEMEFI'}
         </button>
       ) : (
         <div className="text-center py-8 bg-white/5 rounded-lg border border-white/10">

@@ -9,6 +9,7 @@ import { useCurrentAccount } from '@mysten/dapp-kit';
 
 export function Header() {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const account = useCurrentAccount();
   const pathname = usePathname();
   
@@ -66,8 +67,54 @@ export function Header() {
               )}
               
               <ConnectButton />
+              
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="md:hidden text-2xl"
+              >
+                {showMobileMenu ? '✕' : '☰'}
+              </button>
             </div>
           </div>
+          
+          {/* Mobile Menu */}
+          {showMobileMenu && (
+            <div className="md:hidden border-t border-white/10 py-4 space-y-2">
+              <Link 
+                href="/tokens" 
+                onClick={() => setShowMobileMenu(false)}
+                className={`block px-4 py-2 rounded-lg transition-colors ${isActive('/tokens') ? 'bg-white/10 text-gradient font-semibold' : 'hover:bg-white/5'}`}
+              >
+                🔥 Tokens
+              </Link>
+              <Link 
+                href="/faucet" 
+                onClick={() => setShowMobileMenu(false)}
+                className={`block px-4 py-2 rounded-lg transition-colors ${isActive('/faucet') ? 'bg-white/10 text-gradient font-semibold' : 'hover:bg-white/5'}`}
+              >
+                💧 Faucet
+              </Link>
+              <Link 
+                href="/portfolio" 
+                onClick={() => setShowMobileMenu(false)}
+                className={`block px-4 py-2 rounded-lg transition-colors ${isActive('/portfolio') ? 'bg-white/10 text-gradient font-semibold' : 'hover:bg-white/5'}`}
+              >
+                💼 Portfolio
+              </Link>
+              {account && (
+                <button
+                  onClick={() => {
+                    setShowCreateModal(true);
+                    setShowMobileMenu(false);
+                  }}
+                  className="w-full px-4 py-2 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold"
+                >
+                  + Create Coin
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </header>
       
