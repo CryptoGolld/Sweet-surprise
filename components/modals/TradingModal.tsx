@@ -148,8 +148,6 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
               setTimeout(() => window.location.reload(), 2000);
             },
             onError: (error) => {
-              console.error('Buy failed:', error);
-              
               const errorMsg = error.message || '';
               if (errorMsg.includes('0x6')) {
                 toast.error('Supply cap reached!', {
@@ -207,7 +205,6 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
               setTimeout(() => window.location.reload(), 2000);
             },
             onError: (error) => {
-              console.error('Sell failed:', error);
               toast.error('Sale failed', {
                 description: error.message?.slice(0, 100),
               });
