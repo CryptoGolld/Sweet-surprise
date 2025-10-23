@@ -5,6 +5,7 @@ import { BondingCurve } from '@/lib/hooks/useBondingCurves';
 import { TradingModal } from '../modals/TradingModal';
 import { truncateAddress, formatAmount, calculatePercentage } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
+import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
 
 interface CoinCardProps {
   curve: BondingCurve;
@@ -13,15 +14,24 @@ interface CoinCardProps {
 export function CoinCard({ curve }: CoinCardProps) {
   const [showTrading, setShowTrading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const { data: suiPrice = 1.0 } = useSuiPrice();
 
   const progress = calculatePercentage(
     curve.curveSupply,
     BONDING_CURVE.MAX_CURVE_SUPPLY * 1e9
   );
 
-  const marketCap = formatAmount(curve.curveBalance, 9);
+  const suiCollected = Number(curve.curveBalance) / 1e9;
   const tokensTraded = formatAmount(curve.curveSupply, 9);
   const age = Math.floor((Date.now() - curve.createdAt) / (1000 * 60)); // minutes
+
+  // Calculate Market Cap: Price per token * Total Supply
+  // Price per token = SUI collected / tokens sold (if any sold)
+  const tokensSold = Number(curve.curveSupply) / 1e9;
+  const pricePerToken = tokensSold > 0 ? suiCollected / tokensSold : 0;
+  const totalSupply = BONDING_CURVE.TOTAL_SUPPLY; // 1B tokens
+  const marketCapSui = pricePerToken * totalSupply;
+  const marketCapUsd = marketCapSui * suiPrice;
 
   const formatAge = (mins: number) => {
     if (mins < 60) return `${mins}m`;
@@ -34,16 +44,16 @@ export function CoinCard({ curve }: CoinCardProps) {
   return (
     <>
       <div
-        className={`bg-white/5 border border-white/10 rounded-xl overflow-hidden transition-all hover:bg-white/10 hover:border-meme-purple/50 hover:shadow-lg hover:shadow-meme-purple/10 ${
+        className={`bg-white/5 border border-white/10 rounded-lg overflow-hidden transition-all hover:bg-white/10 hover:border-meme-purple/50 hover:shadow-lg hover:shadow-meme-purple/10 ${
           isExpanded ? '' : 'cursor-pointer'
         }`}
         onClick={() => !isExpanded && setIsExpanded(true)}
       >
         {/* Compact View */}
         {!isExpanded ? (
-          <div className="p-4 flex items-center gap-4">
-            {/* Token Image */}
-            <div className="w-12 h-12 flex-shrink-0">
+          <div className="p-3 flex items-center gap-3">
+            {/* Token Image - Smaller */}
+            <div className="w-10 h-10 flex-shrink-0">
               {curve.imageUrl ? (
                 <img
                   src={curve.imageUrl}
@@ -53,51 +63,56 @@ export function CoinCard({ curve }: CoinCardProps) {
                     e.currentTarget.src = '';
                     e.currentTarget.style.display = 'none';
                     const parent = e.currentTarget.parentElement!;
-                    parent.innerHTML = '<div class="w-12 h-12 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg flex items-center justify-center text-2xl">🚀</div>';
+                    parent.innerHTML = '<div class="w-10 h-10 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg flex items-center justify-center text-xl">🚀</div>';
                   }}
                 />
               ) : (
-                <div className="w-12 h-12 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg flex items-center justify-center text-2xl">
+                <div className="w-10 h-10 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg flex items-center justify-center text-xl">
                   🚀
                 </div>
               )}
             </div>
 
-            {/* Token Info */}
+            {/* Token Info - Compact */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-bold text-lg truncate">${curve.ticker}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-base truncate">${curve.ticker}</h3>
                 {curve.graduated ? (
-                  <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
+                  <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] font-semibold rounded">
                     🎓
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 bg-meme-purple/20 text-meme-purple text-xs font-semibold rounded-full">
+                  <span className="px-1.5 py-0.5 bg-meme-purple/20 text-meme-purple text-[10px] font-semibold rounded">
                     🔥
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 truncate">{curve.name || 'Untitled'}</p>
+              <p className="text-xs text-gray-400 truncate leading-tight">{curve.name || 'Untitled'}</p>
             </div>
 
-            {/* Stats */}
-            <div className="hidden sm:flex items-center gap-6 text-sm">
-              <div>
-                <div className="text-gray-400 text-xs">Market Cap</div>
-                <div className="font-semibold text-meme-purple">{marketCap}</div>
+            {/* Stats - Always Visible */}
+            <div className="flex items-center gap-4 text-xs flex-shrink-0">
+              {/* Market Cap */}
+              <div className="text-right">
+                <div className="text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">MC</div>
+                <div className="font-bold text-meme-purple">{formatUSD(marketCapUsd)}</div>
               </div>
-              <div>
-                <div className="text-gray-400 text-xs">Progress</div>
-                <div className="font-semibold">{progress.toFixed(1)}%</div>
-              </div>
-              <div>
-                <div className="text-gray-400 text-xs">Age</div>
+              
+              {/* Age */}
+              <div className="text-right hidden sm:block">
+                <div className="text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">Age</div>
                 <div className="font-semibold">{formatAge(age)}</div>
+              </div>
+              
+              {/* Progress */}
+              <div className="text-right hidden md:block">
+                <div className="text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">Prog</div>
+                <div className="font-semibold">{progress.toFixed(0)}%</div>
               </div>
             </div>
 
             {/* Expand Icon */}
-            <div className="flex-shrink-0 text-gray-400">
+            <div className="flex-shrink-0 text-gray-400 text-xs">
               ▼
             </div>
           </div>
@@ -168,8 +183,8 @@ export function CoinCard({ curve }: CoinCardProps) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
               <div className="bg-white/5 rounded-lg p-3">
                 <div className="text-xs text-gray-400 mb-1">Market Cap</div>
-                <div className="text-lg font-bold text-meme-purple">{marketCap}</div>
-                <div className="text-xs text-gray-500">SUILFG</div>
+                <div className="text-lg font-bold text-meme-purple">{formatUSD(marketCapUsd)}</div>
+                <div className="text-xs text-gray-500">{suiCollected.toFixed(2)} SUI</div>
               </div>
               <div className="bg-white/5 rounded-lg p-3">
                 <div className="text-xs text-gray-400 mb-1">Volume</div>
