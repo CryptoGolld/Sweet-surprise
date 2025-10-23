@@ -5,6 +5,7 @@ import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-ki
 import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
+import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 
 interface CreateCoinModalProps {
   isOpen: boolean;
@@ -14,10 +15,13 @@ interface CreateCoinModalProps {
 export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
-  const [isCreating, setIsCreating] = useState(false);
-  const [status, setStatus] = useState('');
-  const [errorDetails, setErrorDetails] = useState('');
   
+  // UI State
+  const [currentStep, setCurrentStep] = useState(1); // 1 or 2
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [status, setStatus] = useState('');
+  
+  // Form Data
   const [formData, setFormData] = useState({
     ticker: '',
     name: '',
@@ -27,6 +31,16 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     telegram: '',
     website: '',
   });
+  
+  // Published Package Data (from step 1)
+  const [publishedData, setPublishedData] = useState<{
+    packageId: string;
+    moduleName: string;
+    structName: string;
+    treasuryCapId: string;
+    metadataId: string;
+    publishDigest: string;
+  } | null>(null);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -55,7 +69,8 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     return Object.keys(newErrors).length === 0;
   }
 
-  async function handleSubmit(e: FormEvent) {
+  // Step 1: Create Coin (Publish Package)
+  async function handleStep1(e: FormEvent) {
     e.preventDefault();
     
     if (!currentAccount) {
@@ -68,10 +83,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       return;
     }
 
-    setIsCreating(true);
+    setIsProcessing(true);
     
     try {
-      // Step 1: Compile on backend
+      // Compile on backend
       setStatus('Compiling package...');
       const { transaction: publishTx, moduleName, structName } = await createCoinTransaction({
         ticker: formData.ticker.toUpperCase(),
@@ -79,23 +94,22 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         description: formData.description,
       });
       
-      // Step 2: User signs to publish (they pay gas!)
-      setStatus('Please sign to publish package...');
+      // User signs to publish
+      setStatus('Please sign to create coin...');
       const publishResult = await signAndExecute({
         transaction: publishTx,
       });
       
-      // Check if transaction succeeded
       const digest = publishResult.digest;
       if (!digest) {
         throw new Error('Package publish failed - no digest returned');
       }
       
-      // Wait a moment for indexing
+      // Wait for indexing
+      setStatus('Package created! Waiting for confirmation...');
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Fetch full transaction details from RPC
-      const { getFullnodeUrl, SuiClient } = await import('@mysten/sui/client');
+      // Fetch transaction details
       const client = new SuiClient({ url: getFullnodeUrl('testnet') });
       const txDetails = await client.getTransactionBlock({
         digest,
@@ -109,7 +123,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         throw new Error('Package publish failed');
       }
       
-      // Step 3: Extract package ID and objects
+      // Extract package ID and objects
       const publishedObj = txDetails.objectChanges?.find(
         (obj: any) => obj.type === 'published'
       );
@@ -128,16 +142,60 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       const treasuryCapId = (treasuryCapObj as any).objectId;
       const metadataId = (metadataObj as any).objectId;
       
-      // Step 4: Create bonding curve
-      setStatus('Creating bonding curve...');
-      const curveTx = createCurveTransaction({
+      // Save data and move to step 2
+      setPublishedData({
         packageId,
         moduleName,
         structName,
         treasuryCapId,
         metadataId,
+        publishDigest: digest,
       });
       
+      setCurrentStep(2);
+      setStatus('');
+      
+      toast.success('✅ Step 1 Complete!', {
+        description: 'Coin package created. Now publish to bonding curve.',
+        duration: 4000,
+      });
+      
+    } catch (error: any) {
+      console.error('Step 1 failed:', error);
+      
+      toast.error('Failed to create coin', {
+        description: error.message || 'Please try again',
+        duration: 6000,
+      });
+      setStatus('');
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  // Step 2: Publish (Create Bonding Curve)
+  async function handleStep2(e: FormEvent) {
+    e.preventDefault();
+    
+    if (!publishedData) {
+      toast.error('Missing package data. Please restart.');
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      // Create bonding curve
+      setStatus('Creating bonding curve...');
+      const curveTx = createCurveTransaction({
+        packageId: publishedData.packageId,
+        moduleName: publishedData.moduleName,
+        structName: publishedData.structName,
+        treasuryCapId: publishedData.treasuryCapId,
+        metadataId: publishedData.metadataId,
+      });
+      
+      setStatus('Please sign to publish...');
       const curveResult = await signAndExecute({
         transaction: curveTx,
       });
@@ -147,7 +205,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       }
       
       // Success!
-      toast.success('🎉 Coin created successfully!', {
+      toast.success('🎉 Coin published successfully!', {
         description: `${formData.ticker} is now live on SuiLFG MemeFi`,
         action: {
           label: 'View',
@@ -156,7 +214,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         duration: 8000,
       });
       
-      // Reset form
+      // Reset and close
       setFormData({
         ticker: '',
         name: '',
@@ -166,48 +224,42 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         telegram: '',
         website: '',
       });
-      
+      setPublishedData(null);
+      setCurrentStep(1);
       setStatus('');
       onClose();
       
-      // Reload after a delay to show new coin
+      // Reload to show new coin
       setTimeout(() => window.location.reload(), 2000);
       
     } catch (error: any) {
-      console.error('Failed to create coin:', error);
+      console.error('Step 2 failed:', error);
       
-      // Build detailed error log for mobile debugging
-      const debugInfo = {
-        error: error.message || error.toString(),
-        stack: error.stack,
-        timestamp: new Date().toISOString(),
-        ticker: formData.ticker,
-        name: formData.name,
-      };
-      
-      const debugLog = JSON.stringify(debugInfo, null, 2);
-      setErrorDetails(debugLog);
-      
-      toast.error('Failed to create coin', {
-        description: (
-          <div>
-            <p className="mb-2">{error.message || 'Please try again'}</p>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(debugLog);
-                toast.success('Error details copied! 📋');
-              }}
-              className="px-3 py-1 bg-white/10 rounded text-xs hover:bg-white/20 transition-colors"
-            >
-              📋 Copy Error Details
-            </button>
-          </div>
-        ),
-        duration: 10000,
+      toast.error('Failed to publish', {
+        description: error.message || 'Please try again',
+        duration: 6000,
       });
       setStatus('');
     } finally {
-      setIsCreating(false);
+      setIsProcessing(false);
+    }
+  }
+
+  function handleClose() {
+    if (!isProcessing) {
+      setCurrentStep(1);
+      setPublishedData(null);
+      setStatus('');
+      setFormData({
+        ticker: '',
+        name: '',
+        description: '',
+        imageUrl: '',
+        twitter: '',
+        telegram: '',
+        website: '',
+      });
+      onClose();
     }
   }
 
@@ -215,145 +267,233 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-sui-dark border-2 border-white/20 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
         {/* Header */}
-        <div className="sticky top-0 bg-sui-dark border-b border-white/10 p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-gradient">🚀 Create Your Memecoin</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl transition-colors"
-          >
-            ×
-          </button>
+        <div className="sticky top-0 bg-sui-dark border-b border-white/10 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-gradient">🚀 Launch Your Memecoin</h2>
+            <button
+              onClick={handleClose}
+              disabled={isProcessing}
+              className="text-gray-400 hover:text-white text-2xl transition-colors disabled:opacity-50"
+            >
+              ×
+            </button>
+          </div>
+          
+          {/* Step Indicator */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                currentStep === 1 
+                  ? 'bg-gradient-to-r from-meme-pink to-meme-purple text-white' 
+                  : publishedData 
+                  ? 'bg-green-500 text-white'
+                  : 'bg-white/10 text-gray-400'
+              }`}>
+                {publishedData ? '✓' : '1'}
+              </div>
+              <span className={currentStep === 1 ? 'font-semibold' : 'text-gray-400'}>
+                Create Coin
+              </span>
+            </div>
+            
+            <div className="flex-1 h-px bg-white/20"></div>
+            
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                currentStep === 2 
+                  ? 'bg-gradient-to-r from-meme-pink to-meme-purple text-white' 
+                  : 'bg-white/10 text-gray-400'
+              }`}>
+                2
+              </div>
+              <span className={currentStep === 2 ? 'font-semibold' : 'text-gray-400'}>
+                Publish
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Ticker */}
-          <div>
-            <label className="block text-sm font-semibold mb-2">
-              Ticker Symbol <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="PEPE"
-              maxLength={10}
-              value={formData.ticker}
-              onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-            />
-            {errors.ticker && (
-              <p className="text-red-400 text-sm mt-1">{errors.ticker}</p>
-            )}
-          </div>
+        {/* Step 1: Create Coin */}
+        {currentStep === 1 && (
+          <form onSubmit={handleStep1} className="p-6 space-y-6">
+            {/* Ticker */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">
+                Ticker Symbol <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="PEPE"
+                maxLength={10}
+                value={formData.ticker}
+                onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
+              />
+              {errors.ticker && (
+                <p className="text-red-400 text-sm mt-1">{errors.ticker}</p>
+              )}
+            </div>
 
-          {/* Name */}
-          <div>
-            <label className="block text-sm font-semibold mb-2">
-              Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Pepe Coin"
-              maxLength={50}
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-            />
-            {errors.name && (
-              <p className="text-red-400 text-sm mt-1">{errors.name}</p>
-            )}
-          </div>
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Pepe Coin"
+                maxLength={50}
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
+              />
+              {errors.name && (
+                <p className="text-red-400 text-sm mt-1">{errors.name}</p>
+              )}
+            </div>
 
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-semibold mb-2">Description</label>
-            <textarea
-              placeholder="Tell us about your memecoin..."
-              maxLength={500}
-              rows={4}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none resize-none transition-colors"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              {formData.description.length}/500 characters
-            </p>
-            {errors.description && (
-              <p className="text-red-400 text-sm mt-1">{errors.description}</p>
-            )}
-          </div>
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">Description</label>
+              <textarea
+                placeholder="Tell us about your memecoin..."
+                maxLength={500}
+                rows={4}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none resize-none transition-colors"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                {formData.description.length}/500 characters
+              </p>
+            </div>
 
-          {/* Image URL */}
-          <div>
-            <label className="block text-sm font-semibold mb-2">Image URL</label>
-            <input
-              type="url"
-              placeholder="https://..."
-              value={formData.imageUrl}
-              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-            />
-            <p className="text-xs text-gray-400 mt-1">Direct link to your coin's image</p>
-          </div>
+            {/* Image URL */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">Image URL</label>
+              <input
+                type="url"
+                placeholder="https://..."
+                value={formData.imageUrl}
+                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
+              />
+            </div>
 
-          {/* Socials (Optional) */}
-          <div className="space-y-3">
-            <label className="block text-sm font-semibold">Social Links (Optional)</label>
-            
-            <input
-              type="text"
-              placeholder="Twitter username or URL"
-              value={formData.twitter}
-              onChange={(e) => setFormData({ ...formData, twitter: e.target.value })}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-            />
-            
-            <input
-              type="text"
-              placeholder="Telegram username or URL"
-              value={formData.telegram}
-              onChange={(e) => setFormData({ ...formData, telegram: e.target.value })}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-            />
-            
-            <input
-              type="url"
-              placeholder="Website URL"
-              value={formData.website}
-              onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-            />
-          </div>
+            {/* Socials */}
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold">Social Links (Optional)</label>
+              
+              <input
+                type="text"
+                placeholder="Twitter username or URL"
+                value={formData.twitter}
+                onChange={(e) => setFormData({ ...formData, twitter: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
+              />
+              
+              <input
+                type="text"
+                placeholder="Telegram username or URL"
+                value={formData.telegram}
+                onChange={(e) => setFormData({ ...formData, telegram: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
+              />
+              
+              <input
+                type="url"
+                placeholder="Website URL"
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
+              />
+            </div>
 
-          {/* Info box */}
-          <div className="bg-sui-blue/10 border border-sui-blue/30 rounded-lg p-4 space-y-2 text-sm">
-            <p className="font-semibold text-sui-blue">ℹ️ How it works:</p>
-            <ul className="space-y-1 text-gray-300 list-disc list-inside">
-              <li>Fair launch with bonding curve pricing</li>
-              <li>737M tokens available for trading</li>
-              <li>Graduates at 13K SUI collected</li>
-              <li>Auto-creates Cetus liquidity pool</li>
-            </ul>
-          </div>
+            {/* Info box */}
+            <div className="bg-sui-blue/10 border border-sui-blue/30 rounded-lg p-4 space-y-2 text-sm">
+              <p className="font-semibold text-sui-blue">ℹ️ Step 1: Create Coin Package</p>
+              <ul className="space-y-1 text-gray-300 list-disc list-inside">
+                <li>Compiles your coin smart contract</li>
+                <li>Publishes package to Sui blockchain</li>
+                <li>Cost: ~0.1 SUI for gas</li>
+              </ul>
+            </div>
 
-          {/* Action buttons */}
-          <div className="flex gap-4 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isCreating}
-              className="flex-1 px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5 transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isCreating || !currentAccount}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
-            >
-              {isCreating ? (status || '🚀 Creating...') : '🚀 Create Coin'}
-            </button>
-          </div>
-        </form>
+            {/* Action buttons */}
+            <div className="flex gap-4 pt-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isProcessing}
+                className="flex-1 px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isProcessing || !currentAccount}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {isProcessing ? (status || '⏳ Processing...') : '🚀 Create Coin'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Step 2: Publish */}
+        {currentStep === 2 && publishedData && (
+          <form onSubmit={handleStep2} className="p-6 space-y-6">
+            {/* Success Info */}
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
+              <p className="font-semibold text-green-400">✅ Coin Package Created!</p>
+              <div className="text-sm space-y-1 text-gray-300">
+                <p><span className="text-gray-400">Ticker:</span> {formData.ticker}</p>
+                <p><span className="text-gray-400">Name:</span> {formData.name}</p>
+                <p className="text-xs text-gray-400 break-all">
+                  Package: {publishedData.packageId.slice(0, 20)}...
+                </p>
+              </div>
+              <a
+                href={getExplorerLink(publishedData.publishDigest, 'txblock')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-sui-blue hover:underline"
+              >
+                View on Explorer →
+              </a>
+            </div>
+
+            {/* Info box */}
+            <div className="bg-sui-blue/10 border border-sui-blue/30 rounded-lg p-4 space-y-2 text-sm">
+              <p className="font-semibold text-sui-blue">ℹ️ Step 2: Publish to Bonding Curve</p>
+              <ul className="space-y-1 text-gray-300 list-disc list-inside">
+                <li>Creates bonding curve for trading</li>
+                <li>737M tokens available for fair launch</li>
+                <li>Graduates at 13K SUI collected</li>
+                <li>Cost: ~0.1 SUI for gas</li>
+              </ul>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-4 pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                disabled={isProcessing}
+                className="flex-1 px-6 py-3 border border-white/20 rounded-lg font-semibold hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                ← Back
+              </button>
+              <button
+                type="submit"
+                disabled={isProcessing || !currentAccount}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {isProcessing ? (status || '⏳ Publishing...') : '📢 Publish to Curve'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
