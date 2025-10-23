@@ -53,9 +53,8 @@ export async function createCoinTransaction(params: {
   // 2. Build transaction with explicit gas budget
   const tx = new Transaction();
   
-  // Set gas budget: 0.5 SUI for publishing (500,000,000 MIST)
-  // Publishing packages is expensive!
-  tx.setGasBudget(500_000_000);
+  // Set gas budget: 0.1 SUI for publishing (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
   
   // 2a. Publish the package and get UpgradeCap
   const [upgradeCap] = tx.publish({
@@ -90,8 +89,8 @@ export function createCurveTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.2 SUI for curve creation (200,000,000 MIST)
-  tx.setGasBudget(200_000_000);
+  // Set gas budget: 0.1 SUI for curve creation (100,000,000 MIST)
+  tx.setGasBudget(100_000_000);
   
   const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
   
