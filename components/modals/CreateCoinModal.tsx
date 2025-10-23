@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
@@ -51,6 +51,37 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   } | null>(null);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Persist state to localStorage to survive page reloads
+  useEffect(() => {
+    if (isOpen && currentAccount) {
+      const savedState = localStorage.getItem(`createCoin_${currentAccount.address}`);
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          if (parsed.formData) setFormData(parsed.formData);
+          if (parsed.publishedData) setPublishedData(parsed.publishedData);
+          if (parsed.curveData) setCurveData(parsed.curveData);
+          if (parsed.currentStep) setCurrentStep(parsed.currentStep);
+        } catch (e) {
+          console.warn('Failed to restore state:', e);
+        }
+      }
+    }
+  }, [isOpen, currentAccount]);
+
+  // Save state whenever it changes
+  useEffect(() => {
+    if (isOpen && currentAccount && (publishedData || curveData)) {
+      const state = {
+        formData,
+        publishedData,
+        curveData,
+        currentStep,
+      };
+      localStorage.setItem(`createCoin_${currentAccount.address}`, JSON.stringify(state));
+    }
+  }, [isOpen, currentAccount, formData, publishedData, curveData, currentStep]);
 
   if (!isOpen) return null;
 
@@ -170,8 +201,6 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       });
       
     } catch (error: any) {
-      console.error('Step 1 failed:', error);
-      
       toast.error('Failed to create coin', {
         description: error.message || 'Please try again',
         duration: 6000,
@@ -256,8 +285,6 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       });
       
     } catch (error: any) {
-      console.error('Step 2 failed:', error);
-      
       toast.error('Failed to publish', {
         description: error.message || 'Please try again',
         duration: 6000,
@@ -341,8 +368,6 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       handleFinish();
       
     } catch (error: any) {
-      console.error('Initial buy failed:', error);
-      
       toast.error('Failed to buy tokens', {
         description: error.message || 'You can still buy later from the tokens page',
         duration: 6000,
@@ -362,6 +387,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   }
   
   function handleFinish() {
+    // Clear localStorage
+    if (currentAccount) {
+      localStorage.removeItem(`createCoin_${currentAccount.address}`);
+    }
+    
     setFormData({
       ticker: '',
       name: '',
@@ -384,20 +414,33 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
 
   function handleClose() {
     if (!isProcessing) {
-      setCurrentStep(1);
-      setPublishedData(null);
-      setCurveData(null);
-      setBuyAmount('');
-      setStatus('');
-      setFormData({
-        ticker: '',
-        name: '',
-        description: '',
-        imageUrl: '',
-        twitter: '',
-        telegram: '',
-        website: '',
-      });
+      // Don't clear state if we're in the middle of creation (step 2 or 3)
+      if (currentStep > 1) {
+        const shouldClose = confirm('You have an in-progress coin creation. Are you sure you want to close? Your progress will be saved.');
+        if (!shouldClose) return;
+      }
+      
+      // Only clear localStorage if we're closing from step 1
+      if (currentStep === 1 && currentAccount) {
+        localStorage.removeItem(`createCoin_${currentAccount.address}`);
+      }
+      
+      if (currentStep === 1) {
+        setCurrentStep(1);
+        setPublishedData(null);
+        setCurveData(null);
+        setBuyAmount('');
+        setStatus('');
+        setFormData({
+          ticker: '',
+          name: '',
+          description: '',
+          imageUrl: '',
+          twitter: '',
+          telegram: '',
+          website: '',
+        });
+      }
       onClose();
     }
   }

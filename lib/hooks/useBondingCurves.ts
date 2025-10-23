@@ -30,12 +30,6 @@ export function useBondingCurves() {
       try {
         console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
         
-        // Show debug toast on mobile
-        toast.info('🔍 Fetching coins...', {
-          description: `Querying Created events`,
-          duration: 3000,
-        });
-        
         // Query Created events
         const events = await client.queryEvents({
           query: {
@@ -48,17 +42,8 @@ export function useBondingCurves() {
         console.log(`✅ Found ${events.data.length} Created events`);
         
         if (events.data.length === 0) {
-          toast.warning('No coins found', {
-            description: 'Create the first memecoin!',
-            duration: 5000,
-          });
           return [];
         }
-        
-        toast.success(`✅ Found ${events.data.length} events!`, {
-          description: 'Loading curve details...',
-          duration: 3000,
-        });
         
         const curves: BondingCurve[] = [];
         
@@ -136,12 +121,6 @@ export function useBondingCurves() {
         }
         
         console.log(`📊 Loaded ${curves.length} bonding curves`);
-        
-        // Final success toast
-        toast.success('📊 Coins loaded!', {
-          description: `${curves.length} coins available for trading`,
-          duration: 4000,
-        });
         
         return curves;
       } catch (error: any) {

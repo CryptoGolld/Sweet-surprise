@@ -222,6 +222,17 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
   const userBalance = mode === 'buy' ? formatAmount(paymentBalance, 9) : formatAmount(memeBalance, 9);
   const tokenSymbol = mode === 'buy' ? 'SUILFG' : curve.ticker;
 
+  function handleShare() {
+    const url = `${window.location.origin}/tokens/${curve.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success('Link copied!', {
+        description: 'Share this link with others to trade this token',
+      });
+    }).catch(() => {
+      toast.error('Failed to copy link');
+    });
+  }
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-sui-dark border-2 border-white/20 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
@@ -240,12 +251,23 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
               <p className="text-gray-400">{curve.name}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl transition-colors"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleShare}
+              className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              title="Share this token"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white text-2xl transition-colors"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         <div className="p-6 grid md:grid-cols-2 gap-6">

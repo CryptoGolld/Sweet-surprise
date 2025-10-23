@@ -25,7 +25,7 @@ export function UserPortfolio() {
   const { data: bondingCurves = [] } = useBondingCurves();
 
   const { data: coins, isLoading } = useQuery({
-    queryKey: ['user-portfolio', account?.address],
+    queryKey: ['user-portfolio', account?.address, bondingCurves],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
       if (!account?.address) return [];
 
@@ -185,6 +185,7 @@ export function UserPortfolio() {
         
         // Find bonding curve data for this token to get current price
         const curve = bondingCurves.find(c => c.coinType === coin.type);
+        const tokenLink = curve ? `/tokens/${curve.id}` : '/tokens';
         
         // Calculate price per token
         let pricePerToken = 0;
@@ -203,9 +204,10 @@ export function UserPortfolio() {
         }
 
         return (
-          <div
+          <Link
             key={coin.type}
-            className="group relative bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl p-4 hover:from-white/10 hover:to-white/5 hover:border-meme-purple/30 hover:shadow-lg hover:shadow-meme-purple/10 transition-all duration-300 animate-in slide-in-from-bottom"
+            href={tokenLink}
+            className="group relative block bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl p-4 hover:from-white/10 hover:to-white/5 hover:border-meme-purple/30 hover:shadow-lg hover:shadow-meme-purple/10 transition-all duration-300 animate-in slide-in-from-bottom cursor-pointer"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-meme-pink/0 via-meme-purple/0 to-sui-blue/0 group-hover:from-meme-pink/5 group-hover:via-meme-purple/5 group-hover:to-sui-blue/5 rounded-xl transition-all duration-300" />
             <div className="relative z-10 flex items-center justify-between">
@@ -246,15 +248,14 @@ export function UserPortfolio() {
                     {formatUSD(totalValue)}
                   </div>
                 )}
-                <Link
-                  href="/tokens"
-                  className="text-xs text-sui-blue hover:underline"
-                >
-                  Trade →
-                </Link>
+                {curve && (
+                  <div className="text-xs text-sui-blue group-hover:underline">
+                    Trade →
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          </Link>
         );
       })}
       </div>
