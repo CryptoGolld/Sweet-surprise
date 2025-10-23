@@ -6,6 +6,7 @@ import { TradingModal } from '../modals/TradingModal';
 import { truncateAddress, formatAmount, calculatePercentage } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
+import { calculateMarketCap, getInitialMarketCap } from '@/lib/utils/bondingCurve';
 
 interface CoinCardProps {
   curve: BondingCurve;
@@ -25,12 +26,18 @@ export function CoinCard({ curve }: CoinCardProps) {
   const tokensTraded = formatAmount(curve.curveSupply, 9);
   const age = Math.floor((Date.now() - curve.createdAt) / (1000 * 60)); // minutes
 
-  // Calculate Market Cap: Price per token * Total Supply
-  // Price per token = SUI collected / tokens sold (if any sold)
-  const tokensSold = Number(curve.curveSupply) / 1e9;
-  const pricePerToken = tokensSold > 0 ? suiCollected / tokensSold : 0;
-  const totalSupply = BONDING_CURVE.TOTAL_SUPPLY; // 1B tokens
-  const marketCapSui = pricePerToken * totalSupply;
+  // Calculate Market Cap using bonding curve formula
+  const tokensSoldInWholeUnits = Number(curve.curveSupply) / 1e9;
+  
+  // Use bonding curve math to calculate real market cap
+  let marketCapSui: number;
+  if (tokensSoldInWholeUnits > 0) {
+    marketCapSui = calculateMarketCap(tokensSoldInWholeUnits);
+  } else {
+    // At launch, show initial virtual market cap (1000 SUI)
+    marketCapSui = getInitialMarketCap();
+  }
+  
   const marketCapUsd = marketCapSui * suiPrice;
 
   const formatAge = (mins: number) => {
