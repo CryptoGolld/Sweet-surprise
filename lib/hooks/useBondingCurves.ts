@@ -35,7 +35,7 @@ export function useBondingCurves() {
         // Query ALL Created events with pagination
         let allEvents: any[] = [];
         let hasMore = true;
-        let cursor: string | null | undefined = undefined;
+        let cursor: any = null;
         let pageCount = 0;
         
         while (hasMore) {
@@ -47,7 +47,7 @@ export function useBondingCurves() {
               MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
             },
             limit: 50,
-            order: 'descending',
+            order: 'descending' as const,
           };
           
           // Only add cursor if it exists
