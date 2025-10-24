@@ -2,7 +2,7 @@
 
 import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
@@ -23,17 +23,30 @@ export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const { data: suiPrice = 1.0 } = useSuiPrice();
-  const { data: bondingCurves = [] } = useBondingCurves();
+  const { data: bondingCurves = [], isLoading: curvesLoading, error: curvesError } = useBondingCurves();
+  
+  console.log('Portfolio - Bonding curves:', {
+    count: bondingCurves?.length || 0,
+    loading: curvesLoading,
+    error: curvesError?.message,
+  });
 
   const { data: coins, isLoading, refetch } = useQuery({
     queryKey: ['user-portfolio', account?.address, bondingCurves],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
-      if (!account?.address) return [];
+      if (!account?.address) {
+        console.log('Portfolio query: No account');
+        return [];
+      }
 
+      console.log('Portfolio query: Fetching coins for', account.address);
+      
       // Get all coins owned by user
       const allCoins = await client.getAllCoins({
         owner: account.address,
       });
+      
+      console.log('Portfolio query: Found', allCoins.data.length, 'coin objects');
 
       // Group by coin type
       const coinMap = new Map<string, { balance: bigint; type: string }>();
@@ -93,9 +106,11 @@ export function UserPortfolio() {
     refetchInterval: 10000,
   });
 
-  // Refetch portfolio when bonding curves finish loading
+  // Refetch portfolio when bonding curves finish loading (limit to avoid infinite loops)
+  const [refetchCount, setRefetchCount] = useState(0);
+  
   useEffect(() => {
-    if (bondingCurves && bondingCurves.length > 0 && coins) {
+    if (bondingCurves && bondingCurves.length > 0 && coins && refetchCount < 2) {
       // Check if any coins are missing price data
       const hasMissingPrices = coins.some(coin => {
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
@@ -104,11 +119,12 @@ export function UserPortfolio() {
       });
       
       if (hasMissingPrices) {
-        // Refetch to update with new curve data
+        console.log('Found coins with missing prices, refetching...', refetchCount + 1);
+        setRefetchCount(prev => prev + 1);
         setTimeout(() => refetch(), 1000);
       }
     }
-  }, [bondingCurves, coins, refetch]);
+  }, [bondingCurves, coins, refetch, refetchCount]);
 
   if (!account) {
     return (
@@ -118,9 +134,13 @@ export function UserPortfolio() {
     );
   }
 
-  if (isLoading) {
+  // Show loading state
+  if (isLoading || curvesLoading) {
     return (
       <div className="space-y-3">
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 text-sm text-blue-400">
+          ⏳ Loading portfolio... {curvesLoading ? '(Fetching token data)' : ''}
+        </div>
         {[1, 2, 3].map(i => (
           <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4 animate-pulse">
             <div className="flex items-center justify-between">
@@ -135,6 +155,22 @@ export function UserPortfolio() {
             </div>
           </div>
         ))}
+      </div>
+    );
+  }
+  
+  // Show error if bonding curves failed to load
+  if (curvesError) {
+    return (
+      <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
+        <h3 className="text-red-400 font-bold mb-2">❌ Failed to load token data</h3>
+        <p className="text-sm text-gray-300 mb-4">{curvesError.message}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-semibold"
+        >
+          Reload Page
+        </button>
       </div>
     );
   }

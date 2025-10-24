@@ -35,17 +35,29 @@ export function useBondingCurves() {
         // Query ALL Created events with pagination
         let allEvents: any[] = [];
         let hasMore = true;
-        let cursor: any = null;
+        let cursor: string | null | undefined = undefined;
+        let pageCount = 0;
         
         while (hasMore) {
-          const result = await client.queryEvents({
+          pageCount++;
+          console.log(`Fetching page ${pageCount}, cursor:`, cursor || 'initial');
+          
+          const queryParams: any = {
             query: {
               MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
             },
             limit: 50,
             order: 'descending',
-            cursor,
-          });
+          };
+          
+          // Only add cursor if it exists
+          if (cursor) {
+            queryParams.cursor = cursor;
+          }
+          
+          const result = await client.queryEvents(queryParams);
+          
+          console.log(`Page ${pageCount}: Found ${result.data.length} events, hasNextPage: ${result.hasNextPage}`);
           
           allEvents = allEvents.concat(result.data);
           
@@ -56,9 +68,10 @@ export function useBondingCurves() {
           }
         }
         
-        console.log(`✅ Found ${allEvents.length} Created events (fetched all)`);
+        console.log(`✅ Total: ${allEvents.length} Created events across ${pageCount} pages`);
         
         if (allEvents.length === 0) {
+          console.warn('No events found!');
           return [];
         }
         
