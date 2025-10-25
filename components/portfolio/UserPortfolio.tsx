@@ -24,15 +24,18 @@ export function UserPortfolio() {
   const { data: suiPrice = 1.0 } = useSuiPrice();
   const { data: bondingCurves = [] } = useBondingCurves();
 
-  const { data: coins, isLoading } = useQuery({
+  const { data: coins, isLoading, error: portfolioError } = useQuery({
     queryKey: ['user-portfolio', account?.address, bondingCurves],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
       if (!account?.address) return [];
 
-      // Get all coins owned by user
-      const allCoins = await client.getAllCoins({
-        owner: account.address,
-      });
+      try {
+        // Get all coins owned by user
+        const allCoins = await client.getAllCoins({
+          owner: account.address,
+        });
+        
+        console.log(`Portfolio: Found ${allCoins.data.length} coin objects for ${account.address.slice(0, 10)}...`);
 
       // Group by coin type
       const coinMap = new Map<string, { balance: bigint; type: string }>();
@@ -86,7 +89,12 @@ export function UserPortfolio() {
         }
       }
 
-      return coinsWithMetadata;
+        console.log(`Portfolio: Processed ${coinsWithMetadata.length} unique coin types`);
+        return coinsWithMetadata;
+      } catch (error) {
+        console.error('Portfolio query error:', error);
+        throw error;
+      }
     },
     enabled: !!account?.address,
     refetchInterval: 10000,
@@ -122,18 +130,51 @@ export function UserPortfolio() {
     );
   }
 
+  // Show error if query failed
+  if (portfolioError) {
+    return (
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center">
+        <div className="text-6xl mb-4">❌</div>
+        <h3 className="text-2xl font-bold mb-2">Error Loading Portfolio</h3>
+        <p className="text-gray-400 mb-4">{portfolioError.message}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-3 bg-red-500 hover:bg-red-600 rounded-lg font-semibold"
+        >
+          Reload Page
+        </button>
+      </div>
+    );
+  }
+
   if (!coins || coins.length === 0) {
     return (
-      <div className="bg-white/5 border border-white/10 rounded-xl p-12 text-center">
-        <div className="text-6xl mb-4">🪙</div>
-        <h3 className="text-2xl font-bold mb-2">No Tokens Yet</h3>
-        <p className="text-gray-400 mb-6">Start by claiming free tokens</p>
-        <Link
-          href="/faucet"
-          className="inline-block px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
-        >
-          💧 Claim Tokens
-        </Link>
+      <div className="space-y-4">
+        <div className="bg-white/5 border border-white/10 rounded-xl p-12 text-center">
+          <div className="text-6xl mb-4">🪙</div>
+          <h3 className="text-2xl font-bold mb-2">No Tokens Yet</h3>
+          <p className="text-gray-400 mb-6">Start by claiming free tokens</p>
+          <Link
+            href="/faucet"
+            className="inline-block px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
+          >
+            💧 Claim Tokens
+          </Link>
+        </div>
+        
+        {/* Debug Info */}
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-xs">
+          <div className="font-bold mb-2">🔍 Debug Info:</div>
+          <div className="space-y-1 font-mono text-yellow-200">
+            <div>Wallet: {account?.address.slice(0, 20)}...</div>
+            <div>Bonding Curves Loaded: {bondingCurves?.length || 0}</div>
+            <div>Query Status: {isLoading ? 'Loading...' : 'Complete'}</div>
+            <div>Coins Found: {coins?.length || 0}</div>
+          </div>
+          <div className="mt-3 text-yellow-300">
+            If you have tokens but see 0, the query might be failing. Visit /debug page for more details.
+          </div>
+        </div>
       </div>
     );
   }
