@@ -1,0 +1,16 @@
+# Backend indexer - runs separately on Ubuntu, not on Vercel
+indexer/
+
+# Test files
+test-sell-transaction.ts
+contracts/scripts/
+contracts/test*.ts
+
+# Documentation
+*.md
+!README.md
+
+# Contracts
+contracts/
+examples/
+deployments/
