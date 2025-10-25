@@ -1,0 +1,13 @@
+# Environment variables (keep .env.example in git)
+.env
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime
+.DS_Store

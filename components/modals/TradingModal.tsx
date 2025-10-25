@@ -16,6 +16,8 @@ import {
   calculateSpotPrice 
 } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
+import { PriceChart } from '@/components/charts/PriceChart';
+import { TradeHistory } from '@/components/charts/TradeHistory';
 
 interface TradingModalProps {
   isOpen: boolean;
@@ -122,11 +124,11 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           return;
         }
 
-        // Build buy transaction
+        // Build buy transaction - pass all coin IDs to merge them
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinId: paymentCoins[0].coinObjectId,
+          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
@@ -148,8 +150,6 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
               setTimeout(() => window.location.reload(), 2000);
             },
             onError: (error) => {
-              console.error('Buy failed:', error);
-              
               const errorMsg = error.message || '';
               if (errorMsg.includes('0x6')) {
                 toast.error('Supply cap reached!', {
@@ -171,9 +171,22 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           });
           return;
         }
+        
+        // Filter out coins with 0 balance
+        const validCoins = memeCoins.filter(c => BigInt(c.balance) > 0n);
+        
+        if (validCoins.length === 0) {
+          toast.error(`No ${curve.ticker} tokens with balance found`, {
+            description: 'Your coin balance is 0',
+          });
+          return;
+        }
 
         const amountInSmallest = parseAmount(amount, 9);
         const userBalanceBigInt = BigInt(memeBalance);
+        
+        // Calculate total balance from valid coins
+        const totalCoinBalance = validCoins.reduce((sum, coin) => sum + BigInt(coin.balance), 0n);
 
         if (BigInt(amountInSmallest) > userBalanceBigInt) {
           toast.error('Insufficient balance', {
@@ -181,12 +194,44 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
           });
           return;
         }
+        
+        // Additional check: ensure the amount is positive and valid
+        if (BigInt(amountInSmallest) <= 0n) {
+          toast.error('Invalid amount', {
+            description: 'Please enter a valid amount to sell',
+          });
+          return;
+        }
 
-        // Build sell transaction
+        // Verify the amount is within the available balance
+        if (BigInt(amountInSmallest) > totalCoinBalance) {
+          toast.error('Insufficient coin balance', {
+            description: `Total in coins: ${formatAmount(totalCoinBalance.toString(), 9)}, Trying to sell: ${amount}`,
+          });
+          console.error('Balance mismatch:', {
+            reported: memeBalance,
+            actual: totalCoinBalance.toString(),
+            trying: amountInSmallest,
+          });
+          return;
+        }
+
+        console.log('Sell transaction details:', {
+          amount,
+          amountInSmallest,
+          memeBalance,
+          totalCoinBalance: totalCoinBalance.toString(),
+          numCoins: validCoins.length,
+          coinBalances: validCoins.map(c => c.balance),
+          coinIds: validCoins.map(c => c.coinObjectId),
+          match: amountInSmallest === totalCoinBalance.toString(),
+        });
+
+        // Build sell transaction - pass valid coin IDs only
         const tx = sellTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          memeTokenCoinId: memeCoins[0].coinObjectId,
+          memeTokenCoinIds: validCoins.map(c => c.coinObjectId),
           tokensToSell: amountInSmallest,
           minSuiOut: '0',
         });
@@ -207,7 +252,6 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
               setTimeout(() => window.location.reload(), 2000);
             },
             onError: (error) => {
-              console.error('Sell failed:', error);
               toast.error('Sale failed', {
                 description: error.message?.slice(0, 100),
               });
@@ -224,6 +268,22 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
 
   const userBalance = mode === 'buy' ? formatAmount(paymentBalance, 9) : formatAmount(memeBalance, 9);
   const tokenSymbol = mode === 'buy' ? 'SUILFG' : curve.ticker;
+  
+  // Raw balance values for percentage calculations (not formatted)
+  const rawBalance = mode === 'buy' 
+    ? Number(paymentBalance) / 1e9 
+    : Number(memeBalance) / 1e9;
+
+  function handleShare() {
+    const url = `${window.location.origin}/tokens/${curve.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success('Link copied!', {
+        description: 'Share this link with others to trade this token',
+      });
+    }).catch(() => {
+      toast.error('Failed to copy link');
+    });
+  }
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -243,12 +303,31 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
               <p className="text-gray-400">{curve.name}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl transition-colors"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleShare}
+              className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              title="Share this token"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white text-2xl transition-colors"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* Charts Section */}
+        <div className="p-6 border-b border-white/10">
+          <div className="grid md:grid-cols-2 gap-4">
+            <PriceChart coinType={curve.coinType} />
+            <TradeHistory coinType={curve.coinType} />
+          </div>
         </div>
 
         <div className="p-6 grid md:grid-cols-2 gap-6">
@@ -366,17 +445,42 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
                 disabled={curve.graduated}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none text-lg transition-colors disabled:opacity-50"
               />
-              <div className="flex gap-2 mt-2">
-                {[10, 50, 100, 500].map((preset) => (
-                  <button
-                    key={preset}
-                    onClick={() => setAmount(preset.toString())}
-                    disabled={curve.graduated}
-                    className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded text-sm transition-colors disabled:opacity-50"
-                  >
-                    {preset}
-                  </button>
-                ))}
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {mode === 'buy' ? (
+                  // Buy mode: Quick amount buttons in SUI
+                  [10, 50, 100, 500].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setAmount(preset.toString())}
+                      disabled={curve.graduated}
+                      className="px-3 py-1 bg-white/5 hover:bg-white/10 rounded text-sm transition-colors disabled:opacity-50"
+                    >
+                      {preset}
+                    </button>
+                  ))
+                ) : (
+                  // Sell mode: Percentage buttons
+                  [
+                    { label: '25%', value: 0.25 },
+                    { label: '50%', value: 0.5 },
+                    { label: '100%', value: 1.0 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      onClick={() => {
+                        if (!isNaN(rawBalance) && rawBalance > 0) {
+                          const calculatedAmount = rawBalance * preset.value;
+                          // Set the amount with proper precision
+                          setAmount(calculatedAmount.toString());
+                        }
+                      }}
+                      disabled={curve.graduated || rawBalance === 0}
+                      className="px-3 py-1 bg-gradient-to-r from-meme-purple/20 to-sui-blue/20 hover:from-meme-purple/30 hover:to-sui-blue/30 border border-meme-purple/30 rounded text-sm font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {preset.label}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 

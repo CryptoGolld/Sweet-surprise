@@ -26,122 +26,172 @@ export function useBondingCurves() {
   
   return useQuery({
     queryKey: ['bonding-curves'],
+    staleTime: 5000,
+    gcTime: 60000,
     queryFn: async (): Promise<BondingCurve[]> => {
       try {
         console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
         
-        // Show debug toast on mobile
-        toast.info('🔍 Fetching coins...', {
-          description: `Querying Created events`,
-          duration: 3000,
-        });
+        // Fetch ALL events with pagination (with error recovery)
+        const allEventData: any[] = [];
+        let cursor: any = null;
+        let pageCount = 0;
+        const maxPages = 20; // Safety limit
         
-        // Query Created events
-        const events = await client.queryEvents({
-          query: {
-            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
-          },
-          limit: 50,
-          order: 'descending',
-        });
-        
-        console.log(`✅ Found ${events.data.length} Created events`);
-        
-        if (events.data.length === 0) {
-          toast.warning('No coins found', {
-            description: 'Create the first memecoin!',
-            duration: 5000,
-          });
-          return [];
-        }
-        
-        toast.success(`✅ Found ${events.data.length} events!`, {
-          description: 'Loading curve details...',
-          duration: 3000,
-        });
-        
-        const curves: BondingCurve[] = [];
-        
-        for (const event of events.data) {
-          try {
-            // Get the transaction details to find the created BondingCurve object
-            const txDetails = await client.getTransactionBlock({
-              digest: event.id.txDigest,
-              options: {
-                showObjectChanges: true,
+        try {
+          // Keep fetching until no more pages
+          while (pageCount < maxPages) {
+            const result = await client.queryEvents({
+              query: {
+                MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
               },
+              limit: 50,
+              order: 'descending',
+              ...(cursor ? { cursor } : {}),
             });
             
-            // Find the BondingCurve object that was created
-            const curveObj = txDetails.objectChanges?.find(
-              (obj: any) => obj.type === 'created' && obj.objectType?.includes('bonding_curve::BondingCurve')
-            );
+            pageCount++;
+            allEventData.push(...result.data);
             
-            if (!curveObj) continue;
+            console.log(`📄 Page ${pageCount}: +${result.data.length} events (total: ${allEventData.length})`);
             
-            const curveId = (curveObj as any).objectId;
-            
-            // Fetch the curve's current state
-            const curveObject = await client.getObject({
-              id: curveId,
-              options: { showContent: true, showType: true },
-            });
-            
-            if (curveObject.data?.content?.dataType === 'moveObject') {
-              const content = curveObject.data.content as any;
-              const fields = content.fields;
-              
-              // Extract coin type from object type
-              const fullObjectType = curveObject.data.content.type;
-              const match = fullObjectType.match(/<(.+)>/);
-              const coinType = match ? match[1] : '';
-              
-              // Get ticker from coin type (last part)
-              const typeParts = coinType.split('::');
-              const ticker = typeParts[typeParts.length - 1] || 'UNKNOWN';
-              
-              // Fetch CoinMetadata to get name, description, and icon
-              let name = ticker;
-              let description = '';
-              let imageUrl = '';
-              
-              try {
-                const metadata = await client.getCoinMetadata({ coinType });
-                if (metadata) {
-                  name = metadata.name || ticker;
-                  description = metadata.description || '';
-                  imageUrl = metadata.iconUrl || '';
-                }
-              } catch (e) {
-                console.warn(`Failed to fetch metadata for ${ticker}:`, e);
-              }
-              
-              curves.push({
-                id: curveId,
-                ticker,
-                name,
-                description,
-                imageUrl,
-                creator: fields.creator || '0x0',
-                curveSupply: fields.token_supply || '0',
-                curveBalance: fields.sui_reserve || '0', // Balance is stored directly as a number
-                graduated: fields.graduated || false,
-                createdAt: event.timestampMs ? parseInt(event.timestampMs) : Date.now(),
-                coinType,
-              });
+            // Break if no more pages
+            if (!result.hasNextPage || !result.nextCursor) {
+              console.log(`✅ Pagination complete: ${allEventData.length} total events`);
+              break;
             }
-          } catch (error) {
-            console.warn(`Failed to process event:`, error);
+            
+            cursor = result.nextCursor;
+          }
+          
+          if (pageCount >= maxPages) {
+            console.log(`⚠️ Reached max pages limit (${maxPages}), using ${allEventData.length} events`);
+          }
+        } catch (paginationError) {
+          console.error('Pagination error:', paginationError);
+          // If pagination fails, use whatever we got so far
+          if (allEventData.length > 0) {
+            console.log(`⚠️ Pagination failed but recovered with ${allEventData.length} events`);
+          } else {
+            // If we got nothing, throw the error
+            throw paginationError;
           }
         }
         
-        console.log(`📊 Loaded ${curves.length} bonding curves`);
+        if (allEventData.length === 0) {
+          console.log('No events found');
+          return [];
+        }
         
-        // Final success toast
-        toast.success('📊 Coins loaded!', {
-          description: `${curves.length} coins available for trading`,
-          duration: 4000,
+        // Use the exact same structure as before
+        const events = { data: allEventData };
+        
+        // Step 1: Fetch all transaction details in parallel
+        const txDetailsPromises = events.data.map(event =>
+          client.getTransactionBlock({
+            digest: event.id.txDigest,
+            options: { showObjectChanges: true },
+          }).catch(err => {
+            console.warn(`Failed to fetch tx ${event.id.txDigest}:`, err);
+            return null;
+          })
+        );
+        
+        const txDetailsResults = await Promise.all(txDetailsPromises);
+        
+        // Step 2: Extract curve IDs and filter out failed requests
+        const curveInfos: Array<{ id: string; event: any }> = [];
+        txDetailsResults.forEach((txDetails, index) => {
+          if (!txDetails) return;
+          
+          const curveObj = txDetails.objectChanges?.find(
+            (obj: any) => obj.type === 'created' && obj.objectType?.includes('bonding_curve::BondingCurve')
+          );
+          
+          if (curveObj) {
+            curveInfos.push({
+              id: (curveObj as any).objectId,
+              event: events.data[index],
+            });
+          }
         });
+        
+        // Step 3: Fetch all curve objects in parallel
+        const curveObjectsPromises = curveInfos.map(info =>
+          client.getObject({
+            id: info.id,
+            options: { showContent: true, showType: true },
+          }).catch(err => {
+            console.warn(`Failed to fetch curve ${info.id}:`, err);
+            return null;
+          })
+        );
+        
+        const curveObjects = await Promise.all(curveObjectsPromises);
+        
+        // Step 4: Process curves and collect metadata requests
+        const curvesWithoutMetadata: Array<BondingCurve & { needsMetadata: boolean }> = [];
+        const metadataRequests: Array<{ coinType: string; index: number }> = [];
+        
+        curveObjects.forEach((curveObject, index) => {
+          if (!curveObject?.data?.content || curveObject.data.content.dataType !== 'moveObject') {
+            return;
+          }
+          
+          const content = curveObject.data.content as any;
+          const fields = content.fields;
+          const info = curveInfos[index];
+          
+          // Extract coin type from object type
+          const fullObjectType = content.type;
+          const match = fullObjectType.match(/<(.+)>/);
+          const coinType = match ? match[1] : '';
+          
+          // Get ticker from coin type (last part)
+          const typeParts = coinType.split('::');
+          const ticker = typeParts[typeParts.length - 1] || 'UNKNOWN';
+          
+          const curve = {
+            id: info.id,
+            ticker,
+            name: ticker,
+            description: '',
+            imageUrl: '',
+            creator: fields.creator || '0x0',
+            curveSupply: fields.token_supply || '0',
+            curveBalance: fields.sui_reserve || '0',
+            graduated: fields.graduated || false,
+            createdAt: info.event.timestampMs ? parseInt(info.event.timestampMs) : Date.now(),
+            coinType,
+            needsMetadata: true,
+          };
+          
+          curvesWithoutMetadata.push(curve);
+          metadataRequests.push({ coinType, index: curvesWithoutMetadata.length - 1 });
+        });
+        
+        // Step 5: Fetch all metadata in parallel
+        const metadataPromises = metadataRequests.map(req =>
+          client.getCoinMetadata({ coinType: req.coinType }).catch(() => null)
+        );
+        
+        const metadataResults = await Promise.all(metadataPromises);
+        
+        // Step 6: Apply metadata to curves
+        metadataResults.forEach((metadata, i) => {
+          const request = metadataRequests[i];
+          const curve = curvesWithoutMetadata[request.index];
+          
+          if (metadata) {
+            curve.name = metadata.name || curve.ticker;
+            curve.description = metadata.description || '';
+            curve.imageUrl = metadata.iconUrl || '';
+          }
+        });
+        
+        const curves = curvesWithoutMetadata.map(({ needsMetadata, ...curve }) => curve);
+        
+        console.log(`📊 Loaded ${curves.length} bonding curves`);
         
         return curves;
       } catch (error: any) {

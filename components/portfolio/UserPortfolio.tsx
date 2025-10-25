@@ -2,10 +2,10 @@
 
 import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
 import { formatAmount } from '@/lib/sui/client';
-import { COIN_TYPES } from '@/lib/constants';
+import { COIN_TYPES, CONTRACTS } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
-import { useBondingCurves } from '@/lib/hooks/useBondingCurves';
 import { calculateSpotPrice } from '@/lib/utils/bondingCurve';
 import Link from 'next/link';
 
@@ -22,75 +22,160 @@ export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const { data: suiPrice = 1.0 } = useSuiPrice();
-  const { data: bondingCurves = [] } = useBondingCurves();
+  
+  // Debug logs storage
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  
+  // Store curve data separately
+  const [curveData, setCurveData] = useState<Map<string, { curveSupply: string; curveId: string }>>(new Map());
 
-  const { data: coins, isLoading } = useQuery({
+  const { data: coins, isLoading, error: portfolioError } = useQuery({
     queryKey: ['user-portfolio', account?.address],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
       if (!account?.address) return [];
 
-      // Get all coins owned by user
-      const allCoins = await client.getAllCoins({
-        owner: account.address,
-      });
-
-      // Group by coin type
-      const coinMap = new Map<string, { balance: bigint; type: string }>();
-
-      for (const coin of allCoins.data) {
-        const existing = coinMap.get(coin.coinType) || { balance: 0n, type: coin.coinType };
-        existing.balance += BigInt(coin.balance);
-        coinMap.set(coin.coinType, existing);
-      }
-
-      // Fetch metadata for each coin type
-      const coinsWithMetadata: CoinWithMetadata[] = [];
+      const logs: string[] = [];
+      const log = (msg: string) => {
+        console.log(msg);
+        logs.push(msg);
+        setDebugLogs(prev => [...prev, msg]);
+      };
       
-      for (const [type, data] of coinMap.entries()) {
-        try {
-          // Try to get coin metadata
-          const metadata = await client.getCoinMetadata({ coinType: type });
-          
-          // Check if this coin has a bonding curve (for image URL)
-          const curve = bondingCurves.find(c => c.coinType === type);
-          
-          // Use ticker as name if name is empty or same as ticker (for memecoins)
-          const symbol = metadata?.symbol || curve?.ticker || type.split('::').pop() || 'UNKNOWN';
-          const name = metadata?.name && metadata.name !== symbol ? metadata.name : (curve?.name && curve.name !== symbol ? curve.name : `${symbol} Token`);
-          
-          coinsWithMetadata.push({
-            type,
-            balance: data.balance.toString(),
-            symbol,
-            name,
-            iconUrl: curve?.imageUrl || metadata?.iconUrl || undefined,
-            decimals: metadata?.decimals || 9,
-          });
-        } catch (error) {
-          // If metadata fetch fails, use default values
-          const parts = type.split('::');
-          const curve = bondingCurves.find(c => c.coinType === type);
-          
-          // Use ticker as name if name is empty or same as ticker (for memecoins)
-          const symbol = curve?.ticker || parts[parts.length - 1] || 'UNKNOWN';
-          const name = curve?.name && curve.name !== symbol ? curve.name : `${symbol} Token`;
-          
-          coinsWithMetadata.push({
-            type,
-            balance: data.balance.toString(),
-            symbol,
-            name,
-            iconUrl: curve?.imageUrl || undefined,
-            decimals: 9,
-          });
+      try {
+        log(`Starting query for ${account.address.slice(0, 10)}...`);
+        
+        // Get all coins owned by user
+        const allCoins = await client.getAllCoins({
+          owner: account.address,
+        });
+        
+        log(`Found ${allCoins.data.length} coin objects`);
+        
+        if (allCoins.data.length === 0) {
+          log('No coins found');
+          return [];
         }
-      }
 
-      return coinsWithMetadata;
+        // Group by coin type
+        const coinMap = new Map<string, { balance: bigint; type: string }>();
+
+        for (const coin of allCoins.data) {
+          const existing = coinMap.get(coin.coinType) || { balance: 0n, type: coin.coinType };
+          existing.balance += BigInt(coin.balance);
+          coinMap.set(coin.coinType, existing);
+        }
+
+        const coinTypes = Array.from(coinMap.entries());
+        log(`Processing ${coinTypes.length} unique coin types`);
+        
+        // Fetch metadata for all coins in parallel (simple and fast)
+        const metadataPromises = coinTypes.map(([type]) =>
+          client.getCoinMetadata({ coinType: type }).catch(() => null)
+        );
+        
+        const metadataResults = await Promise.all(metadataPromises);
+        log(`Fetched metadata: ${metadataResults.filter(m => m).length}/${coinTypes.length}`);
+        
+        // Build coin list
+        const coinsWithMetadata: CoinWithMetadata[] = coinTypes.map(([type, data], i) => {
+          const metadata = metadataResults[i];
+          const parts = type.split('::');
+          const symbol = metadata?.symbol || parts[parts.length - 1] || 'UNKNOWN';
+          const name = (metadata?.name && metadata.name !== symbol) ? metadata.name : `${symbol} Token`;
+          
+          return {
+            type,
+            balance: data.balance.toString(),
+            symbol,
+            name,
+            iconUrl: metadata?.iconUrl || undefined,
+            decimals: metadata?.decimals || 9,
+          };
+        });
+
+        log(`✅ Successfully processed ${coinsWithMetadata.length} coins`);
+        return coinsWithMetadata;
+      } catch (error: any) {
+        log(`❌ ERROR: ${error.message}`);
+        console.error('Portfolio query error:', error);
+        throw new Error(`Failed at: ${logs[logs.length - 1] || 'unknown step'}`);
+      }
     },
     enabled: !!account?.address,
+    retry: 2, // Retry failed queries twice
+    retryDelay: 1000, // Wait 1s between retries
     refetchInterval: 10000,
   });
+  
+  // Fetch curve data for owned tokens (runs after coins load)
+  useEffect(() => {
+    if (!coins || coins.length === 0) return;
+    
+    const fetchCurveData = async () => {
+      const memeCoins = coins.filter(c => c.type !== COIN_TYPES.SUILFG_MEMEFI);
+      if (memeCoins.length === 0) return;
+      
+      console.log(`Fetching curve data for ${memeCoins.length} tokens...`);
+      
+      try {
+        // Query all curves once
+        const events = await client.queryEvents({
+          query: {
+            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
+          },
+          limit: 50,
+        });
+        
+        // Process each owned token
+        for (const coin of memeCoins) {
+          for (const event of events.data) {
+            try {
+              const txDetails = await client.getTransactionBlock({
+                digest: event.id.txDigest,
+                options: { showObjectChanges: true },
+              });
+              
+              const curveObj = txDetails.objectChanges?.find(
+                (obj: any) => obj.type === 'created' && obj.objectType?.includes('bonding_curve::BondingCurve')
+              );
+              
+              if (!curveObj) continue;
+              
+              const curveId = (curveObj as any).objectId;
+              const curveObject = await client.getObject({
+                id: curveId,
+                options: { showContent: true, showType: true },
+              });
+              
+              if (curveObject.data?.content?.dataType === 'moveObject') {
+                const content = curveObject.data.content as any;
+                const fullType = content.type;
+                const match = fullType.match(/<(.+)>/);
+                const coinType = match ? match[1] : '';
+                
+                if (coinType === coin.type) {
+                  setCurveData(prev => new Map(prev).set(coinType, {
+                    curveSupply: content.fields.token_supply || '0',
+                    curveId,
+                  }));
+                  break;
+                }
+              }
+            } catch (err) {
+              // Skip failed fetches
+            }
+          }
+        }
+        
+        console.log(`Loaded curve data for ${curveData.size} tokens`);
+      } catch (error) {
+        console.error('Failed to fetch curve data:', error);
+      }
+    };
+    
+    fetchCurveData();
+  }, [coins, client]);
+
 
   if (!account) {
     return (
@@ -121,18 +206,68 @@ export function UserPortfolio() {
     );
   }
 
+
+  // Show error if portfolio query failed
+  if (portfolioError) {
+    return (
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8">
+        <div className="text-center">
+          <div className="text-6xl mb-4">❌</div>
+          <h3 className="text-2xl font-bold mb-2">Error Loading Portfolio</h3>
+          <p className="text-gray-400 mb-4">{portfolioError.message}</p>
+        </div>
+        
+        {/* Debug Logs */}
+        <div className="text-xs font-mono bg-black/40 p-4 rounded text-left max-h-60 overflow-y-auto mb-4">
+          <div className="text-green-400 mb-2">📋 Debug Log:</div>
+          {debugLogs.length > 0 ? (
+            debugLogs.map((log, i) => (
+              <div key={i} className="text-gray-300">{log}</div>
+            ))
+          ) : (
+            <div className="text-gray-500">No logs available</div>
+          )}
+        </div>
+        
+        <div className="text-center">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-red-500 hover:bg-red-600 rounded-lg font-semibold"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!coins || coins.length === 0) {
     return (
-      <div className="bg-white/5 border border-white/10 rounded-xl p-12 text-center">
-        <div className="text-6xl mb-4">🪙</div>
-        <h3 className="text-2xl font-bold mb-2">No Tokens Yet</h3>
-        <p className="text-gray-400 mb-6">Start by claiming free tokens</p>
-        <Link
-          href="/faucet"
-          className="inline-block px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
-        >
-          💧 Claim Tokens
-        </Link>
+      <div className="space-y-4">
+        <div className="bg-white/5 border border-white/10 rounded-xl p-12 text-center">
+          <div className="text-6xl mb-4">🪙</div>
+          <h3 className="text-2xl font-bold mb-2">No Tokens Yet</h3>
+          <p className="text-gray-400 mb-6">Start by claiming free tokens</p>
+          <Link
+            href="/faucet"
+            className="inline-block px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
+          >
+            💧 Claim Tokens
+          </Link>
+        </div>
+        
+        {/* Debug Info */}
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-xs">
+          <div className="font-bold mb-2">🔍 Debug Info:</div>
+          <div className="space-y-1 font-mono text-yellow-200">
+            <div>Wallet: {account?.address.slice(0, 20)}...</div>
+            <div>Query Status: {isLoading ? 'Loading...' : 'Complete'}</div>
+            <div>Coins Found: {coins?.length || 0}</div>
+          </div>
+          <div className="mt-3 text-yellow-300">
+            If you have tokens but see 0, the query might be failing. Visit /debug page for more details.
+          </div>
+        </div>
       </div>
     );
   }
@@ -141,16 +276,17 @@ export function UserPortfolio() {
   const totalPortfolioValue = coins.reduce((acc, coin) => {
     const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
     const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
-    const curve = bondingCurves.find(c => c.coinType === coin.type);
     
     let totalValue = 0;
     if (isMainToken) {
       totalValue = balanceNum * suiPrice;
-    } else if (curve) {
-      // NOTE: curve.curveSupply is already in whole tokens from contract
-      const currentSupply = Number(curve.curveSupply);
-      const pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
-      totalValue = balanceNum * pricePerToken;
+    } else {
+      const curve = curveData.get(coin.type);
+      if (curve) {
+        const currentSupply = Number(curve.curveSupply);
+        const pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
+        totalValue = balanceNum * pricePerToken;
+      }
     }
     
     return acc + totalValue;
@@ -182,13 +318,13 @@ export function UserPortfolio() {
       {coins.map((coin) => {
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
         const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
-        
-        // Find bonding curve data for this token to get current price
-        const curve = bondingCurves.find(c => c.coinType === coin.type);
+        const tokenLink = '/tokens';
         
         // Calculate price per token
         let pricePerToken = 0;
         let totalValue = 0;
+        
+        const curve = curveData.get(coin.type);
         
         if (isMainToken) {
           // SUILFG_MEMEFI uses real-time SUI price
@@ -196,16 +332,22 @@ export function UserPortfolio() {
           totalValue = balanceNum * suiPrice;
         } else if (curve) {
           // For meme tokens, calculate current spot price from bonding curve
-          // NOTE: curve.curveSupply is already in whole tokens from contract
           const currentSupply = Number(curve.curveSupply);
-          pricePerToken = calculateSpotPrice(currentSupply) * suiPrice; // Convert to USD
-          totalValue = balanceNum * pricePerToken;
+          
+          if (currentSupply > 0 && !isNaN(currentSupply)) {
+            pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
+            totalValue = balanceNum * pricePerToken;
+          } else {
+            pricePerToken = calculateSpotPrice(0) * suiPrice;
+            totalValue = balanceNum * pricePerToken;
+          }
         }
 
         return (
-          <div
+          <Link
             key={coin.type}
-            className="group relative bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl p-4 hover:from-white/10 hover:to-white/5 hover:border-meme-purple/30 hover:shadow-lg hover:shadow-meme-purple/10 transition-all duration-300 animate-in slide-in-from-bottom"
+            href={tokenLink}
+            className="group relative block bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl p-4 hover:from-white/10 hover:to-white/5 hover:border-meme-purple/30 hover:shadow-lg hover:shadow-meme-purple/10 transition-all duration-300 animate-in slide-in-from-bottom cursor-pointer"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-meme-pink/0 via-meme-purple/0 to-sui-blue/0 group-hover:from-meme-pink/5 group-hover:via-meme-purple/5 group-hover:to-sui-blue/5 rounded-xl transition-all duration-300" />
             <div className="relative z-10 flex items-center justify-between">
@@ -241,20 +383,23 @@ export function UserPortfolio() {
                 <div className="font-bold text-lg">
                   {formatAmount(coin.balance, coin.decimals)} {coin.symbol}
                 </div>
-                {totalValue > 0 && (
+                {totalValue > 0 ? (
                   <div className="text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
+                ) : !isMainToken && !curveData.get(coin.type) ? (
+                  <div className="text-xs text-gray-500 italic">
+                    Loading price...
+                  </div>
+                ) : null}
+                {!isMainToken && (
+                  <div className="text-xs text-sui-blue group-hover:underline">
+                    Trade →
+                  </div>
                 )}
-                <Link
-                  href="/tokens"
-                  className="text-xs text-sui-blue hover:underline"
-                >
-                  Trade →
-                </Link>
               </div>
             </div>
-          </div>
+          </Link>
         );
       })}
       </div>
