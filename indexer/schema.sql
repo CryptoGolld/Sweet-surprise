@@ -1,4 +1,5 @@
 -- Database schema for memecoin indexer
+-- PostgreSQL compatible (indexes created separately)
 
 -- Tokens table (all memecoins)
 CREATE TABLE IF NOT EXISTS tokens (
@@ -14,24 +15,24 @@ CREATE TABLE IF NOT EXISTS tokens (
     graduated BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    -- Price & Market Data (updated on every trade)
-    current_price_sui NUMERIC(20, 10),              -- Current price per token in SUI
-    market_cap_sui NUMERIC(20, 10),                 -- Market cap = price * circulating_supply
-    fully_diluted_valuation_sui NUMERIC(20, 10),   -- FDV = price * total_supply
-    volume_24h_sui NUMERIC(20, 0) DEFAULT 0,        -- 24h trading volume in SUI
-    price_change_24h NUMERIC(10, 4) DEFAULT 0,      -- 24h price change %
-    all_time_high_sui NUMERIC(20, 10),              -- ATH price
-    all_time_high_at TIMESTAMP,                     -- When ATH was reached
-    all_time_low_sui NUMERIC(20, 10),               -- ATL price
-    all_time_low_at TIMESTAMP,                      -- When ATL was reached
-    last_trade_at TIMESTAMP,                        -- Last trade timestamp
-    INDEX idx_ticker (ticker),
-    INDEX idx_created_at (created_at DESC),
-    INDEX idx_graduated (graduated),
-    INDEX idx_market_cap (market_cap_sui DESC),
-    INDEX idx_volume_24h (volume_24h_sui DESC),
-    INDEX idx_price_change (price_change_24h DESC)
+    current_price_sui NUMERIC(20, 10),
+    market_cap_sui NUMERIC(20, 10),
+    fully_diluted_valuation_sui NUMERIC(20, 10),
+    volume_24h_sui NUMERIC(20, 0) DEFAULT 0,
+    price_change_24h NUMERIC(10, 4) DEFAULT 0,
+    all_time_high_sui NUMERIC(20, 10),
+    all_time_high_at TIMESTAMP,
+    all_time_low_sui NUMERIC(20, 10),
+    all_time_low_at TIMESTAMP,
+    last_trade_at TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_ticker ON tokens(ticker);
+CREATE INDEX IF NOT EXISTS idx_created_at ON tokens(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_graduated ON tokens(graduated);
+CREATE INDEX IF NOT EXISTS idx_market_cap ON tokens(market_cap_sui DESC);
+CREATE INDEX IF NOT EXISTS idx_volume_24h ON tokens(volume_24h_sui DESC);
+CREATE INDEX IF NOT EXISTS idx_price_change ON tokens(price_change_24h DESC);
 
 -- Trades table (all buys and sells)
 CREATE TABLE IF NOT EXISTS trades (
@@ -40,18 +41,19 @@ CREATE TABLE IF NOT EXISTS trades (
     coin_type TEXT NOT NULL,
     curve_id VARCHAR(66) NOT NULL,
     trader VARCHAR(66) NOT NULL,
-    trade_type VARCHAR(10) NOT NULL, -- 'buy' or 'sell'
+    trade_type VARCHAR(10) NOT NULL,
     sui_amount NUMERIC(20, 0) NOT NULL,
     token_amount NUMERIC(20, 0) NOT NULL,
     price_per_token NUMERIC(20, 10) NOT NULL,
-    timestamp TIMESTAMP NOT NULL,
-    INDEX idx_coin_type (coin_type),
-    INDEX idx_timestamp (timestamp DESC),
-    INDEX idx_trader (trader),
-    INDEX idx_curve_id (curve_id)
+    timestamp TIMESTAMP NOT NULL
 );
 
--- Price snapshots (for charts - aggregated every minute)
+CREATE INDEX IF NOT EXISTS idx_coin_type ON trades(coin_type);
+CREATE INDEX IF NOT EXISTS idx_timestamp ON trades(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_trader ON trades(trader);
+CREATE INDEX IF NOT EXISTS idx_curve_id ON trades(curve_id);
+
+-- Price snapshots (for charts)
 CREATE TABLE IF NOT EXISTS price_snapshots (
     coin_type TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
@@ -60,31 +62,33 @@ CREATE TABLE IF NOT EXISTS price_snapshots (
     low NUMERIC(20, 10) NOT NULL,
     close NUMERIC(20, 10) NOT NULL,
     volume NUMERIC(20, 0) NOT NULL,
-    PRIMARY KEY (coin_type, timestamp),
-    INDEX idx_timestamp (timestamp DESC)
+    PRIMARY KEY (coin_type, timestamp)
 );
 
--- Indexer state (tracks last processed event)
+CREATE INDEX IF NOT EXISTS idx_snapshot_timestamp ON price_snapshots(timestamp DESC);
+
+-- Indexer state
 CREATE TABLE IF NOT EXISTS indexer_state (
     id INTEGER PRIMARY KEY DEFAULT 1,
     last_cursor TEXT,
     last_timestamp BIGINT,
     updated_at TIMESTAMP DEFAULT NOW(),
-    CHECK (id = 1) -- Only one row allowed
+    CHECK (id = 1)
 );
 
--- Referrals table (tracks referrer-referee relationships)
+-- Referrals table
 CREATE TABLE IF NOT EXISTS referrals (
     referee VARCHAR(66) PRIMARY KEY,
     referrer VARCHAR(66) NOT NULL,
     first_trade_at TIMESTAMP NOT NULL,
     total_rewards NUMERIC(20, 0) DEFAULT 0,
-    trade_count INTEGER DEFAULT 0,
-    INDEX idx_referrer (referrer),
-    INDEX idx_first_trade (first_trade_at DESC)
+    trade_count INTEGER DEFAULT 0
 );
 
--- User PnL table (per user per token)
+CREATE INDEX IF NOT EXISTS idx_referrer ON referrals(referrer);
+CREATE INDEX IF NOT EXISTS idx_first_trade ON referrals(first_trade_at DESC);
+
+-- User PnL table
 CREATE TABLE IF NOT EXISTS user_pnl (
     user_address VARCHAR(66) NOT NULL,
     coin_type TEXT NOT NULL,
@@ -96,24 +100,26 @@ CREATE TABLE IF NOT EXISTS user_pnl (
     sell_count INTEGER DEFAULT 0,
     realized_pnl NUMERIC(20, 0) DEFAULT 0,
     last_trade_at TIMESTAMP,
-    PRIMARY KEY (user_address, coin_type),
-    INDEX idx_user (user_address),
-    INDEX idx_coin (coin_type),
-    INDEX idx_pnl (realized_pnl DESC)
+    PRIMARY KEY (user_address, coin_type)
 );
 
--- Token holders (current holdings per user per token)
+CREATE INDEX IF NOT EXISTS idx_user ON user_pnl(user_address);
+CREATE INDEX IF NOT EXISTS idx_coin ON user_pnl(coin_type);
+CREATE INDEX IF NOT EXISTS idx_pnl ON user_pnl(realized_pnl DESC);
+
+-- Token holders
 CREATE TABLE IF NOT EXISTS token_holders (
     user_address VARCHAR(66) NOT NULL,
     coin_type TEXT NOT NULL,
     balance NUMERIC(20, 0) NOT NULL DEFAULT 0,
     first_acquired_at TIMESTAMP NOT NULL,
     last_updated_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (user_address, coin_type),
-    INDEX idx_coin_type (coin_type),
-    INDEX idx_balance (balance DESC),
-    INDEX idx_user (user_address)
+    PRIMARY KEY (user_address, coin_type)
 );
+
+CREATE INDEX IF NOT EXISTS idx_holder_coin_type ON token_holders(coin_type);
+CREATE INDEX IF NOT EXISTS idx_holder_balance ON token_holders(balance DESC);
+CREATE INDEX IF NOT EXISTS idx_holder_user ON token_holders(user_address);
 
 -- Insert initial state
 INSERT INTO indexer_state (id, last_cursor, last_timestamp) 
