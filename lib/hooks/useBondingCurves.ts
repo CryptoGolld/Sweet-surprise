@@ -26,56 +26,26 @@ export function useBondingCurves() {
   
   return useQuery({
     queryKey: ['bonding-curves'],
-    staleTime: 5000, // Data stays fresh for 5 seconds
-    gcTime: 60000, // Keep in cache for 60 seconds (was cacheTime in older versions)
+    staleTime: 5000,
+    gcTime: 60000,
     queryFn: async (): Promise<BondingCurve[]> => {
       try {
         console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
         
-        // Query ALL Created events with pagination
-        let allEvents: any[] = [];
-        let hasMore = true;
-        let cursor: any = null;
-        let pageCount = 0;
+        // Query Created events - start with 50, can increase later
+        const events = await client.queryEvents({
+          query: {
+            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
+          },
+          limit: 50,
+          order: 'descending',
+        });
         
-        while (hasMore) {
-          pageCount++;
-          console.log(`Fetching page ${pageCount}, cursor:`, cursor || 'initial');
-          
-          const queryParams: any = {
-            query: {
-              MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
-            },
-            limit: 50,
-            order: 'descending' as const,
-          };
-          
-          // Only add cursor if it exists
-          if (cursor) {
-            queryParams.cursor = cursor;
-          }
-          
-          const result = await client.queryEvents(queryParams);
-          
-          console.log(`Page ${pageCount}: Found ${result.data.length} events, hasNextPage: ${result.hasNextPage}`);
-          
-          allEvents = allEvents.concat(result.data);
-          
-          if (result.hasNextPage && result.nextCursor) {
-            cursor = result.nextCursor;
-          } else {
-            hasMore = false;
-          }
-        }
+        console.log(`✅ Found ${events.data.length} Created events`);
         
-        console.log(`✅ Total: ${allEvents.length} Created events across ${pageCount} pages`);
-        
-        if (allEvents.length === 0) {
-          console.warn('No events found!');
+        if (events.data.length === 0) {
           return [];
         }
-        
-        const events = { data: allEvents };
         
         // Step 1: Fetch all transaction details in parallel
         const txDetailsPromises = events.data.map(event =>
