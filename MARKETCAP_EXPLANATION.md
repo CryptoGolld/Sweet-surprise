@@ -1,69 +1,45 @@
 # 💰 Market Cap Calculation (Bonding Curve)
 
-## The Right Way (With Virtual Liquidity)
+## The Right Way
 
-**Market Cap** = curve_balance + 1,000 SUI (virtual liquidity)  
+**Market Cap** = Current Price × 1B (total supply)  
 **FDV** = Current Price × 1B (total supply)
+
+For bonding curve tokens: **Market Cap = FDV**
 
 ---
 
 ## Formula
 
-### **Market Cap (Bonding Curve with Virtual Liquidity):**
+### **Market Cap:**
 ```
-Market Cap = curve_balance + 1,000 SUI
-
-Example at start (0 tokens sold):
-- curve_balance: 0 SUI
-- Virtual liquidity: 1,000 SUI
-- Market Cap: 1,000 SUI ✅
-
-Example at 50% (368M tokens sold):
-- curve_balance: ~6,666 SUI
-- Virtual liquidity: 1,000 SUI
-- Market Cap: 7,666 SUI ✅
-
-Example at 100% (737M tokens sold, graduated):
-- curve_balance: ~13,333 SUI
-- Virtual liquidity: 1,000 SUI
-- Market Cap: 14,333 SUI ✅
-```
-
-**Why curve_balance + 1,000?**
-- Your bonding curve starts with 1,000 SUI virtual market cap
-- curve_balance = actual SUI locked in the curve from trades
-- Virtual liquidity = the initial 1,000 SUI "floor"
-- Total market cap = real SUI + virtual SUI
-
-### **Fully Diluted Valuation (FDV):**
-```
-FDV = Current Price × Total Supply (1B)
+Market Cap = Current Price × Total Supply (1B)
 
 Example:
 - Price: 0.00001 SUI/token
 - Total supply: 1,000,000,000 (1B)
-- FDV: 0.00001 × 1B = 10,000 SUI ✅
+- Market Cap: 10,000 SUI ✅
+- FDV: 10,000 SUI ✅ (same)
 ```
+
+**Why Price × 1B?**
+- Simple, consistent valuation
+- MC = FDV for bonding curve tokens
+- Easy to compare across all tokens
+- Shows full value at current price
 
 ---
 
 ## What We Track
 
-### **Market Cap:**
+### **Market Cap & FDV:**
 ```javascript
-market_cap_sui = (curve_balance + 1000 SUI) 
+const totalSupply = 1_000_000_000;
+market_cap_sui = current_price × totalSupply;
+fully_diluted_valuation_sui = current_price × totalSupply;
 ```
 
-This shows the actual market cap based on:
-1. SUI locked in curve (curve_balance)
-2. Virtual liquidity (1,000 SUI floor)
-
-### **Fully Diluted Valuation (FDV):**
-```javascript
-fully_diluted_valuation_sui = current_price × 1_000_000_000
-```
-
-This shows: "What if all 1B tokens existed at current price?"
+Both are the same for bonding curve tokens.
 
 ### **Current Price:**
 ```javascript
@@ -80,10 +56,11 @@ Price of 1 token in SUI.
 
 ```
 Tokens Sold:     0 / 737M (0%)
-curve_balance:   0 SUI
-Virtual Liq:     1,000 SUI
+Current Price:   0.000001 SUI/token (virtual)
 
-Market Cap:      1,000 SUI ✅ (0 + 1,000)
+Market Cap:      1,000 SUI (0.000001 × 1B) ✅
+FDV:             1,000 SUI ✅
+MC/FDV:          100% (same)
 Progress:        0%
 ```
 
@@ -91,13 +68,11 @@ Progress:        0%
 
 ```
 Tokens Sold:     368M / 737M (50%)
-curve_balance:   ~6,666 SUI
-Virtual Liq:     1,000 SUI
 Current Price:   0.00001234 SUI/token
 
-Market Cap:      7,666 SUI ✅ (6,666 + 1,000)
-FDV:             12,340 SUI (0.00001234 × 1B)
-MC/FDV Ratio:    62.1%
+Market Cap:      12,340 SUI (0.00001234 × 1B) ✅
+FDV:             12,340 SUI ✅
+MC/FDV:          100% (same)
 Progress:        50%
 ```
 
@@ -105,35 +80,33 @@ Progress:        50%
 
 ```
 Tokens Sold:     737M / 737M (100%)
-curve_balance:   ~13,333 SUI
-Virtual Liq:     1,000 SUI
 Current Price:   0.00002000 SUI/token
 
-Market Cap:      14,333 SUI ✅ (13,333 + 1,000)
-FDV:             20,000 SUI (0.00002 × 1B)
-MC/FDV Ratio:    71.7%
+Market Cap:      20,000 SUI (0.00002 × 1B) ✅
+FDV:             20,000 SUI ✅
+MC/FDV:          100% (same)
 Status:          Graduated 🎓
 ```
 
 ---
 
-## Why curve_balance + 1,000 SUI?
+## Why Price × 1B?
 
-### **Bonding Curve with Virtual Liquidity:**
+### **Simple & Consistent:**
 
 ```
 ✅ CORRECT:
-curve_balance: 6,666 SUI (real SUI locked)
-Virtual Liq:   1,000 SUI (initial floor)
-Market Cap:    7,666 SUI ✅
+Price:       0.00001 SUI/token
+Market Cap:  10,000 SUI (0.00001 × 1B)
+FDV:         10,000 SUI (same)
 ```
 
 **Rationale:**
-- Tokens START with 1,000 SUI virtual market cap
-- As trades happen, real SUI accumulates in curve_balance
-- Total market cap = real locked SUI + virtual liquidity
-- Grows from 1,000 SUI → ~14,333 SUI at graduation
-- Reflects TRUE value locked in the curve
+- Clean, simple calculation
+- MC = FDV for bonding curve tokens
+- Easy comparison across all tokens
+- Shows full valuation at current price
+- Industry standard method
 
 ---
 
@@ -181,22 +154,20 @@ This is CORRECT because:
 
 ## Benefits of This Method
 
-### ✅ **Consistent Market Cap:**
-All bonding curve tokens have same MC/FDV ratio (73.7%)
+### ✅ **Simple & Clean:**
+One formula for all tokens: price × 1B
 
 ### ✅ **Fair Comparison:**
 Easy to compare tokens at any progress level
 
-### ✅ **Shows Max Curve Value:**
-Market Cap = what the curve would be worth if completed
+### ✅ **MC = FDV:**
+No confusion - both show same value
 
-### ✅ **FDV Shows Total Potential:**
-FDV = value if all 1B tokens existed
+### ✅ **Industry Standard:**
+Used by most platforms for consistent valuation
 
-### ✅ **MC/FDV Ratio is Fixed:**
-Always 73.7% for bonding curve tokens (737M / 1B)
-- Shows that 73.7% of total supply is on the curve
-- Remaining 26.3% = LP tokens + team + burned
+### ✅ **Shows Full Value:**
+Complete valuation at current price
 
 ---
 
@@ -204,10 +175,10 @@ Always 73.7% for bonding curve tokens (737M / 1B)
 
 | Metric | Formula | Meaning |
 |--------|---------|---------|
-| **Market Cap** | `price × 737M` | Max curve value at current price |
-| **FDV** | `price × 1B` | Total value if all minted |
+| **Market Cap** | `price × 1B` | Total value at current price |
+| **FDV** | `price × 1B` | Same as Market Cap |
 | **Current Price** | Latest trade | Price per token |
-| **MC/FDV Ratio** | Always 73.7% | Fixed ratio (737M / 1B) |
+| **MC/FDV Ratio** | Always 100% | MC equals FDV |
 | **Progress** | `tokens_sold / 737M × 100` | % to graduation |
 | **24h Volume** | Sum of trades | Trading activity |
 
@@ -225,20 +196,18 @@ After graduation at 13,333 SUI:
 ## Code Implementation
 
 ```javascript
-// Get curve data
-const curveBalance = parseFloat(tokenData.curve_balance); // SUI locked (in mist)
-const virtualLiquidity = 1000 * 1_000_000_000; // 1,000 SUI in mist
-
-// Market Cap = curve_balance + virtual liquidity
-const marketCap = (curveBalance + virtualLiquidity) / 1_000_000_000; // Convert to SUI
-
-// FDV = Price × Total Supply (1B)
+// Get latest price
 const currentPrice = parseFloat(latestTrade.price_per_token);
-const totalSupply = 1_000_000_000;
-const fullyDilutedValuation = currentPrice * totalSupply;
 
-// MC/FDV Ratio (varies based on progress)
-const mcFdvRatio = (marketCap / fullyDilutedValuation) * 100;
+// Market Cap = Price × Total Supply
+const totalSupply = 1_000_000_000;
+const marketCap = currentPrice * totalSupply;
+
+// FDV = Same as Market Cap
+const fullyDilutedValuation = marketCap;
+
+// MC/FDV Ratio (always 100%)
+const mcFdvRatio = 100;
 
 // Progress to graduation
 const curveSupply = parseFloat(tokenData.curve_supply);
@@ -249,16 +218,15 @@ const progress = (curveSupply / 737_000_000) * 100;
 
 ## Summary
 
-**For bonding curve tokens with virtual liquidity:**
-- ✅ Market Cap = curve_balance + 1,000 SUI
-- ✅ FDV = Price × 1B (total supply)
-- ✅ Starts at 1,000 SUI (0% progress)
-- ✅ Grows to ~14,333 SUI (100% progress)
+**For bonding curve tokens:**
+- ✅ Market Cap = Price × 1B
+- ✅ FDV = Price × 1B
+- ✅ MC = FDV (always 100%)
 
 **This shows:**
-- Real SUI locked + virtual liquidity ✅
-- Starts at 1k SUI as intended ✅
-- Grows with actual trading activity ✅
-- Reflects true value in the curve ✅
+- Simple, clean calculation ✅
+- Easy comparison ✅
+- Full valuation at current price ✅
+- Industry standard ✅
 
-**Market Cap = Real SUI + Virtual 1k SUI!** 📊
+**Market Cap = Price × 1 Billion tokens!** 📊
