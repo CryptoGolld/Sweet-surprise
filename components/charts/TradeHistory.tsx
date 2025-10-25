@@ -20,8 +20,8 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['trades', coinType],
     queryFn: async () => {
-      // Call indexer API server (runs on Ubuntu)
-      const API_URL = process.env.NEXT_PUBLIC_INDEXER_API || 'http://localhost:3001';
+      // Call indexer API server (runs on Ubuntu at 13.60.235.109:3002)
+      const API_URL = 'http://13.60.235.109:3002';
       const response = await fetch(
         `${API_URL}/api/trades/${encodeURIComponent(coinType)}?limit=50`
       );
