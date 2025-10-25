@@ -1,71 +1,54 @@
 # 💰 Market Cap Calculation (Bonding Curve)
 
-## The Right Way for Bonding Curves
+## The Right Way
 
-For bonding curve tokens, **Market Cap = SUI Reserve (curve_balance)**, NOT price × supply.
-
----
-
-## Why?
-
-### **Traditional Tokens:**
-```
-Market Cap = Price × Circulating Supply
-
-Example:
-- Price: $1
-- Circulating: 1M tokens
-- Market Cap: $1M ✅
-```
-
-### **Bonding Curve Tokens:**
-```
-Market Cap = SUI in Curve (curve_balance)
-
-Example:
-- Tokens sold: 500M (out of 737M)
-- SUI reserve: 8,000 SUI
-- Market Cap: 8,000 SUI ✅
-
-NOT: price × 500M ❌
-```
+**Market Cap** = Current Price × Bonding Curve Supply (tokens sold)  
+**FDV** = Current Price × Total Supply (1B tokens)
 
 ---
 
-## How Our Bonding Curve Works
+## Formula
 
-### **Formula:**
+### **Market Cap:**
 ```
-Price = base_price + (m × supply²)
+Market Cap = Current Price × Curve Supply
+
+Example:
+- Price: 0.00001 SUI/token
+- Tokens sold: 500,000,000 (500M)
+- Market Cap: 0.00001 × 500M = 5,000 SUI ✅
 ```
 
-The curve accumulates SUI as tokens are bought:
-- Start: 0 SUI reserve → 0 Market Cap
-- Mid: 5,000 SUI reserve → 5,000 SUI Market Cap
-- Graduation: 13,333 SUI reserve → 13,333 SUI Market Cap
+### **Fully Diluted Valuation (FDV):**
+```
+FDV = Current Price × Total Supply
 
-**The SUI reserve IS the market cap!**
+Example:
+- Price: 0.00001 SUI/token
+- Total supply: 1,000,000,000 (1B)
+- FDV: 0.00001 × 1B = 10,000 SUI ✅
+```
 
 ---
 
 ## What We Track
 
-### **Market Cap (curve_balance):**
-```sql
-market_cap_sui = curve_balance / 1_000_000_000  -- Convert mist to SUI
+### **Market Cap:**
+```javascript
+market_cap_sui = current_price × curve_supply
 ```
 
-This is the **actual value locked** in the bonding curve.
+This shows the market value of tokens **currently in circulation** on the bonding curve.
 
 ### **Fully Diluted Valuation (FDV):**
-```sql
+```javascript
 fully_diluted_valuation_sui = current_price × 1_000_000_000
 ```
 
-This is: "What if all 1B tokens existed at current price?"
+This shows: "What if all 1B tokens existed at current price?"
 
 ### **Current Price:**
-```sql
+```javascript
 current_price_sui = latest_trade_price
 ```
 
@@ -78,53 +61,46 @@ Price of 1 token in SUI.
 ### **Token at 50% Progress:**
 
 ```
-Tokens Sold:     368M / 737M (50%)
-SUI Reserve:     6,666 SUI
+Tokens Sold:     368,000,000 (368M / 737M)
 Current Price:   0.00001234 SUI/token
 
-Market Cap:      6,666 SUI ✅
+Market Cap:      4,541 SUI (0.00001234 × 368M) ✅
 FDV:             12,340 SUI (0.00001234 × 1B)
+MC/FDV Ratio:    36.8% (shows how much is circulating)
 Progress:        50%
 ```
-
-**Why MC = 6,666 SUI?**
-- That's the actual SUI locked in the curve
-- If you wanted to "buy the project", you'd need to drain 6,666 SUI from the curve
 
 ### **Token at 100% Progress (Graduated):**
 
 ```
-Tokens Sold:     737M / 737M (100%)
-SUI Reserve:     13,333 SUI
+Tokens Sold:     737,000,000 (737M / 737M)
 Current Price:   0.00002000 SUI/token
 
-Market Cap:      13,333 SUI ✅
+Market Cap:      14,740 SUI (0.00002000 × 737M) ✅
 FDV:             20,000 SUI (0.00002000 × 1B)
+MC/FDV Ratio:    73.7%
 Status:          Graduated 🎓
 ```
 
 ---
 
-## Comparison with Traditional MC
+## Why This Method?
 
-### **Why Not Use Price × Supply?**
+### **Standard Across All Markets:**
 
 ```
-❌ BAD (Traditional method):
-Tokens Sold:  100M
+✅ CORRECT (Standard method):
+Tokens Sold:   500M
 Current Price: 0.00001 SUI
-Market Cap:    1,000 SUI (0.00001 × 100M)
-
-✅ GOOD (Bonding Curve method):
-Tokens Sold:  100M
-SUI Reserve:   2,500 SUI
-Market Cap:    2,500 SUI
+Market Cap:    5,000 SUI (0.00001 × 500M)
+FDV:           10,000 SUI (0.00001 × 1B)
 ```
 
-**The bonding curve method shows the TRUE value:**
-- 2,500 SUI is actually locked
-- That's what traders have put in
-- That's the "liquidity" of the token
+**This is the standard way:**
+- Used by CoinGecko, CoinMarketCap
+- Easy to compare with other tokens
+- Shows market value of circulating supply
+- FDV shows potential max value
 
 ---
 
@@ -172,22 +148,23 @@ This is CORRECT because:
 
 ## Benefits of This Method
 
-### ✅ **Accurate Value:**
-Shows real SUI locked, not theoretical price × supply
-
-### ✅ **Graduation Tracking:**
-- 0 SUI → Just launched
-- 6,666 SUI → 50% to graduation
-- 13,333 SUI → Graduated! 🎓
+### ✅ **Industry Standard:**
+Same as CoinGecko, CoinMarketCap, DexScreener
 
 ### ✅ **Fair Comparison:**
-- All tokens use same metric (SUI locked)
-- Can compare tokens at different progress levels
-- "Biggest" = most SUI accumulated
+Can compare with any token on any platform
 
-### ✅ **Matches User Intuition:**
-"This token has 10k SUI locked" = Big
-"This token has 100 SUI locked" = Small
+### ✅ **Shows Circulating Value:**
+Market Cap = value of tokens actually in circulation
+
+### ✅ **FDV Shows Potential:**
+FDV = potential value if fully minted
+
+### ✅ **MC/FDV Ratio:**
+Shows how "diluted" the token is:
+- 100% = All tokens minted (fully circulating)
+- 50% = Half minted
+- 10% = Highly diluted (low MC, high FDV)
 
 ---
 
@@ -195,9 +172,10 @@ Shows real SUI locked, not theoretical price × supply
 
 | Metric | Formula | Meaning |
 |--------|---------|---------|
-| **Market Cap** | `curve_balance` | SUI locked in curve |
-| **FDV** | `price × 1B` | If all tokens existed |
+| **Market Cap** | `price × curve_supply` | Value of circulating tokens |
+| **FDV** | `price × 1B` | Value if all minted |
 | **Current Price** | Latest trade | Price per token |
+| **MC/FDV Ratio** | `MC / FDV × 100` | % of tokens circulating |
 | **Progress** | `supply / 737M × 100` | % to graduation |
 | **24h Volume** | Sum of trades | Trading activity |
 
@@ -215,18 +193,22 @@ After graduation at 13,333 SUI:
 ## Code Implementation
 
 ```javascript
-// Get curve data
-const curveBalance = parseFloat(tokenData.curve_balance); // In mist
+// Get latest price and supply
+const currentPrice = parseFloat(latestTrade.price_per_token);
+const curveSupply = parseFloat(tokenData.curve_supply); // Tokens sold
 
-// Market Cap = SUI Reserve
-const marketCap = curveBalance / 1_000_000_000; // Convert to SUI
+// Market Cap = Price × Circulating Supply
+const marketCap = currentPrice * curveSupply;
 
 // FDV = Price × Total Supply
-const fullyDilutedValuation = currentPrice * 1_000_000_000;
+const totalSupply = 1_000_000_000;
+const fullyDilutedValuation = currentPrice * totalSupply;
+
+// MC/FDV Ratio
+const mcFdvRatio = (marketCap / fullyDilutedValuation) * 100;
 
 // Progress to graduation
 const progress = (curveSupply / 737_000_000) * 100;
-const graduationTarget = 13_333; // SUI
 ```
 
 ---
@@ -234,14 +216,14 @@ const graduationTarget = 13_333; // SUI
 ## Summary
 
 **For bonding curve tokens:**
-- ✅ Market Cap = SUI Reserve (curve_balance)
-- ✅ FDV = Current Price × 1B tokens
-- ✅ Progress = Supply / 737M × 100%
+- ✅ Market Cap = Price × Curve Supply (tokens sold)
+- ✅ FDV = Price × Total Supply (1B)
+- ✅ MC/FDV Ratio = Shows circulation %
 
 **This shows:**
-- Real value locked ✅
-- Fair comparison ✅
-- Clear graduation path ✅
-- Matches user expectations ✅
+- Standard industry metric ✅
+- Easy comparison ✅
+- Market value of circulating supply ✅
+- Potential max value (FDV) ✅
 
-**NOT traditional price × supply!** That doesn't make sense for bonding curves.
+**Same method as CoinGecko, CMC, and all major platforms!** 📊
