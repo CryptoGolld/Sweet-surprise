@@ -2,6 +2,7 @@
 
 import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { formatAmount } from '@/lib/sui/client';
 import { COIN_TYPES } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
@@ -23,19 +24,36 @@ export function UserPortfolio() {
   const client = useSuiClient();
   const { data: suiPrice = 1.0 } = useSuiPrice();
   const { data: bondingCurves = [], isLoading: curvesLoading, error: curvesError } = useBondingCurves();
+  
+  // Debug logs storage
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
 
   const { data: coins, isLoading, error: portfolioError } = useQuery({
     queryKey: ['user-portfolio', account?.address],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
       if (!account?.address) return [];
 
+      const logs: string[] = [];
+      const log = (msg: string) => {
+        console.log(msg);
+        logs.push(msg);
+        setDebugLogs(prev => [...prev, msg]);
+      };
+      
       try {
+        log(`Starting query for ${account.address.slice(0, 10)}...`);
+        
         // Get all coins owned by user
         const allCoins = await client.getAllCoins({
           owner: account.address,
         });
         
-        console.log(`Portfolio: Found ${allCoins.data.length} coin objects for ${account.address.slice(0, 10)}...`);
+        log(`Found ${allCoins.data.length} coin objects`);
+        
+        if (allCoins.data.length === 0) {
+          log('No coins found');
+          return [];
+        }
 
       // Group by coin type
       const coinMap = new Map<string, { balance: bigint; type: string }>();
@@ -46,16 +64,27 @@ export function UserPortfolio() {
         coinMap.set(coin.coinType, existing);
       }
 
-      // Fetch metadata for each coin type
+      // Fetch metadata for each coin type (with timeout protection)
       const coinsWithMetadata: CoinWithMetadata[] = [];
+      const coinTypes = Array.from(coinMap.entries());
       
-      for (const [type, data] of coinMap.entries()) {
+      log(`Processing ${coinTypes.length} unique coin types`);
+      
+      for (let i = 0; i < coinTypes.length; i++) {
+        const [type, data] = coinTypes[i];
+        log(`Processing ${i+1}/${coinTypes.length}: ${type.split('::').pop()}`);
+        
         try {
-          // Try to get coin metadata
-          const metadata = await client.getCoinMetadata({ coinType: type });
+          // Try to get coin metadata (with timeout)
+          const metadataPromise = client.getCoinMetadata({ coinType: type });
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Metadata timeout')), 5000)
+          );
+          
+          const metadata = await Promise.race([metadataPromise, timeoutPromise]) as any;
           
           // Check if this coin has a bonding curve (for image URL)
-          const curve = bondingCurves.find(c => c.coinType === type);
+          const curve = bondingCurves?.find(c => c.coinType === type);
           
           // Use ticker as name if name is empty or same as ticker (for memecoins)
           const symbol = metadata?.symbol || curve?.ticker || type.split('::').pop() || 'UNKNOWN';
@@ -69,10 +98,12 @@ export function UserPortfolio() {
             iconUrl: curve?.imageUrl || metadata?.iconUrl || undefined,
             decimals: metadata?.decimals || 9,
           });
-        } catch (error) {
+        } catch (error: any) {
+          log(`Metadata failed for ${type.split('::').pop()}, using fallback`);
+          
           // If metadata fetch fails, use default values
           const parts = type.split('::');
-          const curve = bondingCurves.find(c => c.coinType === type);
+          const curve = bondingCurves?.find(c => c.coinType === type);
           
           // Use ticker as name if name is empty or same as ticker (for memecoins)
           const symbol = curve?.ticker || parts[parts.length - 1] || 'UNKNOWN';
@@ -89,14 +120,17 @@ export function UserPortfolio() {
         }
       }
 
-        console.log(`Portfolio: Processed ${coinsWithMetadata.length} unique coin types`);
+        log(`✅ Successfully processed ${coinsWithMetadata.length} coins`);
         return coinsWithMetadata;
-      } catch (error) {
+      } catch (error: any) {
+        log(`❌ ERROR: ${error.message}`);
         console.error('Portfolio query error:', error);
-        throw error;
+        throw new Error(`Failed at: ${logs[logs.length - 1] || 'unknown step'}`);
       }
     },
     enabled: !!account?.address,
+    retry: 2, // Retry failed queries twice
+    retryDelay: 1000, // Wait 1s between retries
     refetchInterval: 10000,
   });
 
@@ -153,21 +187,33 @@ export function UserPortfolio() {
   // Show error if portfolio query failed
   if (portfolioError) {
     return (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center">
-        <div className="text-6xl mb-4">❌</div>
-        <h3 className="text-2xl font-bold mb-2">Error Loading Portfolio</h3>
-        <p className="text-gray-400 mb-4">{portfolioError.message}</p>
-        <div className="text-xs text-gray-500 mb-4 font-mono bg-black/20 p-3 rounded text-left">
-          Address: {account?.address}<br/>
-          Curves loaded: {bondingCurves?.length || 0}<br/>
-          Error: {portfolioError.message}
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8">
+        <div className="text-center">
+          <div className="text-6xl mb-4">❌</div>
+          <h3 className="text-2xl font-bold mb-2">Error Loading Portfolio</h3>
+          <p className="text-gray-400 mb-4">{portfolioError.message}</p>
         </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-6 py-3 bg-red-500 hover:bg-red-600 rounded-lg font-semibold"
-        >
-          Reload Page
-        </button>
+        
+        {/* Debug Logs */}
+        <div className="text-xs font-mono bg-black/40 p-4 rounded text-left max-h-60 overflow-y-auto mb-4">
+          <div className="text-green-400 mb-2">📋 Debug Log:</div>
+          {debugLogs.length > 0 ? (
+            debugLogs.map((log, i) => (
+              <div key={i} className="text-gray-300">{log}</div>
+            ))
+          ) : (
+            <div className="text-gray-500">No logs available</div>
+          )}
+        </div>
+        
+        <div className="text-center">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-red-500 hover:bg-red-600 rounded-lg font-semibold"
+          >
+            Reload Page
+          </button>
+        </div>
       </div>
     );
   }
