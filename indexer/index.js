@@ -26,36 +26,56 @@ async function indexEvents() {
       
       console.log(`\n🔄 Polling for new events... (cursor: ${lastCursor || 'start'})`);
       
-      // Query Created events
-      const queryParams = {
-        query: {
-          MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::Created`,
-        },
-        limit: 50,
-        order: 'descending',
-      };
+      // Query ALL event types
+      const eventTypes = [
+        `${PLATFORM_PACKAGE}::bonding_curve::Created`,
+        `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
+        `${PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
+      ];
       
-      if (lastCursor) {
-        queryParams.cursor = lastCursor;
+      let totalNewEvents = 0;
+      
+      for (const eventType of eventTypes) {
+        const queryParams = {
+          query: { MoveEventType: eventType },
+          limit: 50,
+          order: 'descending',
+        };
+        
+        if (lastCursor) {
+          queryParams.cursor = lastCursor;
+        }
+        
+        const events = await client.queryEvents(queryParams);
+        
+        if (events.data.length > 0) {
+          totalNewEvents += events.data.length;
+          
+          // Process each event
+          for (const event of events.data) {
+            if (eventType.includes('Created')) {
+              await processCreatedEvent(event);
+            } else if (eventType.includes('TokensPurchased')) {
+              await processBuyEvent(event);
+            } else if (eventType.includes('TokensSold')) {
+              await processSellEvent(event);
+            }
+          }
+          
+          // Update cursor
+          if (events.nextCursor) {
+            await db.query(
+              'UPDATE indexer_state SET last_cursor = $1, last_timestamp = $2, updated_at = NOW() WHERE id = 1',
+              [JSON.stringify(events.nextCursor), Date.now()]
+            );
+          }
+        }
       }
       
-      const events = await client.queryEvents(queryParams);
-      
-      if (events.data.length > 0) {
-        console.log(`✨ Found ${events.data.length} new events`);
-        
-        // Process each event
-        for (const event of events.data) {
-          await processCreatedEvent(event);
-        }
-        
-        // Update cursor
-        if (events.nextCursor) {
-          await db.query(
-            'UPDATE indexer_state SET last_cursor = $1, last_timestamp = $2, updated_at = NOW() WHERE id = 1',
-            [JSON.stringify(events.nextCursor), Date.now()]
-          );
-        }
+      if (totalNewEvents > 0) {
+        console.log(`✨ Processed ${totalNewEvents} total events`);
+        // Generate candles after processing trades
+        await generateCandles();
       } else {
         console.log('📭 No new events');
       }
@@ -166,6 +186,125 @@ async function processCreatedEvent(event) {
     
   } catch (error) {
     console.error('Failed to process event:', error.message);
+  }
+}
+
+// Process Buy event
+async function processBuyEvent(event) {
+  try {
+    const fields = event.parsedJson;
+    
+    // Extract data
+    const curveId = fields.curve_id;
+    const buyer = fields.buyer;
+    const tokensOut = fields.tokens_out;
+    const suiIn = fields.sui_in;
+    const timestamp = new Date(parseInt(event.timestampMs));
+    
+    // Calculate price per token (in SUI)
+    const pricePerToken = parseFloat(suiIn) / parseFloat(tokensOut);
+    
+    // Get coin type from curve
+    const tokenResult = await db.query('SELECT coin_type FROM tokens WHERE id = $1', [curveId]);
+    const coinType = tokenResult.rows[0]?.coin_type;
+    
+    if (!coinType) {
+      console.warn('Unknown curve:', curveId);
+      return;
+    }
+    
+    // Insert trade
+    await db.query(
+      `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (tx_digest) DO NOTHING`,
+      [event.id.txDigest, coinType, curveId, buyer, 'buy', suiIn, tokensOut, pricePerToken, timestamp]
+    );
+    
+    console.log(`💰 Buy: ${buyer.slice(0, 10)}... bought ${tokensOut} tokens`);
+    
+  } catch (error) {
+    console.error('Failed to process buy event:', error.message);
+  }
+}
+
+// Process Sell event
+async function processSellEvent(event) {
+  try {
+    const fields = event.parsedJson;
+    
+    const curveId = fields.curve_id;
+    const seller = fields.seller;
+    const tokensIn = fields.tokens_in;
+    const suiOut = fields.sui_out;
+    const timestamp = new Date(parseInt(event.timestampMs));
+    
+    const pricePerToken = parseFloat(suiOut) / parseFloat(tokensIn);
+    
+    const tokenResult = await db.query('SELECT coin_type FROM tokens WHERE id = $1', [curveId]);
+    const coinType = tokenResult.rows[0]?.coin_type;
+    
+    if (!coinType) {
+      console.warn('Unknown curve:', curveId);
+      return;
+    }
+    
+    await db.query(
+      `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (tx_digest) DO NOTHING`,
+      [event.id.txDigest, coinType, curveId, seller, 'sell', suiOut, tokensIn, pricePerToken, timestamp]
+    );
+    
+    console.log(`💸 Sell: ${seller.slice(0, 10)}... sold ${tokensIn} tokens`);
+    
+  } catch (error) {
+    console.error('Failed to process sell event:', error.message);
+  }
+}
+
+// Generate OHLCV candles from trades
+async function generateCandles() {
+  try {
+    // Get all coin types with recent trades
+    const coinsResult = await db.query(
+      `SELECT DISTINCT coin_type FROM trades 
+       WHERE timestamp > NOW() - INTERVAL '1 hour'`
+    );
+    
+    for (const row of coinsResult.rows) {
+      const coinType = row.coin_type;
+      
+      // Aggregate trades into 1-minute candles
+      const candleResult = await db.query(
+        `WITH candle_data AS (
+          SELECT 
+            date_trunc('minute', timestamp) as candle_time,
+            (array_agg(price_per_token ORDER BY timestamp ASC))[1] as open,
+            MAX(price_per_token) as high,
+            MIN(price_per_token) as low,
+            (array_agg(price_per_token ORDER BY timestamp DESC))[1] as close,
+            SUM(token_amount) as volume
+          FROM trades
+          WHERE coin_type = $1 
+            AND timestamp > NOW() - INTERVAL '1 hour'
+          GROUP BY candle_time
+        )
+        INSERT INTO price_snapshots (coin_type, timestamp, open, high, low, close, volume)
+        SELECT $1, candle_time, open, high, low, close, volume
+        FROM candle_data
+        ON CONFLICT (coin_type, timestamp) 
+        DO UPDATE SET 
+          open = EXCLUDED.open,
+          high = EXCLUDED.high,
+          low = EXCLUDED.low,
+          close = EXCLUDED.close,
+          volume = EXCLUDED.volume`,
+        [coinType]
+      );
+    }
+  } catch (error) {
+    console.error('Failed to generate candles:', error.message);
   }
 }
 

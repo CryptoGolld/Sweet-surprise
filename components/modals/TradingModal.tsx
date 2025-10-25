@@ -16,6 +16,8 @@ import {
   calculateSpotPrice 
 } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
+import { PriceChart } from '@/components/charts/PriceChart';
+import { TradeHistory } from '@/components/charts/TradeHistory';
 
 interface TradingModalProps {
   isOpen: boolean;
@@ -317,6 +319,14 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
             >
               ×
             </button>
+          </div>
+        </div>
+
+        {/* Charts Section */}
+        <div className="p-6 border-b border-white/10">
+          <div className="grid md:grid-cols-2 gap-4">
+            <PriceChart coinType={curve.coinType} />
+            <TradeHistory coinType={curve.coinType} />
           </div>
         </div>
 
