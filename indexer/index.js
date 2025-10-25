@@ -102,9 +102,20 @@ async function indexEvents() {
     try {
       // Get last processed cursor
       const stateResult = await db.query('SELECT last_cursor FROM indexer_state WHERE id = 1');
-      const lastCursor = stateResult.rows[0]?.last_cursor;
+      const lastCursorStr = stateResult.rows[0]?.last_cursor;
       
-      console.log(`\n🔄 Polling for new events... (cursor: ${lastCursor || 'start'})`);
+      // Parse cursor if it exists (it's stored as JSON string)
+      let lastCursor = null;
+      if (lastCursorStr) {
+        try {
+          lastCursor = JSON.parse(lastCursorStr);
+        } catch (e) {
+          console.log('⚠️  Could not parse cursor, starting fresh');
+          lastCursor = null;
+        }
+      }
+      
+      console.log(`\n🔄 Polling for new events... (cursor: ${lastCursorStr || 'start'})`);
       
       // Query ALL event types
       const eventTypes = [
