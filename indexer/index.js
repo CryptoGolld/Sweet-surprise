@@ -610,9 +610,10 @@ async function updateTokenPriceAndMarketCap(coinType) {
     const curveBalance = parseFloat(tokenResult.rows[0]?.curve_balance || '0');
     
     // MARKET CAP:
-    // Price × tokens sold on bonding curve (curve_supply)
-    // This is the traditional market cap calculation
-    const marketCap = currentPrice * curveSupply;
+    // Price × max bonding curve supply (737M)
+    // This represents the "circulating supply" for bonding curve tokens
+    const maxCurveSupply = 737_000_000;
+    const marketCap = currentPrice * maxCurveSupply;
     
     // FDV (Fully Diluted Valuation):
     // Price × total supply (1B tokens)

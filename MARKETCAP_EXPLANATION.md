@@ -2,8 +2,8 @@
 
 ## The Right Way
 
-**Market Cap** = Current Price × Bonding Curve Supply (tokens sold)  
-**FDV** = Current Price × Total Supply (1B tokens)
+**Market Cap** = Current Price × 737M (max bonding curve supply)  
+**FDV** = Current Price × 1B (total supply)
 
 ---
 
@@ -11,17 +11,22 @@
 
 ### **Market Cap:**
 ```
-Market Cap = Current Price × Curve Supply
+Market Cap = Current Price × 737M (max bonding curve supply)
 
 Example:
 - Price: 0.00001 SUI/token
-- Tokens sold: 500,000,000 (500M)
-- Market Cap: 0.00001 × 500M = 5,000 SUI ✅
+- Max curve supply: 737,000,000
+- Market Cap: 0.00001 × 737M = 7,370 SUI ✅
 ```
+
+**Why 737M?**
+- 737M is the max tokens that can be sold on the bonding curve
+- This is the "circulating supply" for bonding curve phase
+- Represents the market value at current price if curve completes
 
 ### **Fully Diluted Valuation (FDV):**
 ```
-FDV = Current Price × Total Supply
+FDV = Current Price × Total Supply (1B)
 
 Example:
 - Price: 0.00001 SUI/token
@@ -29,16 +34,20 @@ Example:
 - FDV: 0.00001 × 1B = 10,000 SUI ✅
 ```
 
+**Why 1B?**
+- 1B is the total token supply
+- Includes: 737M curve + 207M Cetus LP + 2M team + 54M burned
+
 ---
 
 ## What We Track
 
 ### **Market Cap:**
 ```javascript
-market_cap_sui = current_price × curve_supply
+market_cap_sui = current_price × 737_000_000
 ```
 
-This shows the market value of tokens **currently in circulation** on the bonding curve.
+This shows the market value if all bonding curve tokens existed at current price.
 
 ### **Fully Diluted Valuation (FDV):**
 ```javascript
@@ -61,46 +70,49 @@ Price of 1 token in SUI.
 ### **Token at 50% Progress:**
 
 ```
-Tokens Sold:     368,000,000 (368M / 737M)
+Tokens Sold:     368M / 737M (50%)
 Current Price:   0.00001234 SUI/token
 
-Market Cap:      4,541 SUI (0.00001234 × 368M) ✅
+Market Cap:      9,094 SUI (0.00001234 × 737M) ✅
 FDV:             12,340 SUI (0.00001234 × 1B)
-MC/FDV Ratio:    36.8% (shows how much is circulating)
+MC/FDV Ratio:    73.7%
 Progress:        50%
 ```
+
+**Note:** Market Cap is ALWAYS price × 737M, regardless of progress.
 
 ### **Token at 100% Progress (Graduated):**
 
 ```
-Tokens Sold:     737,000,000 (737M / 737M)
+Tokens Sold:     737M / 737M (100%)
 Current Price:   0.00002000 SUI/token
 
-Market Cap:      14,740 SUI (0.00002000 × 737M) ✅
-FDV:             20,000 SUI (0.00002000 × 1B)
+Market Cap:      14,740 SUI (0.00002 × 737M) ✅
+FDV:             20,000 SUI (0.00002 × 1B)
 MC/FDV Ratio:    73.7%
 Status:          Graduated 🎓
 ```
 
 ---
 
-## Why This Method?
+## Why 737M for Market Cap?
 
-### **Standard Across All Markets:**
+### **737M = Bonding Curve "Circulating Supply":**
 
 ```
-✅ CORRECT (Standard method):
-Tokens Sold:   500M
-Current Price: 0.00001 SUI
-Market Cap:    5,000 SUI (0.00001 × 500M)
+✅ CORRECT:
+Price:         0.00001 SUI
+Market Cap:    7,370 SUI (0.00001 × 737M)
 FDV:           10,000 SUI (0.00001 × 1B)
+MC/FDV:        73.7%
 ```
 
-**This is the standard way:**
-- Used by CoinGecko, CoinMarketCap
-- Easy to compare with other tokens
-- Shows market value of circulating supply
-- FDV shows potential max value
+**Rationale:**
+- 737M is the max that can be minted on the curve
+- This is the "circulating supply" for bonding curve tokens
+- Market Cap represents the value if curve completes
+- Consistent across all tokens regardless of progress
+- Easy comparison between tokens
 
 ---
 
@@ -148,23 +160,22 @@ This is CORRECT because:
 
 ## Benefits of This Method
 
-### ✅ **Industry Standard:**
-Same as CoinGecko, CoinMarketCap, DexScreener
+### ✅ **Consistent Market Cap:**
+All bonding curve tokens have same MC/FDV ratio (73.7%)
 
 ### ✅ **Fair Comparison:**
-Can compare with any token on any platform
+Easy to compare tokens at any progress level
 
-### ✅ **Shows Circulating Value:**
-Market Cap = value of tokens actually in circulation
+### ✅ **Shows Max Curve Value:**
+Market Cap = what the curve would be worth if completed
 
-### ✅ **FDV Shows Potential:**
-FDV = potential value if fully minted
+### ✅ **FDV Shows Total Potential:**
+FDV = value if all 1B tokens existed
 
-### ✅ **MC/FDV Ratio:**
-Shows how "diluted" the token is:
-- 100% = All tokens minted (fully circulating)
-- 50% = Half minted
-- 10% = Highly diluted (low MC, high FDV)
+### ✅ **MC/FDV Ratio is Fixed:**
+Always 73.7% for bonding curve tokens (737M / 1B)
+- Shows that 73.7% of total supply is on the curve
+- Remaining 26.3% = LP tokens + team + burned
 
 ---
 
@@ -172,11 +183,11 @@ Shows how "diluted" the token is:
 
 | Metric | Formula | Meaning |
 |--------|---------|---------|
-| **Market Cap** | `price × curve_supply` | Value of circulating tokens |
-| **FDV** | `price × 1B` | Value if all minted |
+| **Market Cap** | `price × 737M` | Max curve value at current price |
+| **FDV** | `price × 1B` | Total value if all minted |
 | **Current Price** | Latest trade | Price per token |
-| **MC/FDV Ratio** | `MC / FDV × 100` | % of tokens circulating |
-| **Progress** | `supply / 737M × 100` | % to graduation |
+| **MC/FDV Ratio** | Always 73.7% | Fixed ratio (737M / 1B) |
+| **Progress** | `tokens_sold / 737M × 100` | % to graduation |
 | **24h Volume** | Sum of trades | Trading activity |
 
 ---
@@ -193,22 +204,23 @@ After graduation at 13,333 SUI:
 ## Code Implementation
 
 ```javascript
-// Get latest price and supply
+// Get latest price
 const currentPrice = parseFloat(latestTrade.price_per_token);
-const curveSupply = parseFloat(tokenData.curve_supply); // Tokens sold
 
-// Market Cap = Price × Circulating Supply
-const marketCap = currentPrice * curveSupply;
+// Market Cap = Price × Max Bonding Curve Supply (737M)
+const maxCurveSupply = 737_000_000;
+const marketCap = currentPrice * maxCurveSupply;
 
-// FDV = Price × Total Supply
+// FDV = Price × Total Supply (1B)
 const totalSupply = 1_000_000_000;
 const fullyDilutedValuation = currentPrice * totalSupply;
 
-// MC/FDV Ratio
-const mcFdvRatio = (marketCap / fullyDilutedValuation) * 100;
+// MC/FDV Ratio (always 73.7% for bonding curve tokens)
+const mcFdvRatio = (marketCap / fullyDilutedValuation) * 100; // = 73.7%
 
-// Progress to graduation
-const progress = (curveSupply / 737_000_000) * 100;
+// Progress to graduation (based on tokens actually sold)
+const curveSupply = parseFloat(tokenData.curve_supply);
+const progress = (curveSupply / maxCurveSupply) * 100;
 ```
 
 ---
@@ -216,14 +228,14 @@ const progress = (curveSupply / 737_000_000) * 100;
 ## Summary
 
 **For bonding curve tokens:**
-- ✅ Market Cap = Price × Curve Supply (tokens sold)
-- ✅ FDV = Price × Total Supply (1B)
-- ✅ MC/FDV Ratio = Shows circulation %
+- ✅ Market Cap = Price × 737M (max curve supply)
+- ✅ FDV = Price × 1B (total supply)
+- ✅ MC/FDV Ratio = Always 73.7% (fixed)
 
 **This shows:**
-- Standard industry metric ✅
-- Easy comparison ✅
-- Market value of circulating supply ✅
-- Potential max value (FDV) ✅
+- Consistent market cap calculation ✅
+- Fair comparison between all tokens ✅
+- Max value of bonding curve at current price ✅
+- Total potential value (FDV) ✅
 
-**Same method as CoinGecko, CMC, and all major platforms!** 📊
+**Market Cap is always price × 737M, regardless of how many tokens are sold!** 📊
