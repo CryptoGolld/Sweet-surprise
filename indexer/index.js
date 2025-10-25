@@ -596,19 +596,27 @@ async function updateTokenPriceAndMarketCap(coinType) {
     
     const volume24h = volume24hResult.rows[0]?.volume || '0';
     
-    // Get token supply from tokens table
+    // Get curve data from tokens table
     const tokenResult = await db.query(
-      `SELECT curve_supply FROM tokens WHERE coin_type = $1`,
+      `SELECT curve_supply, curve_balance FROM tokens WHERE coin_type = $1`,
       [coinType]
     );
     
-    const curveSupply = tokenResult.rows[0]?.curve_supply || '0';
-    const circulatingSupply = parseFloat(curveSupply);
+    if (tokenResult.rows.length === 0) {
+      return; // Token not found
+    }
     
-    // Calculate market cap (price * circulating supply)
-    const marketCap = currentPrice * circulatingSupply;
+    const curveSupply = parseFloat(tokenResult.rows[0]?.curve_supply || '0');
+    const curveBalance = parseFloat(tokenResult.rows[0]?.curve_balance || '0');
     
-    // For FDV, use total supply (1B tokens)
+    // BONDING CURVE MARKET CAP:
+    // The "market cap" of a bonding curve token is the SUI reserve (curve_balance)
+    // This represents the total value locked in the curve
+    // It starts at 0 and grows to 13,333 SUI at graduation
+    const marketCap = curveBalance / 1_000_000_000; // Convert from mist to SUI
+    
+    // FDV (Fully Diluted Valuation):
+    // If all 1B tokens were minted at current price
     const totalSupply = 1_000_000_000;
     const fullyDilutedValuation = currentPrice * totalSupply;
     
