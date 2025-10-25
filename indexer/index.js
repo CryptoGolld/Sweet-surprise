@@ -16,6 +16,84 @@ console.log('🚀 Starting Memecoin Indexer...');
 console.log('📦 Package:', PLATFORM_PACKAGE);
 console.log('🌐 RPC:', SUI_RPC_URL);
 
+// Index historical events (run once on first start)
+async function indexHistoricalEvents() {
+  const stateResult = await db.query('SELECT last_cursor FROM indexer_state WHERE id = 1');
+  const lastCursor = stateResult.rows[0]?.last_cursor;
+  
+  // Only run if this is the first time (no cursor saved)
+  if (lastCursor) {
+    console.log('⏭️  Skipping historical indexing (already synced)');
+    return;
+  }
+  
+  console.log('📚 Starting historical event indexing...');
+  console.log('⏳ This may take a few minutes for all past events...');
+  
+  const eventTypes = [
+    `${PLATFORM_PACKAGE}::bonding_curve::Created`,
+    `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
+    `${PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
+  ];
+  
+  let totalIndexed = 0;
+  
+  for (const eventType of eventTypes) {
+    console.log(`\n📥 Indexing ${eventType.split('::').pop()} events...`);
+    let cursor = null;
+    let pageCount = 0;
+    const maxPages = 1000; // Safety limit
+    
+    while (pageCount < maxPages) {
+      try {
+        const queryParams = {
+          query: { MoveEventType: eventType },
+          limit: 50,
+          order: 'ascending', // Start from oldest
+        };
+        
+        if (cursor) {
+          queryParams.cursor = cursor;
+        }
+        
+        const events = await client.queryEvents(queryParams);
+        
+        if (events.data.length === 0) break;
+        
+        // Process events
+        for (const event of events.data) {
+          if (eventType.includes('Created')) {
+            await processCreatedEvent(event);
+          } else if (eventType.includes('TokensPurchased')) {
+            await processBuyEvent(event);
+          } else if (eventType.includes('TokensSold')) {
+            await processSellEvent(event);
+          }
+          totalIndexed++;
+        }
+        
+        pageCount++;
+        console.log(`   Page ${pageCount}: Indexed ${events.data.length} events (Total: ${totalIndexed})`);
+        
+        if (!events.hasNextPage || !events.nextCursor) break;
+        cursor = events.nextCursor;
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(`   Error on page ${pageCount}:`, error.message);
+        break;
+      }
+    }
+  }
+  
+  console.log(`\n✅ Historical indexing complete! Indexed ${totalIndexed} total events`);
+  
+  // Generate initial candles
+  await generateCandles();
+  console.log('📊 Generated initial chart candles\n');
+}
+
 // Main indexing loop
 async function indexEvents() {
   while (true) {
@@ -317,4 +395,15 @@ process.on('SIGINT', async () => {
 
 // Start indexing
 console.log('✅ Indexer started!\n');
-indexEvents();
+
+// Index historical events first, then start live polling
+indexHistoricalEvents()
+  .then(() => {
+    console.log('🔄 Switching to live polling mode...\n');
+    indexEvents();
+  })
+  .catch(error => {
+    console.error('❌ Historical indexing failed:', error);
+    console.log('⚠️  Starting live polling anyway...\n');
+    indexEvents();
+  });

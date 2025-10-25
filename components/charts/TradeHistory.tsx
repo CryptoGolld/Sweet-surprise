@@ -20,14 +20,17 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['trades', coinType],
     queryFn: async () => {
+      // Call indexer API server (runs on Ubuntu)
+      const API_URL = process.env.NEXT_PUBLIC_INDEXER_API || 'http://localhost:3001';
       const response = await fetch(
-        `/api/trades/${encodeURIComponent(coinType)}?limit=50`
+        `${API_URL}/api/trades/${encodeURIComponent(coinType)}?limit=50`
       );
       if (!response.ok) throw new Error('Failed to fetch trades');
       return response.json();
     },
     refetchInterval: 3000,
     staleTime: 2000,
+    retry: false, // Don't retry if indexer is not running
   });
 
   if (isLoading) {

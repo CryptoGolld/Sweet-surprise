@@ -22,14 +22,17 @@ export function PriceChart({ coinType }: PriceChartProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['chart', coinType, interval],
     queryFn: async () => {
+      // Call indexer API server (runs on Ubuntu)
+      const API_URL = process.env.NEXT_PUBLIC_INDEXER_API || 'http://localhost:3001';
       const response = await fetch(
-        `/api/chart/${encodeURIComponent(coinType)}?interval=${interval}&limit=100`
+        `${API_URL}/api/chart/${encodeURIComponent(coinType)}?interval=${interval}&limit=100`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
       return response.json();
     },
     refetchInterval: 5000, // Update every 5 seconds
     staleTime: 3000,
+    retry: false, // Don't retry if indexer is not running
   });
 
   if (error) {
