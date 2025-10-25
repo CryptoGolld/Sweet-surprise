@@ -2,11 +2,10 @@
 
 import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatAmount } from '@/lib/sui/client';
-import { COIN_TYPES } from '@/lib/constants';
+import { COIN_TYPES, CONTRACTS } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
-import { useBondingCurves } from '@/lib/hooks/useBondingCurves';
 import { calculateSpotPrice } from '@/lib/utils/bondingCurve';
 import Link from 'next/link';
 
@@ -23,10 +22,12 @@ export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const { data: suiPrice = 1.0 } = useSuiPrice();
-  const { data: bondingCurves = [], isLoading: curvesLoading, error: curvesError } = useBondingCurves();
   
   // Debug logs storage
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  
+  // Store curve data separately
+  const [curveData, setCurveData] = useState<Map<string, { curveSupply: string; curveId: string }>>(new Map());
 
   const { data: coins, isLoading, error: portfolioError } = useQuery({
     queryKey: ['user-portfolio', account?.address],
@@ -55,70 +56,42 @@ export function UserPortfolio() {
           return [];
         }
 
-      // Group by coin type
-      const coinMap = new Map<string, { balance: bigint; type: string }>();
+        // Group by coin type
+        const coinMap = new Map<string, { balance: bigint; type: string }>();
 
-      for (const coin of allCoins.data) {
-        const existing = coinMap.get(coin.coinType) || { balance: 0n, type: coin.coinType };
-        existing.balance += BigInt(coin.balance);
-        coinMap.set(coin.coinType, existing);
-      }
-
-      // Fetch metadata for each coin type (with timeout protection)
-      const coinsWithMetadata: CoinWithMetadata[] = [];
-      const coinTypes = Array.from(coinMap.entries());
-      
-      log(`Processing ${coinTypes.length} unique coin types`);
-      
-      for (let i = 0; i < coinTypes.length; i++) {
-        const [type, data] = coinTypes[i];
-        log(`Processing ${i+1}/${coinTypes.length}: ${type.split('::').pop()}`);
-        
-        try {
-          // Try to get coin metadata (with timeout)
-          const metadataPromise = client.getCoinMetadata({ coinType: type });
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Metadata timeout')), 5000)
-          );
-          
-          const metadata = await Promise.race([metadataPromise, timeoutPromise]) as any;
-          
-          // Check if this coin has a bonding curve (for image URL)
-          const curve = bondingCurves?.find(c => c.coinType === type);
-          
-          // Use ticker as name if name is empty or same as ticker (for memecoins)
-          const symbol = metadata?.symbol || curve?.ticker || type.split('::').pop() || 'UNKNOWN';
-          const name = metadata?.name && metadata.name !== symbol ? metadata.name : (curve?.name && curve.name !== symbol ? curve.name : `${symbol} Token`);
-          
-          coinsWithMetadata.push({
-            type,
-            balance: data.balance.toString(),
-            symbol,
-            name,
-            iconUrl: curve?.imageUrl || metadata?.iconUrl || undefined,
-            decimals: metadata?.decimals || 9,
-          });
-        } catch (error: any) {
-          log(`Metadata failed for ${type.split('::').pop()}, using fallback`);
-          
-          // If metadata fetch fails, use default values
-          const parts = type.split('::');
-          const curve = bondingCurves?.find(c => c.coinType === type);
-          
-          // Use ticker as name if name is empty or same as ticker (for memecoins)
-          const symbol = curve?.ticker || parts[parts.length - 1] || 'UNKNOWN';
-          const name = curve?.name && curve.name !== symbol ? curve.name : `${symbol} Token`;
-          
-          coinsWithMetadata.push({
-            type,
-            balance: data.balance.toString(),
-            symbol,
-            name,
-            iconUrl: curve?.imageUrl || undefined,
-            decimals: 9,
-          });
+        for (const coin of allCoins.data) {
+          const existing = coinMap.get(coin.coinType) || { balance: 0n, type: coin.coinType };
+          existing.balance += BigInt(coin.balance);
+          coinMap.set(coin.coinType, existing);
         }
-      }
+
+        const coinTypes = Array.from(coinMap.entries());
+        log(`Processing ${coinTypes.length} unique coin types`);
+        
+        // Fetch metadata for all coins in parallel (simple and fast)
+        const metadataPromises = coinTypes.map(([type]) =>
+          client.getCoinMetadata({ coinType: type }).catch(() => null)
+        );
+        
+        const metadataResults = await Promise.all(metadataPromises);
+        log(`Fetched metadata: ${metadataResults.filter(m => m).length}/${coinTypes.length}`);
+        
+        // Build coin list
+        const coinsWithMetadata: CoinWithMetadata[] = coinTypes.map(([type, data], i) => {
+          const metadata = metadataResults[i];
+          const parts = type.split('::');
+          const symbol = metadata?.symbol || parts[parts.length - 1] || 'UNKNOWN';
+          const name = (metadata?.name && metadata.name !== symbol) ? metadata.name : `${symbol} Token`;
+          
+          return {
+            type,
+            balance: data.balance.toString(),
+            symbol,
+            name,
+            iconUrl: metadata?.iconUrl || undefined,
+            decimals: metadata?.decimals || 9,
+          };
+        });
 
         log(`✅ Successfully processed ${coinsWithMetadata.length} coins`);
         return coinsWithMetadata;
@@ -133,6 +106,75 @@ export function UserPortfolio() {
     retryDelay: 1000, // Wait 1s between retries
     refetchInterval: 10000,
   });
+  
+  // Fetch curve data for owned tokens (runs after coins load)
+  useEffect(() => {
+    if (!coins || coins.length === 0) return;
+    
+    const fetchCurveData = async () => {
+      const memeCoins = coins.filter(c => c.type !== COIN_TYPES.SUILFG_MEMEFI);
+      if (memeCoins.length === 0) return;
+      
+      console.log(`Fetching curve data for ${memeCoins.length} tokens...`);
+      
+      try {
+        // Query all curves once
+        const events = await client.queryEvents({
+          query: {
+            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
+          },
+          limit: 50,
+        });
+        
+        // Process each owned token
+        for (const coin of memeCoins) {
+          for (const event of events.data) {
+            try {
+              const txDetails = await client.getTransactionBlock({
+                digest: event.id.txDigest,
+                options: { showObjectChanges: true },
+              });
+              
+              const curveObj = txDetails.objectChanges?.find(
+                (obj: any) => obj.type === 'created' && obj.objectType?.includes('bonding_curve::BondingCurve')
+              );
+              
+              if (!curveObj) continue;
+              
+              const curveId = (curveObj as any).objectId;
+              const curveObject = await client.getObject({
+                id: curveId,
+                options: { showContent: true, showType: true },
+              });
+              
+              if (curveObject.data?.content?.dataType === 'moveObject') {
+                const content = curveObject.data.content as any;
+                const fullType = content.type;
+                const match = fullType.match(/<(.+)>/);
+                const coinType = match ? match[1] : '';
+                
+                if (coinType === coin.type) {
+                  setCurveData(prev => new Map(prev).set(coinType, {
+                    curveSupply: content.fields.token_supply || '0',
+                    curveId,
+                  }));
+                  break;
+                }
+              }
+            } catch (err) {
+              // Skip failed fetches
+            }
+          }
+        }
+        
+        console.log(`Loaded curve data for ${curveData.size} tokens`);
+      } catch (error) {
+        console.error('Failed to fetch curve data:', error);
+      }
+    };
+    
+    fetchCurveData();
+  }, [coins, client]);
 
 
   if (!account) {
@@ -164,25 +206,6 @@ export function UserPortfolio() {
     );
   }
 
-  // Show error if curves failed to load
-  if (curvesError) {
-    return (
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-8 text-center">
-        <div className="text-6xl mb-4">⚠️</div>
-        <h3 className="text-2xl font-bold mb-2">Token Data Loading Issue</h3>
-        <p className="text-gray-400 mb-4">Failed to load token price data. Your portfolio may load without prices.</p>
-        <div className="text-sm text-gray-500 mb-4 font-mono bg-black/20 p-2 rounded">
-          {curvesError.message}
-        </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-black rounded-lg font-semibold"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
 
   // Show error if portfolio query failed
   if (portfolioError) {
@@ -254,16 +277,17 @@ export function UserPortfolio() {
   const totalPortfolioValue = coins.reduce((acc, coin) => {
     const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
     const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
-    const curve = bondingCurves.find(c => c.coinType === coin.type);
     
     let totalValue = 0;
     if (isMainToken) {
       totalValue = balanceNum * suiPrice;
-    } else if (curve) {
-      // NOTE: curve.curveSupply is already in whole tokens from contract
-      const currentSupply = Number(curve.curveSupply);
-      const pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
-      totalValue = balanceNum * pricePerToken;
+    } else {
+      const curve = curveData.get(coin.type);
+      if (curve) {
+        const currentSupply = Number(curve.curveSupply);
+        const pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
+        totalValue = balanceNum * pricePerToken;
+      }
     }
     
     return acc + totalValue;
@@ -295,14 +319,13 @@ export function UserPortfolio() {
       {coins.map((coin) => {
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
         const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
-        
-        // Find bonding curve data for this token to get current price
-        const curve = bondingCurves.find(c => c.coinType === coin.type);
-        const tokenLink = curve ? `/tokens/${curve.id}` : '/tokens';
+        const tokenLink = '/tokens';
         
         // Calculate price per token
         let pricePerToken = 0;
         let totalValue = 0;
+        
+        const curve = curveData.get(coin.type);
         
         if (isMainToken) {
           // SUILFG_MEMEFI uses real-time SUI price
@@ -310,21 +333,15 @@ export function UserPortfolio() {
           totalValue = balanceNum * suiPrice;
         } else if (curve) {
           // For meme tokens, calculate current spot price from bonding curve
-          // NOTE: curve.curveSupply is already in whole tokens from contract
           const currentSupply = Number(curve.curveSupply);
           
-          // Only calculate if supply is valid
           if (currentSupply > 0 && !isNaN(currentSupply)) {
-            pricePerToken = calculateSpotPrice(currentSupply) * suiPrice; // Convert to USD
+            pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
             totalValue = balanceNum * pricePerToken;
           } else {
-            // For newly created tokens with 0 supply, use base price
             pricePerToken = calculateSpotPrice(0) * suiPrice;
             totalValue = balanceNum * pricePerToken;
           }
-        } else {
-          // No curve found - might be loading or not a platform token
-          console.log('No curve found for token:', coin.type, 'Symbol:', coin.symbol);
         }
 
         return (
@@ -371,12 +388,12 @@ export function UserPortfolio() {
                   <div className="text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
-                ) : !isMainToken && !curve ? (
+                ) : !isMainToken && !curveData.get(coin.type) ? (
                   <div className="text-xs text-gray-500 italic">
                     Loading price...
                   </div>
                 ) : null}
-                {curve && (
+                {!isMainToken && (
                   <div className="text-xs text-sui-blue group-hover:underline">
                     Trade →
                   </div>
