@@ -237,10 +237,10 @@ async function processCreatedEvent(event) {
       console.warn(`No metadata for ${ticker}`);
     }
     
-    // Insert into database
+    // Insert into database with initial price of 0
     await db.query(
-      `INSERT INTO tokens (id, coin_type, ticker, name, description, image_url, creator, curve_supply, curve_balance, graduated, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO tokens (id, coin_type, ticker, name, description, image_url, creator, curve_supply, curve_balance, graduated, created_at, current_price_sui, market_cap_sui)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, 0)
        ON CONFLICT (coin_type) 
        DO UPDATE SET 
          curve_supply = EXCLUDED.curve_supply,
@@ -354,6 +354,9 @@ async function processBuyEvent(event) {
       );
     }
     
+    // Update token price and market data
+    await updateTokenPriceAndMarketCap(coinType);
+    
     console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${suiIn} SUI`);
     
   } catch (error) {
@@ -448,6 +451,9 @@ async function processSellEvent(event) {
       );
     }
     
+    // Update token price and market data
+    await updateTokenPriceAndMarketCap(coinType);
+    
     console.log(`💸 Sell: ${seller.slice(0, 10)}... received ${suiOut} SUI`);
     
   } catch (error) {
@@ -538,6 +544,129 @@ async function generateCandles() {
     }
   } catch (error) {
     console.error('Failed to generate candles:', error.message);
+  }
+}
+
+// Update token price and market cap based on latest trades
+async function updateTokenPriceAndMarketCap(coinType) {
+  try {
+    // Get latest trade price
+    const latestTradeResult = await db.query(
+      `SELECT price_per_token, timestamp 
+       FROM trades 
+       WHERE coin_type = $1 
+       ORDER BY timestamp DESC 
+       LIMIT 1`,
+      [coinType]
+    );
+    
+    if (latestTradeResult.rows.length === 0) {
+      return; // No trades yet
+    }
+    
+    const currentPrice = parseFloat(latestTradeResult.rows[0].price_per_token);
+    const lastTradeAt = latestTradeResult.rows[0].timestamp;
+    
+    // Get 24h ago price for price change calculation
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const price24hAgoResult = await db.query(
+      `SELECT price_per_token 
+       FROM trades 
+       WHERE coin_type = $1 AND timestamp <= $2
+       ORDER BY timestamp DESC 
+       LIMIT 1`,
+      [coinType, twentyFourHoursAgo]
+    );
+    
+    const price24hAgo = price24hAgoResult.rows.length > 0 
+      ? parseFloat(price24hAgoResult.rows[0].price_per_token) 
+      : currentPrice;
+    
+    const priceChange24h = price24hAgo > 0 
+      ? ((currentPrice - price24hAgo) / price24hAgo) * 100 
+      : 0;
+    
+    // Calculate 24h volume
+    const volume24hResult = await db.query(
+      `SELECT SUM(sui_amount) as volume 
+       FROM trades 
+       WHERE coin_type = $1 AND timestamp > $2`,
+      [coinType, twentyFourHoursAgo]
+    );
+    
+    const volume24h = volume24hResult.rows[0]?.volume || '0';
+    
+    // Get token supply from tokens table
+    const tokenResult = await db.query(
+      `SELECT curve_supply FROM tokens WHERE coin_type = $1`,
+      [coinType]
+    );
+    
+    const curveSupply = tokenResult.rows[0]?.curve_supply || '0';
+    const circulatingSupply = parseFloat(curveSupply);
+    
+    // Calculate market cap (price * circulating supply)
+    const marketCap = currentPrice * circulatingSupply;
+    
+    // For FDV, use total supply (1B tokens)
+    const totalSupply = 1_000_000_000;
+    const fullyDilutedValuation = currentPrice * totalSupply;
+    
+    // Get ATH and ATL
+    const athResult = await db.query(
+      `SELECT MAX(price_per_token) as ath, 
+              (SELECT timestamp FROM trades WHERE coin_type = $1 ORDER BY price_per_token DESC LIMIT 1) as ath_at
+       FROM trades 
+       WHERE coin_type = $1`,
+      [coinType]
+    );
+    
+    const atlResult = await db.query(
+      `SELECT MIN(price_per_token) as atl,
+              (SELECT timestamp FROM trades WHERE coin_type = $1 ORDER BY price_per_token ASC LIMIT 1) as atl_at
+       FROM trades 
+       WHERE coin_type = $1`,
+      [coinType]
+    );
+    
+    const ath = athResult.rows[0]?.ath || currentPrice;
+    const athAt = athResult.rows[0]?.ath_at || lastTradeAt;
+    const atl = atlResult.rows[0]?.atl || currentPrice;
+    const atlAt = atlResult.rows[0]?.atl_at || lastTradeAt;
+    
+    // Update tokens table
+    await db.query(
+      `UPDATE tokens 
+       SET 
+         current_price_sui = $1,
+         market_cap_sui = $2,
+         fully_diluted_valuation_sui = $3,
+         volume_24h_sui = $4,
+         price_change_24h = $5,
+         all_time_high_sui = $6,
+         all_time_high_at = $7,
+         all_time_low_sui = $8,
+         all_time_low_at = $9,
+         last_trade_at = $10,
+         updated_at = NOW()
+       WHERE coin_type = $11`,
+      [
+        currentPrice,
+        marketCap,
+        fullyDilutedValuation,
+        volume24h,
+        priceChange24h,
+        ath,
+        athAt,
+        atl,
+        atlAt,
+        lastTradeAt,
+        coinType
+      ]
+    );
+    
+  } catch (error) {
+    console.error('Failed to update price/market cap:', error.message);
   }
 }
 

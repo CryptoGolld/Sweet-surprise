@@ -14,9 +14,23 @@ CREATE TABLE IF NOT EXISTS tokens (
     graduated BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    -- Price & Market Data (updated on every trade)
+    current_price_sui NUMERIC(20, 10),              -- Current price per token in SUI
+    market_cap_sui NUMERIC(20, 10),                 -- Market cap = price * circulating_supply
+    fully_diluted_valuation_sui NUMERIC(20, 10),   -- FDV = price * total_supply
+    volume_24h_sui NUMERIC(20, 0) DEFAULT 0,        -- 24h trading volume in SUI
+    price_change_24h NUMERIC(10, 4) DEFAULT 0,      -- 24h price change %
+    all_time_high_sui NUMERIC(20, 10),              -- ATH price
+    all_time_high_at TIMESTAMP,                     -- When ATH was reached
+    all_time_low_sui NUMERIC(20, 10),               -- ATL price
+    all_time_low_at TIMESTAMP,                      -- When ATL was reached
+    last_trade_at TIMESTAMP,                        -- Last trade timestamp
     INDEX idx_ticker (ticker),
     INDEX idx_created_at (created_at DESC),
-    INDEX idx_graduated (graduated)
+    INDEX idx_graduated (graduated),
+    INDEX idx_market_cap (market_cap_sui DESC),
+    INDEX idx_volume_24h (volume_24h_sui DESC),
+    INDEX idx_price_change (price_change_24h DESC)
 );
 
 -- Trades table (all buys and sells)

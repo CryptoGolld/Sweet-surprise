@@ -29,13 +29,17 @@ app.get('/api/tokens', async (req, res) => {
     const sort = req.query.sort || 'newest';
 
     let orderBy = 'created_at DESC';
-    if (sort === 'marketcap') orderBy = 'curve_balance DESC';
+    if (sort === 'marketcap') orderBy = 'market_cap_sui DESC NULLS LAST';
+    if (sort === 'volume') orderBy = 'volume_24h_sui DESC NULLS LAST';
+    if (sort === 'price_change') orderBy = 'price_change_24h DESC NULLS LAST';
     if (sort === 'progress') orderBy = 'curve_supply DESC';
-    if (sort === 'volume') orderBy = 'curve_supply DESC';
 
     const result = await db.query(
       `SELECT id, coin_type, ticker, name, description, image_url, creator, 
-              curve_supply, curve_balance, graduated, created_at
+              curve_supply, curve_balance, graduated, created_at,
+              current_price_sui, market_cap_sui, fully_diluted_valuation_sui,
+              volume_24h_sui, price_change_24h, all_time_high_sui, all_time_low_sui,
+              last_trade_at
        FROM tokens
        ORDER BY ${orderBy}
        LIMIT $1 OFFSET $2`,
@@ -54,6 +58,15 @@ app.get('/api/tokens', async (req, res) => {
       curveBalance: row.curve_balance,
       graduated: row.graduated,
       createdAt: new Date(row.created_at).getTime(),
+      // Market data
+      currentPrice: parseFloat(row.current_price_sui) || 0,
+      marketCap: parseFloat(row.market_cap_sui) || 0,
+      fullyDilutedValuation: parseFloat(row.fully_diluted_valuation_sui) || 0,
+      volume24h: row.volume_24h_sui || '0',
+      priceChange24h: parseFloat(row.price_change_24h) || 0,
+      allTimeHigh: parseFloat(row.all_time_high_sui) || 0,
+      allTimeLow: parseFloat(row.all_time_low_sui) || 0,
+      lastTradeAt: row.last_trade_at ? new Date(row.last_trade_at).getTime() : null,
     }));
 
     res.json({
