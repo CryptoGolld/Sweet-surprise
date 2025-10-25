@@ -88,6 +88,19 @@ CREATE TABLE IF NOT EXISTS user_pnl (
     INDEX idx_pnl (realized_pnl DESC)
 );
 
+-- Token holders (current holdings per user per token)
+CREATE TABLE IF NOT EXISTS token_holders (
+    user_address VARCHAR(66) NOT NULL,
+    coin_type TEXT NOT NULL,
+    balance NUMERIC(20, 0) NOT NULL DEFAULT 0,
+    first_acquired_at TIMESTAMP NOT NULL,
+    last_updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_address, coin_type),
+    INDEX idx_coin_type (coin_type),
+    INDEX idx_balance (balance DESC),
+    INDEX idx_user (user_address)
+);
+
 -- Insert initial state
 INSERT INTO indexer_state (id, last_cursor, last_timestamp) 
 VALUES (1, NULL, 0) 

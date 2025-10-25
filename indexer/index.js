@@ -332,6 +332,17 @@ async function processBuyEvent(event) {
       [buyer, coinType, suiIn, tokensOut.toString(), timestamp]
     );
     
+    // Update token holders (increase balance)
+    await db.query(
+      `INSERT INTO token_holders (user_address, coin_type, balance, first_acquired_at, last_updated_at)
+       VALUES ($1, $2, $3, $4, $4)
+       ON CONFLICT (user_address, coin_type) 
+       DO UPDATE SET 
+         balance = token_holders.balance + $3,
+         last_updated_at = $4`,
+      [buyer, coinType, tokensOut.toString(), timestamp]
+    );
+    
     // Track referral if present
     if (referrer && referrer !== '0x0' && referrer !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
       await db.query(
@@ -406,6 +417,24 @@ async function processSellEvent(event) {
          realized_pnl = (user_pnl.total_sui_received + $3) - user_pnl.total_sui_spent,
          last_trade_at = $5`,
       [seller, coinType, suiOut, tokensIn.toString(), timestamp]
+    );
+    
+    // Update token holders (decrease balance)
+    await db.query(
+      `INSERT INTO token_holders (user_address, coin_type, balance, first_acquired_at, last_updated_at)
+       VALUES ($1, $2, -$3, $4, $4)
+       ON CONFLICT (user_address, coin_type) 
+       DO UPDATE SET 
+         balance = token_holders.balance - $3,
+         last_updated_at = $4`,
+      [seller, coinType, tokensIn.toString(), timestamp]
+    );
+    
+    // If balance is now 0 or negative, remove from holders
+    await db.query(
+      `DELETE FROM token_holders 
+       WHERE user_address = $1 AND coin_type = $2 AND balance <= 0`,
+      [seller, coinType]
     );
     
     // Track referral if present

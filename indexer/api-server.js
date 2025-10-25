@@ -281,6 +281,155 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
+// Get token holders
+app.get('/api/holders/:coinType', async (req, res) => {
+  try {
+    const coinType = decodeURIComponent(req.params.coinType);
+    const limit = parseInt(req.query.limit || '100');
+    const minBalance = req.query.minBalance || '0';
+    
+    // Get all holders with balance > minBalance
+    const holdersResult = await db.query(
+      `SELECT 
+        user_address,
+        balance,
+        first_acquired_at,
+        last_updated_at
+       FROM token_holders
+       WHERE coin_type = $1 AND balance > $2
+       ORDER BY balance DESC
+       LIMIT $3`,
+      [coinType, minBalance, limit]
+    );
+    
+    // Get total holder count
+    const countResult = await db.query(
+      `SELECT COUNT(*) as total_holders, SUM(balance) as total_held
+       FROM token_holders
+       WHERE coin_type = $1 AND balance > 0`,
+      [coinType]
+    );
+    
+    // Get top 10 holders for distribution stats
+    const top10Result = await db.query(
+      `SELECT SUM(balance) as top10_balance
+       FROM (
+         SELECT balance 
+         FROM token_holders 
+         WHERE coin_type = $1 AND balance > 0
+         ORDER BY balance DESC 
+         LIMIT 10
+       ) as top10`,
+      [coinType]
+    );
+    
+    const totalHeld = countResult.rows[0]?.total_held || '0';
+    const top10Balance = top10Result.rows[0]?.top10_balance || '0';
+    const top10Percentage = totalHeld > 0 
+      ? (parseFloat(top10Balance) / parseFloat(totalHeld) * 100).toFixed(2)
+      : '0';
+    
+    res.json({
+      coinType,
+      holders: holdersResult.rows.map(row => ({
+        address: row.user_address,
+        balance: row.balance,
+        percentage: totalHeld > 0 
+          ? (parseFloat(row.balance) / parseFloat(totalHeld) * 100).toFixed(4)
+          : '0',
+        firstAcquiredAt: new Date(row.first_acquired_at).getTime(),
+        lastUpdatedAt: new Date(row.last_updated_at).getTime(),
+      })),
+      stats: {
+        totalHolders: parseInt(countResult.rows[0]?.total_holders || '0'),
+        totalHeld: totalHeld,
+        top10Percentage: top10Percentage,
+      },
+    });
+  } catch (error) {
+    console.error('Holders API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user's token holdings
+app.get('/api/holdings/:address', async (req, res) => {
+  try {
+    const address = req.params.address;
+    
+    const result = await db.query(
+      `SELECT 
+        coin_type,
+        balance,
+        first_acquired_at,
+        last_updated_at
+       FROM token_holders
+       WHERE user_address = $1 AND balance > 0
+       ORDER BY last_updated_at DESC`,
+      [address]
+    );
+    
+    res.json({
+      address,
+      holdings: result.rows.map(row => ({
+        coinType: row.coin_type,
+        balance: row.balance,
+        firstAcquiredAt: new Date(row.first_acquired_at).getTime(),
+        lastUpdatedAt: new Date(row.last_updated_at).getTime(),
+      })),
+      totalTokens: result.rows.length,
+    });
+  } catch (error) {
+    console.error('Holdings API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get holder count for multiple tokens (batch query)
+app.post('/api/holders/batch', async (req, res) => {
+  try {
+    const { coinTypes } = req.body;
+    
+    if (!Array.isArray(coinTypes) || coinTypes.length === 0) {
+      return res.status(400).json({ error: 'coinTypes array required' });
+    }
+    
+    // Limit to 50 tokens per request
+    const limited = coinTypes.slice(0, 50);
+    
+    const result = await db.query(
+      `SELECT 
+        coin_type,
+        COUNT(*) as holder_count,
+        SUM(balance) as total_held
+       FROM token_holders
+       WHERE coin_type = ANY($1) AND balance > 0
+       GROUP BY coin_type`,
+      [limited]
+    );
+    
+    // Create map for quick lookup
+    const holderMap = {};
+    result.rows.forEach(row => {
+      holderMap[row.coin_type] = {
+        holderCount: parseInt(row.holder_count),
+        totalHeld: row.total_held,
+      };
+    });
+    
+    res.json({
+      holders: limited.map(coinType => ({
+        coinType,
+        holderCount: holderMap[coinType]?.holderCount || 0,
+        totalHeld: holderMap[coinType]?.totalHeld || '0',
+      })),
+    });
+  } catch (error) {
+    console.error('Batch Holders API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 API Server running on http://localhost:${PORT}`);
