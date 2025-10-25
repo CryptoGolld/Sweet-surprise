@@ -204,9 +204,22 @@ export function sellTokensTransaction(params: {
     tx.mergeCoins(coinArg, restObjects);
   }
   
+  // CRITICAL FIX: The Move sell function expects amount_tokens in WHOLE TOKENS
+  // The contract tracks token_supply in whole tokens (line 49 of bonding_curve.move)
+  // But coin balances are in smallest units (9 decimals)
+  // So we need to convert tokensToSell from smallest units to whole tokens
+  
+  const tokensInSmallestUnits = BigInt(params.tokensToSell);
+  const tokensInWholeUnits = tokensInSmallestUnits / BigInt(1_000_000_000);
+  
+  console.log('Sell amount conversion:', {
+    tokensInSmallestUnits: tokensInSmallestUnits.toString(),
+    tokensInWholeUnits: tokensInWholeUnits.toString(),
+  });
+  
   // The Move sell function expects:
   // - mut tokens: Coin<T> - the coin to sell from (it handles splitting internally)
-  // - amount_tokens: u64 - the amount to sell
+  // - amount_tokens: u64 - the amount to sell in WHOLE TOKENS
   // It will split if needed and return remainder to sender
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
@@ -216,7 +229,7 @@ export function sellTokensTransaction(params: {
       tx.object(params.curveId),
       tx.object(CONTRACTS.REFERRAL_REGISTRY),
       coinArg, // Pass the coin (single or merged)
-      tx.pure.u64(params.tokensToSell),
+      tx.pure.u64(tokensInWholeUnits.toString()), // amount_tokens in WHOLE tokens (not smallest units!)
       tx.pure.u64(params.minSuiOut),
       tx.pure.u64(deadlineMs),
       tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()),

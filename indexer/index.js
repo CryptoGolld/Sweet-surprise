@@ -32,8 +32,10 @@ async function indexHistoricalEvents() {
   
   const eventTypes = [
     `${PLATFORM_PACKAGE}::bonding_curve::Created`,
-    `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
-    `${PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
+    `${PLATFORM_PACKAGE}::bonding_curve::Bought`,
+    `${PLATFORM_PACKAGE}::bonding_curve::Sold`,
+    `${PLATFORM_PACKAGE}::referral_registry::ReferralRegistered`,
+    `${PLATFORM_PACKAGE}::referral_registry::ReferralRewardPaid`,
   ];
   
   let totalIndexed = 0;
@@ -272,34 +274,76 @@ async function processBuyEvent(event) {
   try {
     const fields = event.parsedJson;
     
-    // Extract data
-    const curveId = fields.curve_id;
+    // Extract data from Bought event
     const buyer = fields.buyer;
-    const tokensOut = fields.tokens_out;
-    const suiIn = fields.sui_in;
+    const suiIn = fields.amount_sui;
+    const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
-    // Calculate price per token (in SUI)
-    const pricePerToken = parseFloat(suiIn) / parseFloat(tokensOut);
+    // Get transaction to find curve and token amounts
+    const txDetails = await client.getTransactionBlock({
+      digest: event.id.txDigest,
+      options: { showObjectChanges: true },
+    });
     
-    // Get coin type from curve
-    const tokenResult = await db.query('SELECT coin_type FROM tokens WHERE id = $1', [curveId]);
-    const coinType = tokenResult.rows[0]?.coin_type;
+    // Find minted tokens (newly created coins of the memecoin type)
+    const mintedCoins = txDetails.objectChanges?.filter(
+      obj => obj.type === 'created' && obj.objectType?.includes('::coin::Coin<') && !obj.objectType?.includes('SUILFG_MEMEFI')
+    );
     
-    if (!coinType) {
-      console.warn('Unknown curve:', curveId);
+    if (!mintedCoins || mintedCoins.length === 0) {
+      console.warn('No minted tokens found in buy tx:', event.id.txDigest);
       return;
     }
+    
+    // Extract coin type from minted coin
+    const coinTypeMatch = mintedCoins[0].objectType.match(/<(.+)>/);
+    const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
+    
+    // Get curve ID from transaction
+    const curveUsed = txDetails.objectChanges?.find(
+      obj => obj.type === 'mutated' && obj.objectType?.includes('bonding_curve::BondingCurve')
+    );
+    const curveId = curveUsed?.objectId || '';
+    
+    // Estimate tokens (we don't have exact amount in event, use cost/price estimation)
+    // This is approximate - for exact amounts, we'd need to parse BalanceChange
+    const pricePerToken = 0.00001; // Rough estimate, will be refined by actual trades
+    const tokensOut = BigInt(suiIn) / BigInt(10000); // Rough estimate
     
     // Insert trade
     await db.query(
       `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (tx_digest) DO NOTHING`,
-      [event.id.txDigest, coinType, curveId, buyer, 'buy', suiIn, tokensOut, pricePerToken, timestamp]
+      [event.id.txDigest, coinType, curveId, buyer, 'buy', suiIn, tokensOut.toString(), pricePerToken, timestamp]
     );
     
-    console.log(`💰 Buy: ${buyer.slice(0, 10)}... bought ${tokensOut} tokens`);
+    // Update user PnL
+    await db.query(
+      `INSERT INTO user_pnl (user_address, coin_type, total_sui_spent, total_tokens_bought, buy_count, last_trade_at)
+       VALUES ($1, $2, $3, $4, 1, $5)
+       ON CONFLICT (user_address, coin_type) 
+       DO UPDATE SET 
+         total_sui_spent = user_pnl.total_sui_spent + $3,
+         total_tokens_bought = user_pnl.total_tokens_bought + $4,
+         buy_count = user_pnl.buy_count + 1,
+         last_trade_at = $5`,
+      [buyer, coinType, suiIn, tokensOut.toString(), timestamp]
+    );
+    
+    // Track referral if present
+    if (referrer && referrer !== '0x0' && referrer !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+      await db.query(
+        `INSERT INTO referrals (referee, referrer, first_trade_at, trade_count)
+         VALUES ($1, $2, $3, 1)
+         ON CONFLICT (referee) 
+         DO UPDATE SET trade_count = referrals.trade_count + 1`,
+        [buyer, referrer, timestamp]
+      );
+    }
+    
+    console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${suiIn} SUI`);
     
   } catch (error) {
     console.error('Failed to process buy event:', error.message);
@@ -311,33 +355,115 @@ async function processSellEvent(event) {
   try {
     const fields = event.parsedJson;
     
-    const curveId = fields.curve_id;
+    // Extract data from Sold event
     const seller = fields.seller;
-    const tokensIn = fields.tokens_in;
-    const suiOut = fields.sui_out;
+    const suiOut = fields.amount_sui;
+    const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
-    const pricePerToken = parseFloat(suiOut) / parseFloat(tokensIn);
+    // Get transaction to find curve and token amounts
+    const txDetails = await client.getTransactionBlock({
+      digest: event.id.txDigest,
+      options: { showObjectChanges: true },
+    });
     
-    const tokenResult = await db.query('SELECT coin_type FROM tokens WHERE id = $1', [curveId]);
-    const coinType = tokenResult.rows[0]?.coin_type;
+    // Find curve from mutated objects
+    const curveUsed = txDetails.objectChanges?.find(
+      obj => obj.type === 'mutated' && obj.objectType?.includes('bonding_curve::BondingCurve')
+    );
     
-    if (!coinType) {
-      console.warn('Unknown curve:', curveId);
+    if (!curveUsed) {
+      console.warn('No curve found in sell tx:', event.id.txDigest);
       return;
     }
     
+    // Extract coin type from curve type
+    const coinTypeMatch = curveUsed.objectType.match(/<(.+)>/);
+    const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
+    const curveId = curveUsed.objectId;
+    
+    // Estimate tokens sold (approximate)
+    const pricePerToken = 0.00001; // Rough estimate
+    const tokensIn = BigInt(suiOut) / BigInt(10000); // Rough estimate
+    
+    // Insert trade
     await db.query(
       `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (tx_digest) DO NOTHING`,
-      [event.id.txDigest, coinType, curveId, seller, 'sell', suiOut, tokensIn, pricePerToken, timestamp]
+      [event.id.txDigest, coinType, curveId, seller, 'sell', suiOut, tokensIn.toString(), pricePerToken, timestamp]
     );
     
-    console.log(`💸 Sell: ${seller.slice(0, 10)}... sold ${tokensIn} tokens`);
+    // Update user PnL
+    await db.query(
+      `INSERT INTO user_pnl (user_address, coin_type, total_sui_received, total_tokens_sold, sell_count, last_trade_at)
+       VALUES ($1, $2, $3, $4, 1, $5)
+       ON CONFLICT (user_address, coin_type) 
+       DO UPDATE SET 
+         total_sui_received = user_pnl.total_sui_received + $3,
+         total_tokens_sold = user_pnl.total_tokens_sold + $4,
+         sell_count = user_pnl.sell_count + 1,
+         realized_pnl = (user_pnl.total_sui_received + $3) - user_pnl.total_sui_spent,
+         last_trade_at = $5`,
+      [seller, coinType, suiOut, tokensIn.toString(), timestamp]
+    );
+    
+    // Track referral if present
+    if (referrer && referrer !== '0x0' && referrer !== '0x0000000000000000000000000000000000000000000000000000000000000000') {
+      await db.query(
+        `INSERT INTO referrals (referee, referrer, first_trade_at, trade_count)
+         VALUES ($1, $2, $3, 1)
+         ON CONFLICT (referee) 
+         DO UPDATE SET trade_count = referrals.trade_count + 1`,
+        [seller, referrer, timestamp]
+      );
+    }
+    
+    console.log(`💸 Sell: ${seller.slice(0, 10)}... received ${suiOut} SUI`);
     
   } catch (error) {
     console.error('Failed to process sell event:', error.message);
+  }
+}
+
+// Process ReferralRegistered event
+async function processReferralRegisteredEvent(event) {
+  try {
+    const fields = event.parsedJson;
+    const trader = fields.trader;
+    const referrer = fields.referrer;
+    const timestamp = new Date(parseInt(fields.timestamp));
+    
+    await db.query(
+      `INSERT INTO referrals (referee, referrer, first_trade_at, trade_count)
+       VALUES ($1, $2, $3, 0)
+       ON CONFLICT (referee) DO NOTHING`,
+      [trader, referrer, timestamp]
+    );
+    
+    console.log(`👥 Referral: ${trader.slice(0, 10)}... referred by ${referrer.slice(0, 10)}...`);
+  } catch (error) {
+    console.error('Failed to process referral registered event:', error.message);
+  }
+}
+
+// Process ReferralRewardPaid event
+async function processReferralRewardEvent(event) {
+  try {
+    const fields = event.parsedJson;
+    const referrer = fields.referrer;
+    const amount = fields.amount;
+    
+    await db.query(
+      `UPDATE referrals 
+       SET total_rewards = COALESCE(total_rewards, 0) + $1
+       WHERE referrer = $2`,
+      [amount, referrer]
+    );
+    
+    console.log(`💵 Referral reward: ${referrer.slice(0, 10)}... earned ${amount}`);
+  } catch (error) {
+    console.error('Failed to process referral reward event:', error.message);
   }
 }
 

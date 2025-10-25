@@ -157,6 +157,130 @@ app.get('/api/trades/:coinType', async (req, res) => {
   }
 });
 
+// Get user referral info
+app.get('/api/referral/:address', async (req, res) => {
+  try {
+    const address = req.params.address;
+    
+    // Get if user was referred by someone
+    const refereeResult = await db.query(
+      `SELECT referrer, first_trade_at, trade_count
+       FROM referrals
+       WHERE referee = $1`,
+      [address]
+    );
+    
+    // Get users this address has referred
+    const referrerResult = await db.query(
+      `SELECT referee, first_trade_at, trade_count, total_rewards
+       FROM referrals
+       WHERE referrer = $1
+       ORDER BY first_trade_at DESC`,
+      [address]
+    );
+    
+    // Calculate total rewards earned as referrer
+    const rewardsResult = await db.query(
+      `SELECT COALESCE(SUM(total_rewards), 0) as total_earned
+       FROM referrals
+       WHERE referrer = $1`,
+      [address]
+    );
+    
+    res.json({
+      address,
+      referredBy: refereeResult.rows[0] || null,
+      referrals: referrerResult.rows,
+      totalReferrals: referrerResult.rows.length,
+      totalEarned: rewardsResult.rows[0]?.total_earned || '0',
+    });
+  } catch (error) {
+    console.error('Referral API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user PnL
+app.get('/api/pnl/:address', async (req, res) => {
+  try {
+    const address = req.params.address;
+    
+    const result = await db.query(
+      `SELECT 
+        coin_type,
+        total_sui_spent,
+        total_sui_received,
+        total_tokens_bought,
+        total_tokens_sold,
+        buy_count,
+        sell_count,
+        realized_pnl,
+        last_trade_at
+       FROM user_pnl
+       WHERE user_address = $1
+       ORDER BY last_trade_at DESC`,
+      [address]
+    );
+    
+    // Calculate overall PnL
+    const totalPnl = result.rows.reduce((sum, row) => 
+      sum + BigInt(row.realized_pnl), BigInt(0)
+    );
+    
+    res.json({
+      address,
+      tokens: result.rows.map(row => ({
+        coinType: row.coin_type,
+        suiSpent: row.total_sui_spent,
+        suiReceived: row.total_sui_received,
+        tokensBought: row.total_tokens_bought,
+        tokensSold: row.total_tokens_sold,
+        buyCount: row.buy_count,
+        sellCount: row.sell_count,
+        realizedPnl: row.realized_pnl,
+        lastTradeAt: new Date(row.last_trade_at).getTime(),
+      })),
+      totalPnl: totalPnl.toString(),
+    });
+  } catch (error) {
+    console.error('PnL API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get leaderboard (top PnL)
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || '50');
+    
+    const result = await db.query(
+      `SELECT 
+        user_address,
+        SUM(realized_pnl) as total_pnl,
+        SUM(buy_count + sell_count) as total_trades,
+        MAX(last_trade_at) as last_trade
+       FROM user_pnl
+       GROUP BY user_address
+       ORDER BY total_pnl DESC
+       LIMIT $1`,
+      [limit]
+    );
+    
+    res.json({
+      leaderboard: result.rows.map((row, index) => ({
+        rank: index + 1,
+        address: row.user_address,
+        pnl: row.total_pnl,
+        trades: parseInt(row.total_trades),
+        lastTrade: new Date(row.last_trade).getTime(),
+      })),
+    });
+  } catch (error) {
+    console.error('Leaderboard API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 API Server running on http://localhost:${PORT}`);

@@ -59,6 +59,35 @@ CREATE TABLE IF NOT EXISTS indexer_state (
     CHECK (id = 1) -- Only one row allowed
 );
 
+-- Referrals table (tracks referrer-referee relationships)
+CREATE TABLE IF NOT EXISTS referrals (
+    referee VARCHAR(66) PRIMARY KEY,
+    referrer VARCHAR(66) NOT NULL,
+    first_trade_at TIMESTAMP NOT NULL,
+    total_rewards NUMERIC(20, 0) DEFAULT 0,
+    trade_count INTEGER DEFAULT 0,
+    INDEX idx_referrer (referrer),
+    INDEX idx_first_trade (first_trade_at DESC)
+);
+
+-- User PnL table (per user per token)
+CREATE TABLE IF NOT EXISTS user_pnl (
+    user_address VARCHAR(66) NOT NULL,
+    coin_type TEXT NOT NULL,
+    total_sui_spent NUMERIC(20, 0) DEFAULT 0,
+    total_sui_received NUMERIC(20, 0) DEFAULT 0,
+    total_tokens_bought NUMERIC(20, 0) DEFAULT 0,
+    total_tokens_sold NUMERIC(20, 0) DEFAULT 0,
+    buy_count INTEGER DEFAULT 0,
+    sell_count INTEGER DEFAULT 0,
+    realized_pnl NUMERIC(20, 0) DEFAULT 0,
+    last_trade_at TIMESTAMP,
+    PRIMARY KEY (user_address, coin_type),
+    INDEX idx_user (user_address),
+    INDEX idx_coin (coin_type),
+    INDEX idx_pnl (realized_pnl DESC)
+);
+
 -- Insert initial state
 INSERT INTO indexer_state (id, last_cursor, last_timestamp) 
 VALUES (1, NULL, 0) 
