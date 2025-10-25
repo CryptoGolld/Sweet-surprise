@@ -23,30 +23,17 @@ export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const { data: suiPrice = 1.0 } = useSuiPrice();
-  const { data: bondingCurves = [], isLoading: curvesLoading, error: curvesError } = useBondingCurves();
-  
-  console.log('Portfolio - Bonding curves:', {
-    count: bondingCurves?.length || 0,
-    loading: curvesLoading,
-    error: curvesError?.message,
-  });
+  const { data: bondingCurves = [] } = useBondingCurves();
 
-  const { data: coins, isLoading, refetch } = useQuery({
+  const { data: coins, isLoading } = useQuery({
     queryKey: ['user-portfolio', account?.address, bondingCurves],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
-      if (!account?.address) {
-        console.log('Portfolio query: No account');
-        return [];
-      }
+      if (!account?.address) return [];
 
-      console.log('Portfolio query: Fetching coins for', account.address);
-      
       // Get all coins owned by user
       const allCoins = await client.getAllCoins({
         owner: account.address,
       });
-      
-      console.log('Portfolio query: Found', allCoins.data.length, 'coin objects');
 
       // Group by coin type
       const coinMap = new Map<string, { balance: bigint; type: string }>();

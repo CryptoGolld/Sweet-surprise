@@ -32,41 +32,20 @@ export function useBondingCurves() {
       try {
         console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
         
-        // Fetch ALL pages (but efficiently)
-        let allEvents: any[] = [];
-        let cursor: any = null;
-        let pageNum = 0;
+        // Simple approach: fetch 50 most recent (proven to work)
+        const events = await client.queryEvents({
+          query: {
+            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
+          },
+          limit: 50,
+          order: 'descending',
+        });
         
-        // Fetch all pages sequentially (but each page processes in parallel)
-        do {
-          pageNum++;
-          const queryParams: any = {
-            query: {
-              MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
-            },
-            limit: 50,
-            order: 'descending',
-          };
-          
-          if (cursor) {
-            queryParams.cursor = cursor;
-          }
-          
-          const result = await client.queryEvents(queryParams);
-          console.log(`📄 Page ${pageNum}: ${result.data.length} events`);
-          
-          allEvents = allEvents.concat(result.data);
-          cursor = result.hasNextPage ? result.nextCursor : null;
-          
-        } while (cursor);
+        console.log(`✅ Found ${events.data.length} Created events`);
         
-        console.log(`✅ Total: ${allEvents.length} events across ${pageNum} pages`);
-        
-        if (allEvents.length === 0) {
+        if (events.data.length === 0) {
           return [];
         }
-        
-        const events = { data: allEvents };
         
         // Step 1: Fetch all transaction details in parallel
         const txDetailsPromises = events.data.map(event =>
