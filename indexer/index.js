@@ -609,11 +609,21 @@ async function updateTokenPriceAndMarketCap(coinType) {
     const curveSupply = parseFloat(tokenResult.rows[0]?.curve_supply || '0');
     const curveBalance = parseFloat(tokenResult.rows[0]?.curve_balance || '0');
     
-    // MARKET CAP:
-    // Price × max bonding curve supply (737M)
-    // This represents the "circulating supply" for bonding curve tokens
-    const maxCurveSupply = 737_000_000;
-    const marketCap = currentPrice * maxCurveSupply;
+    // MARKET CAP CALCULATION FOR BONDING CURVE:
+    // The bonding curve has a formula: p(s) = base_price + (m/den) × s²
+    // The market cap is the integral (area under curve) from 0 to current supply
+    // This equals: base_price × s + (m/den) × s³ / 3
+    // 
+    // BUT: We can use a simpler approach since curve_balance already contains
+    // the SUI that has been accumulated from all buys minus sells.
+    // However, with VIRTUAL LIQUIDITY of 1,000 SUI at start, we need to add it:
+    //
+    // Market Cap = curve_balance + virtual_liquidity
+    // At start (s=0): MC = 0 + 1,000 = 1,000 SUI ✅
+    // At end (s=737M): MC = ~13,333 + 1,000 = ~14,333 SUI ✅
+    
+    const virtualLiquidity = 1000 * 1_000_000_000; // 1,000 SUI in mist
+    const marketCap = (curveBalance + virtualLiquidity) / 1_000_000_000; // Convert to SUI
     
     // FDV (Fully Diluted Valuation):
     // Price × total supply (1B tokens)
