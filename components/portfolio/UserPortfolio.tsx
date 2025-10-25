@@ -22,10 +22,10 @@ export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
   const { data: suiPrice = 1.0 } = useSuiPrice();
-  const { data: bondingCurves = [] } = useBondingCurves();
+  const { data: bondingCurves = [], isLoading: curvesLoading, error: curvesError } = useBondingCurves();
 
   const { data: coins, isLoading, error: portfolioError } = useQuery({
-    queryKey: ['user-portfolio', account?.address, bondingCurves],
+    queryKey: ['user-portfolio', account?.address],
     queryFn: async (): Promise<CoinWithMetadata[]> => {
       if (!account?.address) return [];
 
@@ -130,13 +130,38 @@ export function UserPortfolio() {
     );
   }
 
-  // Show error if query failed
+  // Show error if curves failed to load
+  if (curvesError) {
+    return (
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-8 text-center">
+        <div className="text-6xl mb-4">⚠️</div>
+        <h3 className="text-2xl font-bold mb-2">Token Data Loading Issue</h3>
+        <p className="text-gray-400 mb-4">Failed to load token price data. Your portfolio may load without prices.</p>
+        <div className="text-sm text-gray-500 mb-4 font-mono bg-black/20 p-2 rounded">
+          {curvesError.message}
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-black rounded-lg font-semibold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // Show error if portfolio query failed
   if (portfolioError) {
     return (
       <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center">
         <div className="text-6xl mb-4">❌</div>
         <h3 className="text-2xl font-bold mb-2">Error Loading Portfolio</h3>
         <p className="text-gray-400 mb-4">{portfolioError.message}</p>
+        <div className="text-xs text-gray-500 mb-4 font-mono bg-black/20 p-3 rounded text-left">
+          Address: {account?.address}<br/>
+          Curves loaded: {bondingCurves?.length || 0}<br/>
+          Error: {portfolioError.message}
+        </div>
         <button
           onClick={() => window.location.reload()}
           className="px-6 py-3 bg-red-500 hover:bg-red-600 rounded-lg font-semibold"

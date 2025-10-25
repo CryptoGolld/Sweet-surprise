@@ -32,41 +32,54 @@ export function useBondingCurves() {
       try {
         console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
         
-        // Fetch ALL events with pagination
+        // Fetch ALL events with pagination (with error recovery)
         const allEventData: any[] = [];
         let cursor: any = null;
         let pageCount = 0;
-        const maxPages = 20; // Safety limit: 20 pages × 50 = 1000 tokens max
+        const maxPages = 20; // Safety limit
         
-        // Keep fetching until no more pages
-        while (pageCount < maxPages) {
-          const result = await client.queryEvents({
-            query: {
-              MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
-            },
-            limit: 50,
-            order: 'descending',
-            ...(cursor ? { cursor } : {}),
-          });
-          
-          pageCount++;
-          allEventData.push(...result.data);
-          
-          // Break if no more pages
-          if (!result.hasNextPage || !result.nextCursor) {
-            break;
+        try {
+          // Keep fetching until no more pages
+          while (pageCount < maxPages) {
+            const result = await client.queryEvents({
+              query: {
+                MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
+              },
+              limit: 50,
+              order: 'descending',
+              ...(cursor ? { cursor } : {}),
+            });
+            
+            pageCount++;
+            allEventData.push(...result.data);
+            
+            console.log(`📄 Page ${pageCount}: +${result.data.length} events (total: ${allEventData.length})`);
+            
+            // Break if no more pages
+            if (!result.hasNextPage || !result.nextCursor) {
+              console.log(`✅ Pagination complete: ${allEventData.length} total events`);
+              break;
+            }
+            
+            cursor = result.nextCursor;
           }
           
-          cursor = result.nextCursor;
+          if (pageCount >= maxPages) {
+            console.log(`⚠️ Reached max pages limit (${maxPages}), using ${allEventData.length} events`);
+          }
+        } catch (paginationError) {
+          console.error('Pagination error:', paginationError);
+          // If pagination fails, use whatever we got so far
+          if (allEventData.length > 0) {
+            console.log(`⚠️ Pagination failed but recovered with ${allEventData.length} events`);
+          } else {
+            // If we got nothing, throw the error
+            throw paginationError;
+          }
         }
-        
-        if (pageCount >= maxPages) {
-          console.log(`⚠️ Reached max pages limit (${maxPages})`);
-        }
-        
-        console.log(`✅ Found ${allEventData.length} Created events across ${pageCount} pages`);
         
         if (allEventData.length === 0) {
+          console.log('No events found');
           return [];
         }
         
