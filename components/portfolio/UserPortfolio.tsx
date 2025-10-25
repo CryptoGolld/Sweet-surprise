@@ -261,7 +261,6 @@ export function UserPortfolio() {
           <div className="font-bold mb-2">🔍 Debug Info:</div>
           <div className="space-y-1 font-mono text-yellow-200">
             <div>Wallet: {account?.address.slice(0, 20)}...</div>
-            <div>Curve Data Loaded: {curveData.size}</div>
             <div>Query Status: {isLoading ? 'Loading...' : 'Complete'}</div>
             <div>Coins Found: {coins?.length || 0}</div>
           </div>
