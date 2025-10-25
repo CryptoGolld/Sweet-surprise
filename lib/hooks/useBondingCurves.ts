@@ -32,20 +32,46 @@ export function useBondingCurves() {
       try {
         console.log('🔍 Querying bonding curves from:', CONTRACTS.PLATFORM_PACKAGE);
         
-        // Simple approach: fetch 50 most recent (proven to work)
-        const events = await client.queryEvents({
-          query: {
-            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
-          },
-          limit: 50,
-          order: 'descending',
-        });
+        // Fetch ALL events with pagination
+        const allEventData: any[] = [];
+        let cursor: any = null;
+        let pageCount = 0;
+        const maxPages = 20; // Safety limit: 20 pages × 50 = 1000 tokens max
         
-        console.log(`✅ Found ${events.data.length} Created events`);
+        // Keep fetching until no more pages
+        while (pageCount < maxPages) {
+          const result = await client.queryEvents({
+            query: {
+              MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
+            },
+            limit: 50,
+            order: 'descending',
+            ...(cursor ? { cursor } : {}),
+          });
+          
+          pageCount++;
+          allEventData.push(...result.data);
+          
+          // Break if no more pages
+          if (!result.hasNextPage || !result.nextCursor) {
+            break;
+          }
+          
+          cursor = result.nextCursor;
+        }
         
-        if (events.data.length === 0) {
+        if (pageCount >= maxPages) {
+          console.log(`⚠️ Reached max pages limit (${maxPages})`);
+        }
+        
+        console.log(`✅ Found ${allEventData.length} Created events across ${pageCount} pages`);
+        
+        if (allEventData.length === 0) {
           return [];
         }
+        
+        // Use the exact same structure as before
+        const events = { data: allEventData };
         
         // Step 1: Fetch all transaction details in parallel
         const txDetailsPromises = events.data.map(event =>
