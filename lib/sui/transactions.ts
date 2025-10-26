@@ -161,7 +161,7 @@ export function createCurveTransaction(params: {
 
 /**
  * Buy tokens from bonding curve
- * @param estimateGas - Optional: If provided with client and sender, will estimate gas dynamically
+ * Gas is estimated automatically by the wallet - no need to set it
  */
 export function buyTokensTransaction(params: {
   curveId: string;
@@ -169,9 +169,6 @@ export function buyTokensTransaction(params: {
   paymentCoinIds: string[]; // Array of payment coin object IDs
   maxSuiIn: string;
   minTokensOut: string;
-  // Optional: for dynamic gas estimation
-  client?: SuiClient;
-  sender?: string;
 }): Transaction {
   const tx = new Transaction();
   
@@ -232,7 +229,7 @@ export function buyTokensTransaction(params: {
 
 /**
  * Sell tokens back to bonding curve
- * @param estimateGas - Optional: If provided with client and sender, will estimate gas dynamically
+ * Gas is estimated automatically by the wallet - no need to set it
  */
 export function sellTokensTransaction(params: {
   curveId: string;
@@ -240,9 +237,6 @@ export function sellTokensTransaction(params: {
   memeTokenCoinIds: string[]; // Array of coin object IDs
   tokensToSell: string;
   minSuiOut: string;
-  // Optional: for dynamic gas estimation
-  client?: SuiClient;
-  sender?: string;
 }): Transaction {
   const tx = new Transaction();
   
