@@ -22,10 +22,9 @@ export function PriceChart({ coinType }: PriceChartProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['chart', coinType, interval],
     queryFn: async () => {
-      // Call indexer API server (runs on Ubuntu at 13.60.235.109:3002)
-      const API_URL = 'http://13.60.235.109:3002';
+      // Call through Next.js proxy to avoid mixed content issues
       const response = await fetch(
-        `${API_URL}/api/chart/${encodeURIComponent(coinType)}?interval=${interval}&limit=100`
+        `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=${interval}&limit=100`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
       return response.json();

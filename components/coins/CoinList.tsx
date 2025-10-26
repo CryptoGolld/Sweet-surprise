@@ -7,8 +7,8 @@ import { CoinCard } from './CoinCard';
 type SortOption = 'newest' | 'marketcap' | 'progress' | 'volume';
 type FilterTab = 'all' | 'trading' | 'graduated';
 
-// Indexer API endpoint
-const INDEXER_API = 'http://13.60.235.109:3002';
+// Use Next.js API proxy to avoid mixed content (HTTPS→HTTP) issues
+const API_BASE = '/api/proxy';
 
 interface Token {
   id: string;
@@ -38,7 +38,7 @@ export function CoinList() {
     queryKey: ['indexer-tokens'],
     queryFn: async () => {
       try {
-        const response = await fetch(`${INDEXER_API}/api/tokens?limit=1000&sort=newest`, {
+        const response = await fetch(`${API_BASE}/tokens?limit=1000&sort=newest`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -146,7 +146,7 @@ export function CoinList() {
         <h3 className="text-2xl font-bold mb-2">Failed to load coins</h3>
         <p className="text-gray-400 mb-4">{error.message || 'Please try refreshing the page'}</p>
         <div className="text-xs text-gray-500 mb-4 font-mono">
-          API: {INDEXER_API}
+          API: {API_BASE}/tokens
         </div>
         <button
           onClick={() => window.location.reload()}

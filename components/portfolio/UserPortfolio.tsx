@@ -118,8 +118,8 @@ export function UserPortfolio() {
       console.log(`Fetching curve data from indexer for ${memeCoins.length} tokens...`);
       
       try {
-        // Fetch all tokens from indexer
-        const response = await fetch('http://13.60.235.109:3002/api/tokens?limit=1000');
+        // Fetch all tokens from indexer through proxy
+        const response = await fetch('/api/proxy/tokens?limit=1000');
         if (!response.ok) throw new Error('Failed to fetch from indexer');
         
         const data = await response.json();

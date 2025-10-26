@@ -20,10 +20,9 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
   const { data, isLoading } = useQuery({
     queryKey: ['trades', coinType],
     queryFn: async () => {
-      // Call indexer API server (runs on Ubuntu at 13.60.235.109:3002)
-      const API_URL = 'http://13.60.235.109:3002';
+      // Call through Next.js proxy to avoid mixed content issues
       const response = await fetch(
-        `${API_URL}/api/trades/${encodeURIComponent(coinType)}?limit=50`
+        `/api/proxy/trades/${encodeURIComponent(coinType)}?limit=50`
       );
       if (!response.ok) throw new Error('Failed to fetch trades');
       return response.json();
