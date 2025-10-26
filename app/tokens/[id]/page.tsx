@@ -3,18 +3,29 @@
 import { useParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { BottomNav } from '@/components/BottomNav';
-import { useBondingCurves } from '@/lib/hooks/useBondingCurves';
 import { TradingModal } from '@/components/modals/TradingModal';
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 export default function TokenPage() {
   const params = useParams();
   const tokenId = params.id as string;
-  const { data: curves, isLoading } = useBondingCurves();
+  
+  // Fetch from indexer API via proxy
+  const { data: tokensResponse, isLoading } = useQuery({
+    queryKey: ['indexer-tokens'],
+    queryFn: async () => {
+      const response = await fetch('/api/proxy/tokens?limit=1000');
+      if (!response.ok) throw new Error('Failed to fetch tokens');
+      return response.json();
+    },
+    staleTime: 3000,
+  });
+  
   const [showTrading, setShowTrading] = useState(false);
   
-  // Find the token by ID
-  const token = curves?.find(c => c.id === tokenId);
+  // Find the token by ID from indexer data
+  const token = tokensResponse?.tokens?.find((t: any) => t.id === tokenId);
 
   // Auto-open trading modal when token is loaded
   useEffect(() => {

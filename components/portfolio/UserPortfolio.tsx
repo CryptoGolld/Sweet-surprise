@@ -263,21 +263,21 @@ export function UserPortfolio() {
 
   return (
     <div className="space-y-6">
-      {/* Total Portfolio Value Card */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-meme-pink/20 via-meme-purple/20 to-sui-blue/20 border border-white/20 rounded-2xl p-8 backdrop-blur-sm">
+      {/* Total Portfolio Value Card - Compact for Mobile */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-meme-pink/20 via-meme-purple/20 to-sui-blue/20 border border-white/20 rounded-2xl p-4 md:p-8 backdrop-blur-sm">
         <div className="absolute inset-0 bg-gradient-to-r from-meme-pink/5 to-sui-blue/5 animate-pulse" />
         <div className="relative z-10">
-          <div className="text-sm text-gray-400 mb-2 font-semibold tracking-wide uppercase">Total Portfolio Value</div>
-          <div className="text-5xl font-bold bg-gradient-to-r from-meme-pink via-meme-purple to-sui-blue bg-clip-text text-transparent animate-in fade-in duration-700">
+          <div className="text-xs md:text-sm text-gray-400 mb-1 md:mb-2 font-semibold tracking-wide uppercase">Total Portfolio Value</div>
+          <div className="text-3xl md:text-5xl font-bold bg-gradient-to-r from-meme-pink via-meme-purple to-sui-blue bg-clip-text text-transparent animate-in fade-in duration-700">
             {formatUSD(totalPortfolioValue)}
           </div>
-          <div className="mt-4 flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <div className="mt-2 md:mt-4 flex items-center gap-2 md:gap-4 text-xs md:text-sm">
+            <div className="flex items-center gap-1 md:gap-2">
+              <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-green-400 animate-pulse" />
               <span className="text-gray-400">{coins.length} Assets</span>
             </div>
             <div className="text-gray-500">•</div>
-            <div className="text-gray-400">Live Prices</div>
+            <div className="text-gray-400">Live</div>
           </div>
         </div>
       </div>
@@ -316,56 +316,52 @@ export function UserPortfolio() {
           <Link
             key={coin.type}
             href={tokenLink}
-            className="group relative block bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl p-4 hover:from-white/10 hover:to-white/5 hover:border-meme-purple/30 hover:shadow-lg hover:shadow-meme-purple/10 transition-all duration-300 animate-in slide-in-from-bottom cursor-pointer"
+            className="group relative block bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 rounded-xl p-3 md:p-4 hover:from-white/10 hover:to-white/5 hover:border-meme-purple/30 hover:shadow-lg hover:shadow-meme-purple/10 transition-all duration-300 animate-in slide-in-from-bottom cursor-pointer"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-meme-pink/0 via-meme-purple/0 to-sui-blue/0 group-hover:from-meme-pink/5 group-hover:via-meme-purple/5 group-hover:to-sui-blue/5 rounded-xl transition-all duration-300" />
-            <div className="relative z-10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {/* Token Image */}
+            <div className="relative z-10 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                {/* Token Image - Smaller on Mobile */}
                 {coin.iconUrl ? (
                   <img
                     src={coin.iconUrl}
                     alt={coin.symbol}
-                    className="w-12 h-12 rounded-full object-cover"
+                    className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover flex-shrink-0"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                       const parent = e.currentTarget.parentElement!;
                       const emoji = isMainToken ? '💧' : '🪙';
-                      parent.innerHTML = `<div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}">${emoji}</div>`;
+                      parent.innerHTML = `<div class="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl flex-shrink-0 ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}">${emoji}</div>`;
                     }}
                   />
                 ) : (
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple shadow-lg shadow-meme-purple/50' : 'bg-gradient-to-br from-white/10 to-white/5 backdrop-blur'} transition-all group-hover:scale-110`}>
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl flex-shrink-0 ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple shadow-lg shadow-meme-purple/50' : 'bg-gradient-to-br from-white/10 to-white/5 backdrop-blur'} transition-all group-hover:scale-110`}>
                     {isMainToken ? '💧' : '🪙'}
                   </div>
                 )}
                 
-                <div>
-                  <div className="font-bold text-lg">{coin.name}</div>
-                  <div className="text-xs text-gray-400">
-                    {pricePerToken > 0 ? `$${pricePerToken.toFixed(6)} per ${coin.symbol}` : coin.symbol}
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm md:text-lg truncate">{coin.name}</div>
+                  <div className="text-xs text-gray-400 truncate">
+                    {pricePerToken > 0 ? `$${pricePerToken.toFixed(6)}` : coin.symbol}
                   </div>
                 </div>
               </div>
               
-              <div className="text-right">
-                <div className="font-bold text-lg">
-                  {formatAmount(coin.balance, coin.decimals)} {coin.symbol}
+              <div className="text-right flex-shrink-0">
+                <div className="font-bold text-sm md:text-lg">
+                  {formatAmount(coin.balance, coin.decimals)}
                 </div>
+                <div className="text-xs text-gray-400">{coin.symbol}</div>
                 {totalValue > 0 ? (
-                  <div className="text-sm text-meme-purple font-semibold">
+                  <div className="text-xs md:text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
                 ) : !isMainToken && !curveData.get(coin.type) ? (
                   <div className="text-xs text-gray-500 italic">
-                    Loading price...
+                    Loading...
                   </div>
                 ) : null}
-                {!isMainToken && (
-                  <div className="text-xs text-sui-blue group-hover:underline">
-                    Trade →
-                  </div>
-                )}
               </div>
             </div>
           </Link>
@@ -373,21 +369,21 @@ export function UserPortfolio() {
       })}
       </div>
       
-      {/* Quick Actions */}
-      <div className="mt-6 grid grid-cols-2 gap-3">
+      {/* Quick Actions - More Compact on Mobile */}
+      <div className="mt-4 md:mt-6 grid grid-cols-2 gap-2 md:gap-3">
         <Link
           href="/faucet"
-          className="p-4 bg-white/5 border border-white/10 rounded-xl text-center hover:bg-white/10 transition-colors"
+          className="p-3 md:p-4 bg-white/5 border border-white/10 rounded-xl text-center hover:bg-white/10 transition-colors"
         >
-          <div className="text-3xl mb-1">💧</div>
-          <div className="text-sm font-semibold">Claim More</div>
+          <div className="text-2xl md:text-3xl mb-1">💧</div>
+          <div className="text-xs md:text-sm font-semibold">Claim More</div>
         </Link>
         <Link
           href="/tokens"
-          className="p-4 bg-white/5 border border-white/10 rounded-xl text-center hover:bg-white/10 transition-colors"
+          className="p-3 md:p-4 bg-white/5 border border-white/10 rounded-xl text-center hover:bg-white/10 transition-colors"
         >
-          <div className="text-3xl mb-1">🔥</div>
-          <div className="text-sm font-semibold">Trade</div>
+          <div className="text-2xl md:text-3xl mb-1">🔥</div>
+          <div className="text-xs md:text-sm font-semibold">Trade</div>
         </Link>
       </div>
     </div>
