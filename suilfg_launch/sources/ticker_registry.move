@@ -120,7 +120,7 @@ module suilfg_launch::ticker_registry {
         } else {
             let mut wl = vector::empty<address>();
             vector::push_back(&mut wl, user);
-            let info = TickerInfo { status: TickerStatus::Whitelisted, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: wl, creation_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
+            let info = TickerInfo { status: TickerStatus::Whitelisted, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: wl, last_use_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
             table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
         }
     }
@@ -209,7 +209,7 @@ module suilfg_launch::ticker_registry {
             let info_ref = table::borrow_mut<String, TickerInfo>(&mut registry.tickers, key_for_borrow);
             info_ref.status = status;
         } else {
-            let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>(), creation_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
+            let info = TickerInfo { status, token_id: opt::none<ID>(), cooldown_ends_ts_ms: 0, whitelist: vector::empty<address>(), last_use_ts_ms: 0, graduated_ts_ms: 0, current_reuse_fee_mist: 0, reserved_for: opt::none<address>() };
             table::add<String, TickerInfo>(&mut registry.tickers, ticker, info);
         }
     }

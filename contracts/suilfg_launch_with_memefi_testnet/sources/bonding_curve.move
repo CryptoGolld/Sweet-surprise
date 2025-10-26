@@ -22,14 +22,16 @@ module suilfg_launch_memefi::bonding_curve {
     use suilfg_launch_memefi::ticker_registry::{Self as ticker_registry, TickerRegistry};
     
     // Cetus CLMM imports for automatic pool creation
-    use cetus_clmm::config::GlobalConfig;
-    use cetus_clmm::pool::{Self as cetus_pool, Pool};
-    use cetus_clmm::position::Position;
-    use cetus_clmm::pool_creator;
-    use cetus_clmm::factory::Pools;
+    // CETUS IMPORTS COMMENTED FOR NOW - Will re-enable when bot is stable
+    // use cetus_clmm::config::GlobalConfig;
+    // use cetus_clmm::pool::{Self as cetus_pool, Pool};
+    // use cetus_clmm::position::Position;
+    // use cetus_clmm::pool_creator;
+    // use cetus_clmm::factory::Pools;
     
     // Our custom LP locker for permanent lock with upgrade-safe flag
-    use suilfg_launch_memefi::lp_locker::{Self, LockedLPPosition};
+    // COMMENTED FOR NOW - Will re-enable with Cetus integration
+    // use suilfg_launch_memefi::lp_locker::{Self, LockedLPPosition};
 
     // Supply constants in whole token units (bonding curve tracks whole tokens, minting converts to smallest units)
     const DECIMALS: u8 = 9;
@@ -62,6 +64,8 @@ module suilfg_launch_memefi::bonding_curve {
         reward_paid: bool,
         // LP fee recipient (changeable by admin)
         lp_fee_recipient: address,
+        // Special launch flag: if true, 54M goes to treasury instead of burn
+        special_launch: bool,
     }
 
     // TokenCoin removed; we mint/burn Coin<T> directly via TreasuryCap
@@ -109,6 +113,7 @@ module suilfg_launch_memefi::bonding_curve {
             lp_seeded: false,
             reward_paid: false,
             lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
+            special_launch: false,
         }
     }
 
@@ -133,6 +138,7 @@ module suilfg_launch_memefi::bonding_curve {
             lp_seeded: false,
             reward_paid: false,
             lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
+            special_launch: false,
         }
     }
 
@@ -418,6 +424,24 @@ module suilfg_launch_memefi::bonding_curve {
         let tokens_to_mint = tokens_out * 1_000_000_000; // Convert whole tokens to smallest units (9 decimals)
         let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_to_mint, ctx);
         transfer::public_transfer(minted, buyer);
+
+        // AUTO-GRADUATION: If we hit MAX_CURVE_SUPPLY (737M), graduate immediately and freeze trading
+        if (curve.token_supply >= MAX_CURVE_SUPPLY && !curve.graduated) {
+            let target = curve.graduation_target_mist;
+            let raised = balance::value(&curve.sui_reserve);
+            
+            // Only graduate if we've also raised enough SUILFG
+            if (raised >= target) {
+                curve.graduated = true;
+                curve.status = TradingStatus::Frozen; // FREEZE TRADING IMMEDIATELY
+                
+                event::emit(Graduated {
+                    creator: curve.creator,
+                    reward_sui: platform_config::get_creator_graduation_payout_mist(cfg),
+                    treasury: platform_config::get_treasury_address(cfg)
+                });
+            };
+        };
         
         let referrer_addr = if (option::is_some(&referral_registry::get_referrer(referral_registry, buyer))) {
             *option::borrow(&referral_registry::get_referrer(referral_registry, buyer))
@@ -439,6 +463,9 @@ module suilfg_launch_memefi::bonding_curve {
         clk: &Clock,
         ctx: &mut TxContext
     ) {
+        // Block selling if graduated (trading is frozen)
+        if (curve.graduated) { abort E_TRADING_FROZEN; };
+        
         // Only allow when open or whitelisted exit; if WL, enforce allowlist
         let seller = sender(ctx);
         match (curve.status) {
@@ -462,8 +489,10 @@ module suilfg_launch_memefi::bonding_curve {
         };
 
         // Compute payout and fees
+        // Convert amount_tokens from smallest units (coin balance) to whole tokens (supply tracking)
+        let amount_tokens_whole = amount_tokens / 1_000_000_000;
         let s1 = curve.token_supply;
-        let s2 = s1 - amount_tokens;
+        let s2 = s1 - amount_tokens_whole;
         let gross = narrow_u128_to_u64(integrate_cost_u128(s2, s1, curve.m_num, curve.m_den, curve.base_price_mist));
 
         if (gross < min_sui_out) { abort 7; } else {}; // E_MIN_SUI_OUT_NOT_MET
@@ -522,7 +551,7 @@ module suilfg_launch_memefi::bonding_curve {
             transfer::public_transfer(fee_coin, curve.creator);
         };
 
-        curve.token_supply = curve.token_supply - amount_tokens;
+        curve.token_supply = curve.token_supply - amount_tokens_whole;
         
         let referrer_addr = if (option::is_some(&referrer_opt)) {
             *option::borrow(&referrer_opt)
@@ -574,6 +603,44 @@ module suilfg_launch_memefi::bonding_curve {
         
         curve.reward_paid = true;
         // Note: Remaining 12,000 SUI stays in reserve for LP seeding (90% of 13,333)
+    }
+    
+    /// ADMIN: Extract liquidity for bot-driven manual pool creation
+    /// Mints tokens, extracts SUI, handles 54M tokens burn/treasury
+    public entry fun prepare_liquidity_for_bot<T: drop>(
+        _admin: &AdminCap,
+        cfg: &PlatformConfig,
+        curve: &mut BondingCurve<T>,
+        burn_54m: bool,
+        ctx: &mut TxContext
+    ) {
+        assert!(curve.graduated, E_NOT_GRADUATED);
+        assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
+        assert!(curve.reward_paid, 9010);
+        
+        let sui_for_lp = 12_000_000_000_000;
+        let tokens_for_lp = 207_000_000;
+        let team_allocation = 2_000_000;
+        let burn_or_treasury_amount = 54_000_000;
+        
+        let treasury_address = platform_config::get_treasury_address(cfg);
+        let lp_sui = coin::from_balance(balance::split(&mut curve.sui_reserve, sui_for_lp), ctx);
+        let lp_tokens = coin::mint(&mut curve.treasury, tokens_for_lp * 1_000_000_000, ctx);
+        let team_tokens = coin::mint(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
+        transfer::public_transfer(team_tokens, treasury_address);
+        
+        let treasury_tokens = coin::mint(&mut curve.treasury, burn_or_treasury_amount * 1_000_000_000, ctx);
+        if (burn_54m) {
+            coin::burn(&mut curve.treasury, treasury_tokens);
+        } else {
+            transfer::public_transfer(treasury_tokens, treasury_address);
+        };
+        
+        transfer::public_transfer(lp_sui, sender(ctx));
+        transfer::public_transfer(lp_tokens, sender(ctx));
+        
+        curve.token_supply = curve.token_supply + tokens_for_lp + team_allocation + burn_or_treasury_amount;
+        curve.lp_seeded = true;
     }
 
     /// Legacy function for manual pool creation (kept for backwards compatibility)
@@ -630,6 +697,8 @@ module suilfg_launch_memefi::bonding_curve {
         curve.lp_seeded = true;
     }
 
+    /*
+    // Cetus functions commented out - bot handles pool creation manually
     /// Creates Cetus pool with PERMANENT LP burn (cannot be removed!)
     /// This is the PRIMARY graduation function - fully automatic, on-chain
     /// 
@@ -779,6 +848,7 @@ module suilfg_launch_memefi::bonding_curve {
             ctx
         );
     }
+    */
     
     /// Change the LP fee recipient address (admin only)
     /// This allows flexibility while keeping liquidity permanently locked

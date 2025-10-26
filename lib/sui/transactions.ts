@@ -148,7 +148,7 @@ export function buyTokensTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
       tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      paymentCoin, // payment: Coin<SUILFG_MEMEFI> - split to max_sui_in
+      paymentCoin, // payment: Coin<SUI>
       tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
       tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
       tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
@@ -204,22 +204,21 @@ export function sellTokensTransaction(params: {
     tx.mergeCoins(coinArg, restObjects);
   }
   
-  // CRITICAL FIX: The Move sell function expects amount_tokens in WHOLE TOKENS
-  // The contract tracks token_supply in whole tokens (line 49 of bonding_curve.move)
-  // But coin balances are in smallest units (9 decimals)
-  // So we need to convert tokensToSell from smallest units to whole tokens
+  // IMPORTANT: The Move sell function expects amount_tokens in SMALLEST UNITS
+  // The contract tracks token_supply in whole tokens internally
+  // But amount_tokens parameter is in smallest units to match coin::value
+  // The contract handles the conversion internally (divides by 1_000_000_000)
   
   const tokensInSmallestUnits = BigInt(params.tokensToSell);
-  const tokensInWholeUnits = tokensInSmallestUnits / BigInt(1_000_000_000);
   
-  console.log('Sell amount conversion:', {
+  console.log('Sell amount:', {
     tokensInSmallestUnits: tokensInSmallestUnits.toString(),
-    tokensInWholeUnits: tokensInWholeUnits.toString(),
+    tokensInWholeUnits: (tokensInSmallestUnits / BigInt(1_000_000_000)).toString(),
   });
   
   // The Move sell function expects:
   // - mut tokens: Coin<T> - the coin to sell from (it handles splitting internally)
-  // - amount_tokens: u64 - the amount to sell in WHOLE TOKENS
+  // - amount_tokens: u64 - the amount to sell in SMALLEST UNITS (matches coin balance)
   // It will split if needed and return remainder to sender
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
@@ -227,12 +226,12 @@ export function sellTokensTransaction(params: {
     arguments: [
       tx.object(CONTRACTS.PLATFORM_STATE),
       tx.object(params.curveId),
-      tx.object(CONTRACTS.REFERRAL_REGISTRY),
+      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
       coinArg, // Pass the coin (single or merged)
-      tx.pure.u64(tokensInWholeUnits.toString()), // amount_tokens in WHOLE tokens (not smallest units!)
+      tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
       tx.pure.u64(params.minSuiOut),
       tx.pure.u64(deadlineMs),
-      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()),
+      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
       tx.object('0x6'),
     ],
   });

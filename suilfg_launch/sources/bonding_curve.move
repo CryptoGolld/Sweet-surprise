@@ -16,9 +16,10 @@ module suilfg_launch::bonding_curve {
     use suilfg_launch::platform_config::{PlatformConfig, AdminCap};
     
     // Cetus CLMM imports for automatic pool creation with 100-year lock
-    use cetus_clmm::config::GlobalConfig;
-    use cetus_clmm::pool::{Self as cetus_pool, Pool};
-    use cetus_clmm::position::{Self as cetus_position, Position};
+    // TEMPORARILY DISABLED - Cetus interface incompatibility
+    // use cetus_clmm::config::GlobalConfig;
+    // use cetus_clmm::pool::{Self as cetus_pool, Pool};
+    // use cetus_clmm::position::{Self as cetus_position, Position};
 
     const TOTAL_SUPPLY: u64 = 1_000_000_000;
 
@@ -51,13 +52,14 @@ module suilfg_launch::bonding_curve {
     public struct Sold has copy, drop { seller: address, amount_sui: u64 }
     public struct Graduated has copy, drop { creator: address, reward_sui: u64, treasury: address }
     public struct GraduationReady has copy, drop { creator: address, token_supply: u64, spot_price_sui_approx: u64 }
-    public struct PoolCreated has copy, drop { 
-        token_type: TypeName,
-        sui_amount: u64,
-        token_amount: u64,
-        lock_until: u64,
-        lp_recipient: address
-    }
+    // Event temporarily disabled - used by Cetus functions
+    // public struct PoolCreated has copy, drop { 
+    //     token_type: TypeName,
+    //     sui_amount: u64,
+    //     token_amount: u64,
+    //     lock_until: u64,
+    //     lp_recipient: address
+    // }
 
     const E_CREATION_PAUSED: u64 = 1;
     const E_TRADING_FROZEN: u64 = 2;
@@ -210,8 +212,10 @@ module suilfg_launch::bonding_curve {
         balance::join(&mut curve.sui_reserve, deposit);
 
         // Mint tokens as Coin<T> to buyer and update supply
+        // token_supply tracks whole tokens, but minting requires smallest units (with decimals)
         curve.token_supply = s2_clamped;
-        let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_out, ctx);
+        let tokens_to_mint = tokens_out * 1_000_000_000; // Convert whole tokens to smallest units (9 decimals)
+        let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_to_mint, ctx);
         transfer::public_transfer(minted, sender(ctx));
         event::emit(Bought { buyer: sender(ctx), amount_sui: used });
     }
@@ -238,9 +242,13 @@ module suilfg_launch::bonding_curve {
 
         if (clock::timestamp_ms(clk) > deadline_ts_ms) { abort 4; } else {}; // E_DEADLINE_EXPIRED
 
+        // Convert amount_tokens from smallest units (coin balance) to whole tokens (supply tracking)
+        // amount_tokens comes from frontend in smallest units (9 decimals)
+        let amount_tokens_whole = amount_tokens / 1_000_000_000;
+        
         // Compute payout and fees
         let s1 = curve.token_supply;
-        let s2 = s1 - amount_tokens;
+        let s2 = s1 - amount_tokens_whole;
         let gross = narrow_u128_to_u64(integrate_cost_u128(s2, s1, curve.m_num, curve.m_den, curve.base_price_mist));
 
         if (gross < min_sui_out) { abort 7; } else {}; // E_MIN_SUI_OUT_NOT_MET
@@ -250,6 +258,7 @@ module suilfg_launch::bonding_curve {
         let net = gross - platform_fee - creator_fee;
 
         // Burn the tokens being sold; if needed, split first
+        // amount_tokens is in smallest units, matching coin::value
         let val = coin::value(&tokens);
         if (val == amount_tokens) {
             coin::burn<T>(&mut curve.treasury, tokens);
@@ -276,7 +285,7 @@ module suilfg_launch::bonding_curve {
             transfer::public_transfer(fee_coin, curve.creator);
         } else {};
 
-        curve.token_supply = curve.token_supply - amount_tokens;
+        curve.token_supply = curve.token_supply - amount_tokens_whole;
         event::emit(Sold { seller: sender(ctx), amount_sui: net });
     }
 
@@ -308,7 +317,7 @@ module suilfg_launch::bonding_curve {
         // Platform takes its cut (10% = 1,333 SUI)
         if (platform_cut > 0) {
             let platform_balance = balance::split(&mut curve.sui_reserve, platform_cut);
-            let platform_coin = coin::from_balance(platform_balance, ctx);
+            let mut platform_coin = coin::from_balance(platform_balance, ctx);
             
             // Creator payout comes FROM platform's cut (40 SUI from 1,333 SUI)
             if (creator_payout > 0 && creator_payout <= platform_cut) {
@@ -381,22 +390,11 @@ module suilfg_launch::bonding_curve {
     /// Creates Cetus pool with 100-year liquidity lock
     /// This is the PRIMARY graduation function - fully automatic, on-chain
     /// 
-    /// Steps:
-    /// 1. Mints team allocation (2M tokens)
-    /// 2. Creates Cetus CLMM pool
-    /// 3. Adds liquidity with 100-year lock (maximum trust)
-    /// 4. LP Position NFT sent to lp_recipient_address
-    /// 5. Platform earns 0.3% LP fees (permissionless collection)
-    ///
-    /// Parameters:
-    /// - cetus_global_config: Cetus protocol config object (validated against config!)
-    /// - bump_bps: Optional price bump (0-1000 bps), usually 0
-    /// - tick_lower/tick_upper: Liquidity range (typically full range)
+    /// TEMPORARILY DISABLED - Cetus interface incompatibility
+    /// Use seed_pool_prepare() instead for manual pool creation
     /// 
-    /// SECURITY FEATURES:
-    /// 1. Team allocation sent to treasury_address (from config)
-    /// 2. Cetus config validated against admin-set address
-    /// This prevents ALL fund theft attacks!
+    /// TODO: Update Cetus dependency to compatible version
+    /*
     public entry fun seed_pool_and_create_cetus_with_lock<T: drop + store>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
@@ -477,9 +475,11 @@ module suilfg_launch::bonding_curve {
             lp_recipient
         });
     }
+    */
     
     /// Collect LP fees from Cetus position (permissionless!)
-    /// Anyone can call this to send accumulated fees to lp_recipient
+    /// TEMPORARILY DISABLED - Cetus interface incompatibility
+    /*
     public entry fun collect_lp_fees<T: drop + store>(
         cfg: &PlatformConfig,
         pool: &mut Pool<SUI, T>,
@@ -496,6 +496,7 @@ module suilfg_launch::bonding_curve {
         transfer::public_transfer(fee_sui, lp_recipient);
         transfer::public_transfer(fee_token, lp_recipient);
     }
+    */
 
     public fun spot_price_u128<T: drop + store>(curve: &BondingCurve<T>): u128 {
         // p(s) = base_price + (m_num/m_den) * s^2
