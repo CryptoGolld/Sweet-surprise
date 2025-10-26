@@ -544,16 +544,16 @@ async function processReferralRewardEvent(event) {
 // Generate OHLCV candles from trades
 async function generateCandles() {
   try {
-    // Get all coin types with recent trades
+    // Get all coin types with ANY trades (not just last hour)
     const coinsResult = await db.query(
-      `SELECT DISTINCT coin_type FROM trades 
-       WHERE timestamp > NOW() - INTERVAL '1 hour'`
+      `SELECT DISTINCT coin_type FROM trades`
     );
     
     for (const row of coinsResult.rows) {
       const coinType = row.coin_type;
       
-      // Aggregate trades into 1-minute candles
+      // Aggregate ALL trades into 1-minute candles (not just last hour)
+      // This ensures historical charts are populated
       const candleResult = await db.query(
         `WITH candle_data AS (
           SELECT 
@@ -564,8 +564,7 @@ async function generateCandles() {
             (array_agg(price_per_token ORDER BY timestamp DESC))[1] as close,
             SUM(token_amount) as volume
           FROM trades
-          WHERE coin_type = $1 
-            AND timestamp > NOW() - INTERVAL '1 hour'
+          WHERE coin_type = $1
           GROUP BY candle_time
         )
         INSERT INTO price_snapshots (coin_type, timestamp, open, high, low, close, volume)
