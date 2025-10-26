@@ -54,8 +54,8 @@ export async function createCoinTransaction(params: {
   // 2. Build transaction with explicit gas budget
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for publishing (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Publishing is expensive, keep at 0.1 SUI
+  tx.setGasBudget(100_000_000); // 0.1 SUI
   
   // 2a. Publish the package and get UpgradeCap
   const upgradeCap = tx.publish({
@@ -89,8 +89,8 @@ export function createCurveTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for curve creation (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Curve creation is more expensive, keep at 0.1 SUI
+  tx.setGasBudget(100_000_000); // 0.1 SUI
   
   const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
   
@@ -121,8 +121,10 @@ export function buyTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for buy (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Gas budget will be estimated automatically by wallet if not set
+  // Typically buy costs ~3-10M MIST (0.003-0.01 SUI)
+  // We set a reasonable upper bound to prevent issues
+  tx.setGasBudget(50_000_000); // 0.05 SUI max (was 0.1 SUI)
   
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
@@ -184,8 +186,10 @@ export function sellTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for sell (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Gas budget will be estimated automatically by wallet if not set
+  // Typically sell costs ~3-10M MIST (0.003-0.01 SUI)
+  // We set a reasonable upper bound to prevent issues
+  tx.setGasBudget(50_000_000); // 0.05 SUI max (was 0.1 SUI)
   
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
