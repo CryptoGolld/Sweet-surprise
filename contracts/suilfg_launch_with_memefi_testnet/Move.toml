@@ -1,7 +1,7 @@
 [package]
 name = "suilfg_launch_memefi"
-version = "0.0.6"
-published-at = "0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047"
+version = "0.0.7"
+published-at = "0x98da9f73a80663ec6d8cf0f9d9e1edd030d9255b780f755e6a85ae468545fdd0"
 edition = "2024.beta"
 
 [dependencies]

@@ -604,6 +604,44 @@ module suilfg_launch_memefi::bonding_curve {
         curve.reward_paid = true;
         // Note: Remaining 12,000 SUI stays in reserve for LP seeding (90% of 13,333)
     }
+    
+    /// ADMIN: Extract liquidity for bot-driven manual pool creation
+    /// Mints tokens, extracts SUI, handles 54M tokens burn/treasury
+    public entry fun prepare_liquidity_for_bot<T: drop>(
+        _admin: &AdminCap,
+        cfg: &PlatformConfig,
+        curve: &mut BondingCurve<T>,
+        burn_54m: bool,
+        ctx: &mut TxContext
+    ) {
+        assert!(curve.graduated, E_NOT_GRADUATED);
+        assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
+        assert!(curve.reward_paid, 9010);
+        
+        let sui_for_lp = 12_000_000_000_000;
+        let tokens_for_lp = 207_000_000;
+        let team_allocation = 2_000_000;
+        let burn_or_treasury_amount = 54_000_000;
+        
+        let treasury_address = platform_config::get_treasury_address(cfg);
+        let lp_sui = coin::from_balance(balance::split(&mut curve.sui_reserve, sui_for_lp), ctx);
+        let lp_tokens = coin::mint(&mut curve.treasury, tokens_for_lp * 1_000_000_000, ctx);
+        let team_tokens = coin::mint(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
+        transfer::public_transfer(team_tokens, treasury_address);
+        
+        let treasury_tokens = coin::mint(&mut curve.treasury, burn_or_treasury_amount * 1_000_000_000, ctx);
+        if (burn_54m) {
+            coin::burn(&mut curve.treasury, treasury_tokens);
+        } else {
+            transfer::public_transfer(treasury_tokens, treasury_address);
+        };
+        
+        transfer::public_transfer(lp_sui, sender(ctx));
+        transfer::public_transfer(lp_tokens, sender(ctx));
+        
+        curve.token_supply = curve.token_supply + tokens_for_lp + team_allocation + burn_or_treasury_amount;
+        curve.lp_seeded = true;
+    }
 
     /// Legacy function for manual pool creation (kept for backwards compatibility)
     /// DEPRECATED: Use seed_pool_and_create_cetus_with_lock() instead
@@ -659,6 +697,8 @@ module suilfg_launch_memefi::bonding_curve {
         curve.lp_seeded = true;
     }
 
+    /*
+    // Cetus functions commented out - bot handles pool creation manually
     /// Creates Cetus pool with PERMANENT LP burn (cannot be removed!)
     /// This is the PRIMARY graduation function - fully automatic, on-chain
     /// 
@@ -808,6 +848,7 @@ module suilfg_launch_memefi::bonding_curve {
             ctx
         );
     }
+    */
     
     /// Change the LP fee recipient address (admin only)
     /// This allows flexibility while keeping liquidity permanently locked
