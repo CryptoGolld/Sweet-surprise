@@ -159,8 +159,8 @@ async function indexEvents() {
           for (const event of events.data) {
             const eventTimestamp = parseInt(event.timestampMs);
             
-            // Stop if we've reached events we've already processed (use < not <=)
-            if (eventTimestamp < lastTimestamp) {
+            // Stop if we've reached events we've already processed
+            if (eventTimestamp <= lastTimestamp) {
               foundOldEvent = true;
               break;
             }
@@ -170,13 +170,14 @@ async function indexEvents() {
               latestTimestamp = eventTimestamp;
             }
             
-            // Check if already in database (extra safety)
+            // Check if already in database by tx_digest (extra safety)
             const existsResult = await db.query(
               'SELECT 1 FROM trades WHERE tx_digest = $1 LIMIT 1',
               [event.id.txDigest]
             );
             
             if (existsResult.rows.length > 0 && !eventType.includes('Created')) {
+              console.log(`⏭️  Skipping duplicate trade: ${event.id.txDigest.slice(0, 10)}...`);
               continue; // Skip if already processed
             }
             
