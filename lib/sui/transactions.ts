@@ -172,9 +172,6 @@ export function buyTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Gas will be set dynamically after transaction is built, or use default
-  // Don't set gas budget here - will be set by caller after estimation
-  
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
@@ -239,9 +236,6 @@ export function sellTokensTransaction(params: {
   minSuiOut: string;
 }): Transaction {
   const tx = new Transaction();
-  
-  // Gas will be set dynamically after transaction is built, or use default
-  // Don't set gas budget here - will be set by caller after estimation
   
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
