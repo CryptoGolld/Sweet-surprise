@@ -114,7 +114,10 @@ async function indexEvents() {
       const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
       const lastTimestamp = stateResult.rows[0]?.last_timestamp || 0;
       
-      console.log(`\n🔄 Polling for new events (after ${new Date(lastTimestamp).toISOString()})...`);
+      const lastDate = new Date(lastTimestamp).toISOString();
+      console.log(`\n🔄 Polling for new events (after ${lastDate})...`);
+      console.log(`   Watching NEW: ${PLATFORM_PACKAGE.substring(0, 20)}...`);
+      console.log(`   Watching LEGACY: ${LEGACY_PLATFORM_PACKAGE.substring(0, 20)}...`);
       
       // Poll BOTH contracts for new events
       const eventTypes = [
@@ -185,10 +188,13 @@ async function indexEvents() {
             
             // Process the event
             if (eventType.includes('Created')) {
+              console.log(`   📦 Processing Created event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processCreatedEvent(event);
             } else if (eventType.includes('TokensPurchased')) {
+              console.log(`   💰 Processing Buy event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processBuyEvent(event);
             } else if (eventType.includes('TokensSold')) {
+              console.log(`   💸 Processing Sell event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processSellEvent(event);
             }
           }

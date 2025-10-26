@@ -4,7 +4,7 @@
 
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/sui/bcs';
-import { CONTRACTS, COIN_TYPES } from '../constants';
+import { CONTRACTS, COIN_TYPES, getContractForCurve } from '../constants';
 
 /**
  * Create a new memecoin by compiling on backend and publishing on frontend
@@ -128,7 +128,14 @@ export function buyTokensTransaction(params: {
   const deadlineMs = Date.now() + 300000;
   
   // Detect which contract this curve belongs to based on coinType
-  const { package: platformPackage, state, referralRegistry } = CONTRACTS.getContractForCurve(params.coinType);
+  const contractInfo = getContractForCurve(params.coinType);
+  const { package: platformPackage, state, referralRegistry } = contractInfo;
+  
+  console.log('🔍 Buy Transaction - Contract Detection:', {
+    coinType: params.coinType.substring(0, 80) + '...',
+    detectedPackage: platformPackage,
+    isLegacy: contractInfo.isLegacy,
+  });
   
   // Merge all payment coins first if there are multiple
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
@@ -184,15 +191,17 @@ export function sellTokensTransaction(params: {
   const deadlineMs = Date.now() + 300000;
   
   // Detect which contract this curve belongs to based on coinType
-  const { package: platformPackage, state, referralRegistry } = CONTRACTS.getContractForCurve(params.coinType);
+  const contractInfo = getContractForCurve(params.coinType);
+  const { package: platformPackage, state, referralRegistry } = contractInfo;
   
   // Log transaction details for debugging
-  console.log('Building sell transaction:', {
+  console.log('🔍 Sell Transaction - Contract Detection:', {
+    coinType: params.coinType.substring(0, 80) + '...',
+    detectedPackage: platformPackage,
+    isLegacy: contractInfo.isLegacy,
     numCoins: params.memeTokenCoinIds.length,
     tokensToSell: params.tokensToSell,
     minSuiOut: params.minSuiOut,
-    coinIds: params.memeTokenCoinIds,
-    contract: platformPackage,
   });
   
   // Strategy: Create coin references, merge if needed, then pass to moveCall
