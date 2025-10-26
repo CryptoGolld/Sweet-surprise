@@ -37,12 +37,28 @@ export function CoinList() {
   const { data: tokensResponse, isLoading, error } = useQuery({
     queryKey: ['indexer-tokens'],
     queryFn: async () => {
-      const response = await fetch(`${INDEXER_API}/api/tokens?limit=1000&sort=newest`);
-      if (!response.ok) throw new Error('Failed to fetch tokens from indexer');
-      return response.json();
+      try {
+        const response = await fetch(`${INDEXER_API}/api/tokens?limit=1000&sort=newest`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        console.log('✅ Fetched tokens from indexer:', data.tokens?.length || 0);
+        return data;
+      } catch (err: any) {
+        console.error('❌ Indexer fetch error:', err);
+        throw new Error(`Failed to fetch from indexer: ${err.message}`);
+      }
     },
     refetchInterval: 5000, // Refresh every 5 seconds
     staleTime: 3000,
+    retry: 3, // Retry 3 times
+    retryDelay: 1000, // Wait 1s between retries
   });
 
   const curves: Token[] = tokensResponse?.tokens || [];
@@ -128,7 +144,10 @@ export function CoinList() {
       <div className="text-center py-16 bg-white/5 border border-white/10 rounded-xl">
         <div className="text-6xl mb-4">⚠️</div>
         <h3 className="text-2xl font-bold mb-2">Failed to load coins</h3>
-        <p className="text-gray-400 mb-4">Please try refreshing the page</p>
+        <p className="text-gray-400 mb-4">{error.message || 'Please try refreshing the page'}</p>
+        <div className="text-xs text-gray-500 mb-4 font-mono">
+          API: {INDEXER_API}
+        </div>
         <button
           onClick={() => window.location.reload()}
           className="px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
