@@ -45,7 +45,7 @@ export function CoinList() {
     staleTime: 3000,
   });
 
-  const curves = tokensResponse?.tokens || [];
+  const curves: Token[] = tokensResponse?.tokens || [];
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -55,7 +55,7 @@ export function CoinList() {
     if (!curves) return [];
 
     // Filter by search query
-    let filtered = curves.filter((curve) => {
+    let filtered = curves.filter((curve: Token) => {
       const query = searchQuery.toLowerCase().trim();
       if (!query) return true;
       
