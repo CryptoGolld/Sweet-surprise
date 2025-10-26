@@ -296,8 +296,6 @@ export function UserPortfolio() {
         let pricePerToken = 0;
         let totalValue = 0;
         
-        const curve = curveData.get(coin.type);
-        
         if (isMainToken) {
           // SUILFG_MEMEFI uses real-time SUI price
           pricePerToken = suiPrice;
