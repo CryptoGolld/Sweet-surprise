@@ -96,14 +96,16 @@ async function indexHistoricalEvents() {
   console.log('📊 Generated initial chart candles\n');
 }
 
-// Main indexing loop
+// Main indexing loop with pagination
 async function indexEvents() {
   while (true) {
     try {
-      console.log(`\n🔄 Polling for new events...`);
+      // Get last processed timestamp
+      const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
+      const lastTimestamp = stateResult.rows[0]?.last_timestamp || 0;
       
-      // Query ALL event types WITHOUT cursor - just get latest events
-      // This ensures we always see new events
+      console.log(`\n🔄 Polling for new events (after ${new Date(lastTimestamp).toISOString()})...`);
+      
       const eventTypes = [
         `${PLATFORM_PACKAGE}::bonding_curve::Created`,
         `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
@@ -111,39 +113,60 @@ async function indexEvents() {
       ];
       
       let totalNewEvents = 0;
-      const seenTxs = new Set();
+      let latestTimestamp = lastTimestamp;
       
       for (const eventType of eventTypes) {
-        const queryParams = {
-          query: { MoveEventType: eventType },
-          limit: 50,
-          order: 'descending', // Always get latest events first
-        };
+        let hasMore = true;
+        let cursor = null;
         
-        const events = await client.queryEvents(queryParams);
-        
-        if (events.data.length > 0) {
-          // Process each event (skip duplicates we've already seen this poll)
+        // Keep paginating until we hit events we've already seen
+        while (hasMore) {
+          const queryParams = {
+            query: { MoveEventType: eventType },
+            limit: 50,
+            order: 'descending',
+          };
+          
+          if (cursor) {
+            queryParams.cursor = cursor;
+          }
+          
+          const events = await client.queryEvents(queryParams);
+          
+          if (events.data.length === 0) {
+            hasMore = false;
+            break;
+          }
+          
+          let foundOldEvent = false;
+          
           for (const event of events.data) {
-            const txKey = `${event.id.txDigest}-${event.id.eventSeq}`;
+            const eventTimestamp = parseInt(event.timestampMs);
             
-            // Skip if we've already processed this exact event in this poll cycle
-            if (seenTxs.has(txKey)) continue;
-            seenTxs.add(txKey);
+            // Stop if we've reached events we've already processed
+            if (eventTimestamp <= lastTimestamp) {
+              foundOldEvent = true;
+              break;
+            }
             
-            // Check if event is already in database
+            // Track latest timestamp
+            if (eventTimestamp > latestTimestamp) {
+              latestTimestamp = eventTimestamp;
+            }
+            
+            // Check if already in database (extra safety)
             const existsResult = await db.query(
               'SELECT 1 FROM trades WHERE tx_digest = $1 LIMIT 1',
               [event.id.txDigest]
             );
             
-            // Skip if already processed
             if (existsResult.rows.length > 0 && !eventType.includes('Created')) {
-              continue;
+              continue; // Skip if already processed
             }
             
             totalNewEvents++;
             
+            // Process the event
             if (eventType.includes('Created')) {
               await processCreatedEvent(event);
             } else if (eventType.includes('TokensPurchased')) {
@@ -152,12 +175,26 @@ async function indexEvents() {
               await processSellEvent(event);
             }
           }
+          
+          // Stop if we found old events or no more pages
+          if (foundOldEvent || !events.hasNextPage) {
+            hasMore = false;
+          } else {
+            cursor = events.nextCursor;
+          }
         }
+      }
+      
+      // Update last processed timestamp
+      if (latestTimestamp > lastTimestamp) {
+        await db.query(
+          'UPDATE indexer_state SET last_timestamp = $1, updated_at = NOW() WHERE id = 1',
+          [latestTimestamp]
+        );
       }
       
       if (totalNewEvents > 0) {
         console.log(`✨ Processed ${totalNewEvents} new events`);
-        // Generate candles after processing trades
         await generateCandles();
       } else {
         console.log('📭 No new events');
@@ -168,7 +205,6 @@ async function indexEvents() {
       
     } catch (error) {
       console.error('❌ Indexing error:', error.message);
-      // Wait longer on error
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
