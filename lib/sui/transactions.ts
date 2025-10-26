@@ -147,12 +147,10 @@ export function buyTokensTransaction(params: {
     arguments: [
       tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
-      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      paymentCoin, // payment: Coin<SUILFG_MEMEFI> - split to max_sui_in
+      paymentCoin, // payment: Coin<SUI>
       tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
       tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
       tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
       tx.object('0x6'), // clk: &Clock
     ],
   });
@@ -226,12 +224,10 @@ export function sellTokensTransaction(params: {
     arguments: [
       tx.object(CONTRACTS.PLATFORM_STATE),
       tx.object(params.curveId),
-      tx.object(CONTRACTS.REFERRAL_REGISTRY),
       coinArg, // Pass the coin (single or merged)
       tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
       tx.pure.u64(params.minSuiOut),
       tx.pure.u64(deadlineMs),
-      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()),
       tx.object('0x6'),
     ],
   });

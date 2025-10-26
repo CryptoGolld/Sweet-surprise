@@ -6,21 +6,26 @@
 export const NETWORK = 'testnet' as const;
 
 export const CONTRACTS = {
-  // Platform package (v0.0.5 - with supply cap fix) - PRODUCTION
-  PLATFORM_PACKAGE: '0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047',
+  // Platform package (v0.0.2 - DECIMAL FIX DEPLOYED) - NEW PRODUCTION
+  PLATFORM_PACKAGE: '0xc6a2e71b87b181251bcc44662616afad81288f78c330a6172792c1ec2c59761f',
   
   // Faucet package (SUILFG_MEMEFI token)
   FAUCET_PACKAGE: '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81',
   
-  // Shared objects - UPDATED from testnet_production.json
-  PLATFORM_STATE: '0x7fca4d72dcf81fc27f432bddc2ba07cd1fddf6517327ad448d845b2d3e77ef9c',
-  REFERRAL_REGISTRY: '0xf2d402107eb02d4ac5376e42cfcc09412cf968956ce66c31444621d34fc8828d',
-  TICKER_REGISTRY: '0x3bc08244a681e5fa1d125293ebd66c7017605d0c6d1820f4f9e5e1a7961a94e3',
+  // Shared objects - FRESH DEPLOYMENT with decimal fixes
+  PLATFORM_STATE: '0xb3a58b36c5805e38685ff9d9fa2197a015f13528075486085f1fd1e16d8daee4',
+  TICKER_REGISTRY: '0x3678022234b54f9ab84436efa95cc707236e4e999bd005c53775bd71c2e51f33',
   FAUCET_OBJECT: '0xd5c81489322b9e74609be2986c02652390feba41f06e4a7fd936a2c312fb9dde',
+  
+  // Note: Referral system not yet deployed in v0.0.2 - will be added in future upgrade
+  REFERRAL_REGISTRY: '0xf2d402107eb02d4ac5376e42cfcc09412cf968956ce66c31444621d34fc8828d', // OLD - NOT COMPATIBLE
   
   // Cetus integration (testnet)
   CETUS_GLOBAL_CONFIG: '0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e',
   CETUS_POOLS: '0x50eb61dd5928cec5ea04711a2e9b72e5237e79e9fbcd2ce3d5469dc8708e0ee2',
+  
+  // OLD PACKAGE (BUGGY - DO NOT USE)
+  // OLD_PLATFORM_PACKAGE: '0x39d07cf6ad6896e3dafc19293165eb96d05b385f21fac4bb3d794e50408c6047',
 } as const;
 
 export const COIN_TYPES = {

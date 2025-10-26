@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "F6C9B522B40EA5B81C7DE4B82F682DC7402C8B2F8ECA314C9DD1D4FAE7CB130A"
+manifest_digest = "B85149268BA10B33CBFBF4A991E62C32D5F451FCCF5B8C1ED27AC6F354906F4F"
 deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "CetusClmm", name = "CetusClmm" },
@@ -51,3 +51,11 @@ dependencies = [
 compiler-version = "1.59.0"
 edition = "2024"
 flavor = "sui"
+
+[env]
+
+[env.testnet]
+chain-id = "4c78adac"
+original-published-id = "0xc6a2e71b87b181251bcc44662616afad81288f78c330a6172792c1ec2c59761f"
+latest-published-id = "0xc6a2e71b87b181251bcc44662616afad81288f78c330a6172792c1ec2c59761f"
+published-version = "1"
