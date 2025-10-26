@@ -127,6 +127,9 @@ export function buyTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
+  // Detect which contract this curve belongs to based on coinType
+  const { package: platformPackage, state, referralRegistry } = CONTRACTS.getContractForCurve(params.coinType);
+  
   // Merge all payment coins first if there are multiple
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
   if (params.paymentCoinIds.length > 1) {
@@ -142,12 +145,12 @@ export function buyTokensTransaction(params: {
   ]);
   
   tx.moveCall({
-    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
+    target: `${platformPackage}::bonding_curve::buy`,
     typeArguments: [params.coinType],
     arguments: [
-      tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
+      tx.object(state), // cfg: &PlatformConfig
       tx.object(params.curveId), // curve: &mut BondingCurve<T>
-      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
+      tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
       paymentCoin, // payment: Coin<SUI>
       tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
       tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
@@ -180,12 +183,16 @@ export function sellTokensTransaction(params: {
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
+  // Detect which contract this curve belongs to based on coinType
+  const { package: platformPackage, state, referralRegistry } = CONTRACTS.getContractForCurve(params.coinType);
+  
   // Log transaction details for debugging
   console.log('Building sell transaction:', {
     numCoins: params.memeTokenCoinIds.length,
     tokensToSell: params.tokensToSell,
     minSuiOut: params.minSuiOut,
     coinIds: params.memeTokenCoinIds,
+    contract: platformPackage,
   });
   
   // Strategy: Create coin references, merge if needed, then pass to moveCall
@@ -221,12 +228,12 @@ export function sellTokensTransaction(params: {
   // - amount_tokens: u64 - the amount to sell in SMALLEST UNITS (matches coin balance)
   // It will split if needed and return remainder to sender
   tx.moveCall({
-    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
+    target: `${platformPackage}::bonding_curve::sell`,
     typeArguments: [params.coinType],
     arguments: [
-      tx.object(CONTRACTS.PLATFORM_STATE),
+      tx.object(state),
       tx.object(params.curveId),
-      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
+      tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
       coinArg, // Pass the coin (single or merged)
       tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
       tx.pure.u64(params.minSuiOut),

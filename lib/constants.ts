@@ -31,6 +31,9 @@ export const CONTRACTS = {
   // OTHER DEPLOYMENTS (not needed anymore)
   // FRESH_V2: '0xc6a2e71b87b181251bcc44662616afad81288f78c330a6172792c1ec2c59761f',
   // FRESH_V3: '0x344f97a405d33c899bd70a75a248554b7576070cc113d3322672bb1b22be5a70',
+  
+  // Helper to detect which contract a curve belongs to
+  getContractForCurve,
 } as const;
 
 export const COIN_TYPES = {

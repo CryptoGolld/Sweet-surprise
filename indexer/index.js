@@ -116,10 +116,16 @@ async function indexEvents() {
       
       console.log(`\n🔄 Polling for new events (after ${new Date(lastTimestamp).toISOString()})...`);
       
+      // Poll BOTH contracts for new events
       const eventTypes = [
+        // NEW package events
         `${PLATFORM_PACKAGE}::bonding_curve::Created`,
         `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
         `${PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
+        // LEGACY package events
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Created`,
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
       ];
       
       let totalNewEvents = 0;
