@@ -107,7 +107,7 @@ export function UserPortfolio() {
     refetchInterval: 10000,
   });
   
-  // Fetch curve data for owned tokens (runs after coins load)
+  // Fetch curve data for owned tokens from indexer (runs after coins load)
   useEffect(() => {
     if (!coins || coins.length === 0) return;
     
@@ -115,66 +115,35 @@ export function UserPortfolio() {
       const memeCoins = coins.filter(c => c.type !== COIN_TYPES.SUILFG_MEMEFI);
       if (memeCoins.length === 0) return;
       
-      console.log(`Fetching curve data for ${memeCoins.length} tokens...`);
+      console.log(`Fetching curve data from indexer for ${memeCoins.length} tokens...`);
       
       try {
-        // Query all curves once
-        const events = await client.queryEvents({
-          query: {
-            MoveEventType: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::Created`,
-          },
-          limit: 50,
-        });
+        // Fetch all tokens from indexer
+        const response = await fetch('http://13.60.235.109:3002/api/tokens?limit=1000');
+        if (!response.ok) throw new Error('Failed to fetch from indexer');
         
-        // Process each owned token
+        const data = await response.json();
+        const tokens = data.tokens || [];
+        
+        // Match owned coins with indexed tokens
         for (const coin of memeCoins) {
-          for (const event of events.data) {
-            try {
-              const txDetails = await client.getTransactionBlock({
-                digest: event.id.txDigest,
-                options: { showObjectChanges: true },
-              });
-              
-              const curveObj = txDetails.objectChanges?.find(
-                (obj: any) => obj.type === 'created' && obj.objectType?.includes('bonding_curve::BondingCurve')
-              );
-              
-              if (!curveObj) continue;
-              
-              const curveId = (curveObj as any).objectId;
-              const curveObject = await client.getObject({
-                id: curveId,
-                options: { showContent: true, showType: true },
-              });
-              
-              if (curveObject.data?.content?.dataType === 'moveObject') {
-                const content = curveObject.data.content as any;
-                const fullType = content.type;
-                const match = fullType.match(/<(.+)>/);
-                const coinType = match ? match[1] : '';
-                
-                if (coinType === coin.type) {
-                  setCurveData(prev => new Map(prev).set(coinType, {
-                    curveSupply: content.fields.token_supply || '0',
-                    curveId,
-                  }));
-                  break;
-                }
-              }
-            } catch (err) {
-              // Skip failed fetches
-            }
+          const indexedToken = tokens.find((t: any) => t.coinType === coin.type);
+          if (indexedToken) {
+            setCurveData(prev => new Map(prev).set(coin.type, {
+              curveSupply: indexedToken.curveSupply || '0',
+              curveId: indexedToken.id,
+            }));
           }
         }
         
-        console.log(`Loaded curve data for ${curveData.size} tokens`);
+        console.log(`✅ Loaded curve data from indexer for ${curveData.size} tokens`);
       } catch (error) {
-        console.error('Failed to fetch curve data:', error);
+        console.error('Failed to fetch curve data from indexer:', error);
       }
     };
     
     fetchCurveData();
-  }, [coins, client]);
+  }, [coins]);
 
 
   if (!account) {

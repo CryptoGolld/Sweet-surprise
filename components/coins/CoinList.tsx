@@ -1,14 +1,51 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useBondingCurves } from '@/lib/hooks/useBondingCurves';
+import { useQuery } from '@tanstack/react-query';
 import { CoinCard } from './CoinCard';
 
 type SortOption = 'newest' | 'marketcap' | 'progress' | 'volume';
 type FilterTab = 'all' | 'trading' | 'graduated';
 
+// Indexer API endpoint
+const INDEXER_API = 'http://13.60.235.109:3002';
+
+interface Token {
+  id: string;
+  coinType: string;
+  ticker: string;
+  name: string;
+  description: string;
+  imageUrl: string;
+  creator: string;
+  curveSupply: string;
+  curveBalance: string;
+  graduated: boolean;
+  createdAt: number;
+  currentPrice: number;
+  marketCap: number;
+  fullyDilutedValuation: number;
+  volume24h: string;
+  priceChange24h: number;
+  allTimeHigh: number;
+  allTimeLow: number;
+  lastTradeAt: number | null;
+}
+
 export function CoinList() {
-  const { data: curves, isLoading, error } = useBondingCurves();
+  // Fetch from indexer API instead of blockchain
+  const { data: tokensResponse, isLoading, error } = useQuery({
+    queryKey: ['indexer-tokens'],
+    queryFn: async () => {
+      const response = await fetch(`${INDEXER_API}/api/tokens?limit=1000&sort=newest`);
+      if (!response.ok) throw new Error('Failed to fetch tokens from indexer');
+      return response.json();
+    },
+    refetchInterval: 5000, // Refresh every 5 seconds
+    staleTime: 3000,
+  });
+
+  const curves = tokensResponse?.tokens || [];
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
