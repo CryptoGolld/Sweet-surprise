@@ -22,14 +22,16 @@ module suilfg_launch_memefi::bonding_curve {
     use suilfg_launch_memefi::ticker_registry::{Self as ticker_registry, TickerRegistry};
     
     // Cetus CLMM imports for automatic pool creation
-    use cetus_clmm::config::GlobalConfig;
-    use cetus_clmm::pool::{Self as cetus_pool, Pool};
-    use cetus_clmm::position::Position;
-    use cetus_clmm::pool_creator;
-    use cetus_clmm::factory::Pools;
+    // CETUS IMPORTS COMMENTED FOR NOW - Will re-enable when bot is stable
+    // use cetus_clmm::config::GlobalConfig;
+    // use cetus_clmm::pool::{Self as cetus_pool, Pool};
+    // use cetus_clmm::position::Position;
+    // use cetus_clmm::pool_creator;
+    // use cetus_clmm::factory::Pools;
     
     // Our custom LP locker for permanent lock with upgrade-safe flag
-    use suilfg_launch_memefi::lp_locker::{Self, LockedLPPosition};
+    // COMMENTED FOR NOW - Will re-enable with Cetus integration
+    // use suilfg_launch_memefi::lp_locker::{Self, LockedLPPosition};
 
     // Supply constants in whole token units (bonding curve tracks whole tokens, minting converts to smallest units)
     const DECIMALS: u8 = 9;
@@ -62,6 +64,8 @@ module suilfg_launch_memefi::bonding_curve {
         reward_paid: bool,
         // LP fee recipient (changeable by admin)
         lp_fee_recipient: address,
+        // Special launch flag: if true, 54M goes to treasury instead of burn
+        special_launch: bool,
     }
 
     // TokenCoin removed; we mint/burn Coin<T> directly via TreasuryCap
@@ -109,6 +113,7 @@ module suilfg_launch_memefi::bonding_curve {
             lp_seeded: false,
             reward_paid: false,
             lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
+            special_launch: false,
         }
     }
 
@@ -133,6 +138,7 @@ module suilfg_launch_memefi::bonding_curve {
             lp_seeded: false,
             reward_paid: false,
             lp_fee_recipient: platform_config::get_lp_recipient_address(cfg),
+            special_launch: false,
         }
     }
 
@@ -418,6 +424,24 @@ module suilfg_launch_memefi::bonding_curve {
         let tokens_to_mint = tokens_out * 1_000_000_000; // Convert whole tokens to smallest units (9 decimals)
         let minted: Coin<T> = coin::mint<T>(&mut curve.treasury, tokens_to_mint, ctx);
         transfer::public_transfer(minted, buyer);
+
+        // AUTO-GRADUATION: If we hit MAX_CURVE_SUPPLY (737M), graduate immediately and freeze trading
+        if (curve.token_supply >= MAX_CURVE_SUPPLY && !curve.graduated) {
+            let target = curve.graduation_target_mist;
+            let raised = balance::value(&curve.sui_reserve);
+            
+            // Only graduate if we've also raised enough SUILFG
+            if (raised >= target) {
+                curve.graduated = true;
+                curve.status = TradingStatus::Frozen; // FREEZE TRADING IMMEDIATELY
+                
+                event::emit(Graduated {
+                    creator: curve.creator,
+                    reward_sui: platform_config::get_creator_graduation_payout_mist(cfg),
+                    treasury: platform_config::get_treasury_address(cfg)
+                });
+            };
+        };
         
         let referrer_addr = if (option::is_some(&referral_registry::get_referrer(referral_registry, buyer))) {
             *option::borrow(&referral_registry::get_referrer(referral_registry, buyer))
@@ -439,6 +463,9 @@ module suilfg_launch_memefi::bonding_curve {
         clk: &Clock,
         ctx: &mut TxContext
     ) {
+        // Block selling if graduated (trading is frozen)
+        if (curve.graduated) { abort E_TRADING_FROZEN; };
+        
         // Only allow when open or whitelisted exit; if WL, enforce allowlist
         let seller = sender(ctx);
         match (curve.status) {
