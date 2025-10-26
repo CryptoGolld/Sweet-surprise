@@ -100,24 +100,10 @@ async function indexHistoricalEvents() {
 async function indexEvents() {
   while (true) {
     try {
-      // Get last processed cursor
-      const stateResult = await db.query('SELECT last_cursor FROM indexer_state WHERE id = 1');
-      const lastCursorStr = stateResult.rows[0]?.last_cursor;
+      console.log(`\n🔄 Polling for new events...`);
       
-      // Parse cursor if it exists (it's stored as JSON string)
-      let lastCursor = null;
-      if (lastCursorStr) {
-        try {
-          lastCursor = JSON.parse(lastCursorStr);
-        } catch (e) {
-          console.log('⚠️  Could not parse cursor, starting fresh');
-          lastCursor = null;
-        }
-      }
-      
-      console.log(`\n🔄 Polling for new events... (cursor: ${lastCursorStr || 'start'})`);
-      
-      // Query ALL event types
+      // Query ALL event types WITHOUT cursor - just get latest events
+      // This ensures we always see new events
       const eventTypes = [
         `${PLATFORM_PACKAGE}::bonding_curve::Created`,
         `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
@@ -125,25 +111,39 @@ async function indexEvents() {
       ];
       
       let totalNewEvents = 0;
+      const seenTxs = new Set();
       
       for (const eventType of eventTypes) {
         const queryParams = {
           query: { MoveEventType: eventType },
           limit: 50,
-          order: 'descending',
+          order: 'descending', // Always get latest events first
         };
-        
-        if (lastCursor) {
-          queryParams.cursor = lastCursor;
-        }
         
         const events = await client.queryEvents(queryParams);
         
         if (events.data.length > 0) {
-          totalNewEvents += events.data.length;
-          
-          // Process each event
+          // Process each event (skip duplicates we've already seen this poll)
           for (const event of events.data) {
+            const txKey = `${event.id.txDigest}-${event.id.eventSeq}`;
+            
+            // Skip if we've already processed this exact event in this poll cycle
+            if (seenTxs.has(txKey)) continue;
+            seenTxs.add(txKey);
+            
+            // Check if event is already in database
+            const existsResult = await db.query(
+              'SELECT 1 FROM trades WHERE tx_digest = $1 LIMIT 1',
+              [event.id.txDigest]
+            );
+            
+            // Skip if already processed
+            if (existsResult.rows.length > 0 && !eventType.includes('Created')) {
+              continue;
+            }
+            
+            totalNewEvents++;
+            
             if (eventType.includes('Created')) {
               await processCreatedEvent(event);
             } else if (eventType.includes('TokensPurchased')) {
@@ -152,19 +152,11 @@ async function indexEvents() {
               await processSellEvent(event);
             }
           }
-          
-          // Update cursor
-          if (events.nextCursor) {
-            await db.query(
-              'UPDATE indexer_state SET last_cursor = $1, last_timestamp = $2, updated_at = NOW() WHERE id = 1',
-              [JSON.stringify(events.nextCursor), Date.now()]
-            );
-          }
         }
       }
       
       if (totalNewEvents > 0) {
-        console.log(`✨ Processed ${totalNewEvents} total events`);
+        console.log(`✨ Processed ${totalNewEvents} new events`);
         // Generate candles after processing trades
         await generateCandles();
       } else {
