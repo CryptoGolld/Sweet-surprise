@@ -292,14 +292,14 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
     : "fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200";
   
   const contentClasses = fullPage
-    ? "bg-sui-dark border-2 border-white/20 rounded-2xl w-full" // Full width for page
+    ? "bg-sui-dark w-full" // Full width for page, no border/rounded for full screen
     : "bg-sui-dark border-2 border-white/20 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"; // Modal size
   
   return (
     <div className={containerClasses}>
       <div className={contentClasses}>
-        {/* Header */}
-        <div className="sticky top-0 bg-sui-dark border-b border-white/10 p-6 flex items-center justify-between">
+        {/* Header - Compact on full page */}
+        <div className={`sticky top-0 bg-sui-dark border-b border-white/10 flex items-center justify-between ${fullPage ? 'p-3 md:p-4' : 'p-6'}`}>
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-gradient-to-br from-meme-pink/20 to-sui-blue/20 rounded-lg flex items-center justify-center text-3xl overflow-hidden">
               {curve.imageUrl ? (
@@ -332,15 +332,15 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           </div>
         </div>
 
-        {/* Charts Section */}
-        <div className="p-6 border-b border-white/10">
-          <div className="grid md:grid-cols-2 gap-4">
+        {/* Charts Section - Compact padding on full page */}
+        <div className={`border-b border-white/10 ${fullPage ? 'p-3 md:p-4' : 'p-6'}`}>
+          <div className="grid md:grid-cols-2 gap-3 md:gap-4">
             <PriceChart coinType={curve.coinType} />
             <TradeHistory coinType={curve.coinType} />
           </div>
         </div>
 
-        <div className="p-6 grid md:grid-cols-2 gap-6">
+        <div className={`grid md:grid-cols-2 gap-4 md:gap-6 ${fullPage ? 'p-3 md:p-4' : 'p-6'}`}>
           {/* Left: Info */}
           <div className="space-y-6">
             {/* Description */}

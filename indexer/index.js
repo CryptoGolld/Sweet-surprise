@@ -143,8 +143,8 @@ async function indexEvents() {
           for (const event of events.data) {
             const eventTimestamp = parseInt(event.timestampMs);
             
-            // Stop if we've reached events we've already processed
-            if (eventTimestamp <= lastTimestamp) {
+            // Stop if we've reached events we've already processed (use < not <=)
+            if (eventTimestamp < lastTimestamp) {
               foundOldEvent = true;
               break;
             }
