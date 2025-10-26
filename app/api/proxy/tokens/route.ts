@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const INDEXER_API = 'http://13.60.235.109:3002';
 
+// Mark route as dynamic to avoid static rendering errors
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

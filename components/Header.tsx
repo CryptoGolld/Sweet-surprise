@@ -53,6 +53,12 @@ export function Header() {
               >
                 💼 Portfolio
               </Link>
+              <Link 
+                href="/referrals" 
+                className={`transition-colors ${isActive('/referrals') ? 'text-gradient font-semibold' : 'text-gray-300 hover:text-white'}`}
+              >
+                🎁 Referrals
+              </Link>
             </nav>
 
             {/* Actions */}

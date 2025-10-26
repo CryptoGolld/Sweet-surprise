@@ -287,7 +287,10 @@ export function UserPortfolio() {
       {coins.map((coin) => {
         const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
         const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
-        const tokenLink = '/tokens';
+        
+        // Get the curve ID for this token to link to its page
+        const curve = curveData.get(coin.type);
+        const tokenLink = curve?.curveId ? `/tokens/${curve.curveId}` : '/tokens';
         
         // Calculate price per token
         let pricePerToken = 0;

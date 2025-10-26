@@ -74,20 +74,26 @@ export default function TokenPage() {
   return (
     <div className="min-h-screen pb-20 md:pb-0">
       <Header />
-      <main className="container mx-auto px-4 py-8">
-        {/* Token will be displayed via the trading modal */}
-        {token && (
-          <TradingModal
-            isOpen={showTrading}
-            onClose={() => {
-              setShowTrading(false);
-              // Redirect back to tokens list after closing
-              setTimeout(() => {
-                window.location.href = '/tokens';
-              }, 300);
-            }}
-            curve={token}
-          />
+      <main className="container mx-auto px-4 py-6">
+        {/* Full page trading interface */}
+        {token && showTrading && (
+          <div className="max-w-7xl mx-auto">
+            {/* Back button */}
+            <button
+              onClick={() => window.history.back()}
+              className="mb-4 flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+            >
+              ← Back to Tokens
+            </button>
+            
+            {/* Trading interface in full page */}
+            <TradingModal
+              isOpen={true}
+              onClose={() => window.history.back()}
+              curve={token}
+              fullPage={true}
+            />
+          </div>
         )}
       </main>
       <BottomNav />

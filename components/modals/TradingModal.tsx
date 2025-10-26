@@ -23,9 +23,10 @@ interface TradingModalProps {
   isOpen: boolean;
   onClose: () => void;
   curve: BondingCurve;
+  fullPage?: boolean; // If true, renders as full page instead of modal overlay
 }
 
-export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
+export function TradingModal({ isOpen, onClose, curve, fullPage = false }: TradingModalProps) {
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
   const { data: suiPrice = 1.0 } = useSuiPrice();
@@ -285,9 +286,18 @@ export function TradingModal({ isOpen, onClose, curve }: TradingModalProps) {
     });
   }
 
+  // Render as full page or modal overlay based on fullPage prop
+  const containerClasses = fullPage
+    ? "w-full" // Full page - no fixed positioning
+    : "fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200";
+  
+  const contentClasses = fullPage
+    ? "bg-sui-dark border-2 border-white/20 rounded-2xl w-full" // Full width for page
+    : "bg-sui-dark border-2 border-white/20 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"; // Modal size
+  
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-sui-dark border-2 border-white/20 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+    <div className={containerClasses}>
+      <div className={contentClasses}>
         {/* Header */}
         <div className="sticky top-0 bg-sui-dark border-b border-white/10 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
