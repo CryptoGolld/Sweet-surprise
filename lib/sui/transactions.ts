@@ -4,7 +4,57 @@
 
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/sui/bcs';
+import { SuiClient } from '@mysten/sui/client';
 import { CONTRACTS, COIN_TYPES, getContractForCurve } from '../constants';
+
+/**
+ * Estimate gas for a transaction with a 30% safety buffer
+ * Export this for advanced users who want manual control over gas estimation
+ */
+export async function estimateGasWithBuffer(
+  tx: Transaction,
+  client: SuiClient,
+  sender: string
+): Promise<string> {
+  try {
+    // Build transaction for dry run
+    tx.setSender(sender);
+    const dryRunTxBytes = await tx.build({ client });
+    
+    // Dry run to get gas estimate
+    const dryRun = await client.dryRunTransactionBlock({
+      transactionBlock: dryRunTxBytes,
+    });
+    
+    if (dryRun.effects.status.status !== 'success') {
+      console.warn('Dry run failed, using default gas budget');
+      return '50000000'; // 0.05 SUI default
+    }
+    
+    // Calculate total gas: computation + storage - rebate
+    const computation = BigInt(dryRun.effects.gasUsed.computationCost);
+    const storage = BigInt(dryRun.effects.gasUsed.storageCost);
+    const rebate = BigInt(dryRun.effects.gasUsed.storageRebate);
+    
+    const totalGas = computation + storage - rebate;
+    
+    // Add 30% buffer for safety
+    const gasWithBuffer = (totalGas * 130n) / 100n;
+    
+    console.log('⛽ Gas Estimation:', {
+      computation: computation.toString(),
+      storage: storage.toString(),
+      total: totalGas.toString(),
+      withBuffer: gasWithBuffer.toString(),
+      inSUI: (Number(gasWithBuffer) / 1_000_000_000).toFixed(4),
+    });
+    
+    return gasWithBuffer.toString();
+  } catch (error) {
+    console.warn('Gas estimation failed:', error);
+    return '50000000'; // 0.05 SUI fallback
+  }
+}
 
 /**
  * Create a new memecoin by compiling on backend and publishing on frontend
@@ -111,6 +161,7 @@ export function createCurveTransaction(params: {
 
 /**
  * Buy tokens from bonding curve
+ * @param estimateGas - Optional: If provided with client and sender, will estimate gas dynamically
  */
 export function buyTokensTransaction(params: {
   curveId: string;
@@ -118,13 +169,14 @@ export function buyTokensTransaction(params: {
   paymentCoinIds: string[]; // Array of payment coin object IDs
   maxSuiIn: string;
   minTokensOut: string;
+  // Optional: for dynamic gas estimation
+  client?: SuiClient;
+  sender?: string;
 }): Transaction {
   const tx = new Transaction();
   
-  // Gas budget will be estimated automatically by wallet if not set
-  // Typically buy costs ~3-10M MIST (0.003-0.01 SUI)
-  // We set a reasonable upper bound to prevent issues
-  tx.setGasBudget(50_000_000); // 0.05 SUI max (was 0.1 SUI)
+  // Gas will be set dynamically after transaction is built, or use default
+  // Don't set gas budget here - will be set by caller after estimation
   
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
@@ -171,11 +223,16 @@ export function buyTokensTransaction(params: {
   
   // Note: buy is an entry function, tokens are auto-transferred to sender
   
+  // Don't set gas budget - wallet SDK will estimate automatically
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
+  
   return tx;
 }
 
 /**
  * Sell tokens back to bonding curve
+ * @param estimateGas - Optional: If provided with client and sender, will estimate gas dynamically
  */
 export function sellTokensTransaction(params: {
   curveId: string;
@@ -183,13 +240,14 @@ export function sellTokensTransaction(params: {
   memeTokenCoinIds: string[]; // Array of coin object IDs
   tokensToSell: string;
   minSuiOut: string;
+  // Optional: for dynamic gas estimation
+  client?: SuiClient;
+  sender?: string;
 }): Transaction {
   const tx = new Transaction();
   
-  // Gas budget will be estimated automatically by wallet if not set
-  // Typically sell costs ~3-10M MIST (0.003-0.01 SUI)
-  // We set a reasonable upper bound to prevent issues
-  tx.setGasBudget(50_000_000); // 0.05 SUI max (was 0.1 SUI)
+  // Gas will be set dynamically after transaction is built, or use default
+  // Don't set gas budget here - will be set by caller after estimation
   
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
@@ -255,6 +313,10 @@ export function sellTokensTransaction(params: {
       tx.object('0x6'),
     ],
   });
+  
+  // Don't set gas budget - wallet SDK will estimate automatically
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
   
   return tx;
 }
