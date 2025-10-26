@@ -6,14 +6,16 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Configuration
-const PLATFORM_PACKAGE = process.env.PLATFORM_PACKAGE;
+// Configuration - Watch BOTH contracts for backwards compatibility
+const PLATFORM_PACKAGE = process.env.PLATFORM_PACKAGE || '0xf19ee4bbe2183adc6bbe44801988e68982839566ddbca3c38321080d420ca7a5'; // NEW
+const LEGACY_PLATFORM_PACKAGE = process.env.LEGACY_PLATFORM_PACKAGE || '0x98da9f73a80663ec6d8cf0f9d9e1edd030d9255b780f755e6a85ae468545fdd0'; // OLD
 const SUI_RPC_URL = process.env.SUI_RPC_URL;
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 const client = new SuiClient({ url: SUI_RPC_URL });
 
 console.log('🚀 Starting Memecoin Indexer...');
-console.log('📦 Package:', PLATFORM_PACKAGE);
+console.log('📦 NEW Package:', PLATFORM_PACKAGE);
+console.log('📦 LEGACY Package:', LEGACY_PLATFORM_PACKAGE);
 console.log('🌐 RPC:', SUI_RPC_URL);
 
 // Index historical events (run once on first start)
@@ -30,12 +32,20 @@ async function indexHistoricalEvents() {
   console.log('📚 Starting historical event indexing...');
   console.log('⏳ This may take a few minutes for all past events...');
   
+  // Index events from BOTH packages (new + legacy)
   const eventTypes = [
+    // NEW package events
     `${PLATFORM_PACKAGE}::bonding_curve::Created`,
     `${PLATFORM_PACKAGE}::bonding_curve::Bought`,
     `${PLATFORM_PACKAGE}::bonding_curve::Sold`,
     `${PLATFORM_PACKAGE}::referral_registry::ReferralRegistered`,
     `${PLATFORM_PACKAGE}::referral_registry::ReferralRewardPaid`,
+    // LEGACY package events
+    `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Created`,
+    `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Bought`,
+    `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Sold`,
+    `${LEGACY_PLATFORM_PACKAGE}::referral_registry::ReferralRegistered`,
+    `${LEGACY_PLATFORM_PACKAGE}::referral_registry::ReferralRewardPaid`,
   ];
   
   let totalIndexed = 0;
