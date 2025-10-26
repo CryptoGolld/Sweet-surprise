@@ -114,7 +114,13 @@ async function indexEvents() {
       const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
       const lastTimestamp = stateResult.rows[0]?.last_timestamp || 0;
       
-      const lastDate = new Date(lastTimestamp).toISOString();
+      // Handle case where timestamp might be null/invalid
+      let lastDate;
+      try {
+        lastDate = lastTimestamp > 0 ? new Date(lastTimestamp).toISOString() : 'beginning';
+      } catch (e) {
+        lastDate = 'beginning';
+      }
       console.log(`\n🔄 Polling for new events (after ${lastDate})...`);
       console.log(`   Watching NEW: ${PLATFORM_PACKAGE.substring(0, 20)}...`);
       console.log(`   Watching LEGACY: ${LEGACY_PLATFORM_PACKAGE.substring(0, 20)}...`);
