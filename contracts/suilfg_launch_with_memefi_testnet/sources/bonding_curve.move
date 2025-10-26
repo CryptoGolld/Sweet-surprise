@@ -462,8 +462,10 @@ module suilfg_launch_memefi::bonding_curve {
         };
 
         // Compute payout and fees
+        // Convert amount_tokens from smallest units (coin balance) to whole tokens (supply tracking)
+        let amount_tokens_whole = amount_tokens / 1_000_000_000;
         let s1 = curve.token_supply;
-        let s2 = s1 - amount_tokens;
+        let s2 = s1 - amount_tokens_whole;
         let gross = narrow_u128_to_u64(integrate_cost_u128(s2, s1, curve.m_num, curve.m_den, curve.base_price_mist));
 
         if (gross < min_sui_out) { abort 7; } else {}; // E_MIN_SUI_OUT_NOT_MET
@@ -522,7 +524,7 @@ module suilfg_launch_memefi::bonding_curve {
             transfer::public_transfer(fee_coin, curve.creator);
         };
 
-        curve.token_supply = curve.token_supply - amount_tokens;
+        curve.token_supply = curve.token_supply - amount_tokens_whole;
         
         let referrer_addr = if (option::is_some(&referrer_opt)) {
             *option::borrow(&referrer_opt)
