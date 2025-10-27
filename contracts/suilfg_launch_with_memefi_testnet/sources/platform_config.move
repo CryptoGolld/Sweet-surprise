@@ -9,6 +9,7 @@ module suilfg_launch_memefi::platform_config {
         id: UID,
         treasury_address: address,
         lp_recipient_address: address,
+        lp_bot_address: address,  // Bot address that receives LP tokens for pool creation
         creation_is_paused: bool,
         first_buyer_fee_mist: u64,
         default_platform_fee_bps: u64,
@@ -84,6 +85,7 @@ module suilfg_launch_memefi::platform_config {
     public fun get_cetus_global_config_id(cfg: &PlatformConfig): address { cfg.cetus_global_config_id }
     public fun get_cetus_burn_manager_id(cfg: &PlatformConfig): address { cfg.cetus_burn_manager_id }
     public fun get_lp_recipient_address(cfg: &PlatformConfig): address { cfg.lp_recipient_address }
+    public fun get_lp_bot_address(cfg: &PlatformConfig): address { cfg.lp_bot_address }
     public fun get_referral_fee_bps(cfg: &PlatformConfig): u64 { cfg.referral_fee_bps }
 
     /// One-time module initializer (Sui requirement: internal, witness + ctx)
@@ -109,6 +111,7 @@ module suilfg_launch_memefi::platform_config {
             ticker_early_reuse_base_fee_mist: DEFAULT_TICKER_EARLY_REUSE_BASE_FEE_MIST,
             ticker_early_reuse_max_fee_mist: DEFAULT_TICKER_EARLY_REUSE_MAX_FEE_MIST,
             lp_recipient_address: sender(ctx),
+            lp_bot_address: sender(ctx),  // Initialize to deployer, change later via set_lp_bot_address
             cetus_global_config_id: @0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e, // Testnet Global Config
             cetus_burn_manager_id: @0x0, // Must be set after deployment
             referral_fee_bps: DEFAULT_REFERRAL_FEE_BPS,
@@ -192,6 +195,10 @@ module suilfg_launch_memefi::platform_config {
 
     public entry fun set_lp_recipient_address(_admin: &AdminCap, cfg: &mut PlatformConfig, addr: address) {
         cfg.lp_recipient_address = addr;
+    }
+
+    public entry fun set_lp_bot_address(_admin: &AdminCap, cfg: &mut PlatformConfig, addr: address) {
+        cfg.lp_bot_address = addr;
     }
 
     /// CRITICAL SECURITY: Set the official Cetus GlobalConfig address

@@ -93,6 +93,8 @@ module suilfg_launch_memefi::bonding_curve {
     const E_INVALID_CETUS_CONFIG: u64 = 6;
     const E_INVALID_BURN_MANAGER: u64 = 7;
     const E_TICKER_ALREADY_EXISTS: u64 = 8;
+    const E_UNAUTHORIZED_BOT: u64 = 9;
+    const E_ALREADY_SEEDED: u64 = 10;
 
     fun init_for_token<T: drop>(cfg: &PlatformConfig, creator: address, treasury: TreasuryCap<T>, ctx: &mut TxContext): BondingCurve<T> {
         BondingCurve<T> {
@@ -606,17 +608,21 @@ module suilfg_launch_memefi::bonding_curve {
     }
     
     /// ADMIN: Extract liquidity for bot-driven manual pool creation
-    /// Mints tokens, extracts SUI, handles 54M tokens burn/treasury
+    /// SECURITY: Only configured bot address can receive LP tokens
+    /// Automatically handles 54M tokens based on special_launch flag
     public entry fun prepare_liquidity_for_bot<T: drop>(
         _admin: &AdminCap,
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
-        burn_54m: bool,
         ctx: &mut TxContext
     ) {
         assert!(curve.graduated, E_NOT_GRADUATED);
         assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
         assert!(curve.reward_paid, 9010);
+        
+        // SECURITY: Only configured bot address can call and receive LP tokens
+        let bot_address = platform_config::get_lp_bot_address(cfg);
+        assert!(sender(ctx) == bot_address, E_UNAUTHORIZED_BOT);
         
         let sui_for_lp = 12_000_000_000_000;
         let tokens_for_lp = 207_000_000;
@@ -629,18 +635,38 @@ module suilfg_launch_memefi::bonding_curve {
         let team_tokens = coin::mint(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
         transfer::public_transfer(team_tokens, treasury_address);
         
+        // Handle 54M tokens based on special_launch flag
         let treasury_tokens = coin::mint(&mut curve.treasury, burn_or_treasury_amount * 1_000_000_000, ctx);
-        if (burn_54m) {
-            coin::burn(&mut curve.treasury, treasury_tokens);
-        } else {
+        if (curve.special_launch) {
+            // Special launch: send 54M to treasury instead of burning
             transfer::public_transfer(treasury_tokens, treasury_address);
+        } else {
+            // Normal launch: burn 54M tokens
+            coin::burn(&mut curve.treasury, treasury_tokens);
         };
         
-        transfer::public_transfer(lp_sui, sender(ctx));
-        transfer::public_transfer(lp_tokens, sender(ctx));
+        // Send LP tokens to configured bot address
+        transfer::public_transfer(lp_sui, bot_address);
+        transfer::public_transfer(lp_tokens, bot_address);
         
         curve.token_supply = curve.token_supply + tokens_for_lp + team_allocation + burn_or_treasury_amount;
         curve.lp_seeded = true;
+    }
+    
+    /// ADMIN: Mark a curve as special launch (54M to treasury instead of burn)
+    /// Must be called BEFORE pool creation
+    public entry fun set_special_launch<T: drop>(
+        _admin: &AdminCap,
+        curve: &mut BondingCurve<T>,
+        is_special: bool
+    ) {
+        assert!(!curve.lp_seeded, E_ALREADY_SEEDED);
+        curve.special_launch = is_special;
+    }
+    
+    /// View if curve is marked as special launch
+    public fun is_special_launch<T: drop>(curve: &BondingCurve<T>): bool {
+        curve.special_launch
     }
 
     /// Legacy function for manual pool creation (kept for backwards compatibility)
