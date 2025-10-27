@@ -101,11 +101,11 @@ export async function createCoinTransaction(params: {
   
   const { modules, dependencies, moduleName, structName } = result;
   
-  // 2. Build transaction with explicit gas budget
+  // 2. Build transaction - wallet will estimate gas
   const tx = new Transaction();
   
-  // Publishing is expensive, keep at 0.1 SUI
-  tx.setGasBudget(100_000_000); // 0.1 SUI
+  // Publishing is expensive (~0.05-0.15 SUI depending on package size)
+  // Let wallet estimate automatically for optimal gas usage
   
   // 2a. Publish the package and get UpgradeCap
   const upgradeCap = tx.publish({
@@ -139,8 +139,8 @@ export function createCurveTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Curve creation is more expensive, keep at 0.1 SUI
-  tx.setGasBudget(100_000_000); // 0.1 SUI
+  // Curve creation costs ~0.01-0.05 SUI
+  // Let wallet estimate automatically for optimal gas usage
   
   const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
   
@@ -315,8 +315,7 @@ export function sellTokensTransaction(params: {
 export function graduateCurveTransaction(curveId: string): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for graduation (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Graduation is complex but wallet will estimate accurately
   
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::try_graduate`,
