@@ -112,7 +112,7 @@ async function indexEvents() {
     try {
       // Get last processed timestamp
       const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
-      const lastTimestamp = stateResult.rows[0]?.last_timestamp || 0;
+      const lastTimestamp = parseInt(stateResult.rows[0]?.last_timestamp) || 0;
       
       // Handle case where timestamp might be null/invalid
       let lastDate;
@@ -493,12 +493,12 @@ async function processSellEvent(event) {
     // Update token holders (decrease balance)
     await db.query(
       `INSERT INTO token_holders (user_address, coin_type, balance, first_acquired_at, last_updated_at)
-       VALUES ($1, $2, $3, $4, $4)
+       VALUES ($1, $2, -$3::bigint, $4, $4)
        ON CONFLICT (user_address, coin_type) 
        DO UPDATE SET 
-         balance = token_holders.balance - $3,
+         balance = token_holders.balance - $3::bigint,
          last_updated_at = $4`,
-      [seller, coinType, `-${tokensIn.toString()}`, timestamp]
+      [seller, coinType, tokensIn.toString(), timestamp]
     );
     
     // If balance is now 0 or negative, remove from holders
