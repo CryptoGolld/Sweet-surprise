@@ -208,7 +208,7 @@ export function buyTokensTransaction(params: {
     tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
     tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
     tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-    tx.pure.option('address', null), // referrer: Option<address> (null for now)
+    tx.pure.vector('address', []), // referrer: Option<address> (None = empty vector)
     tx.object('0x6'), // clk: &Clock
   ];
   
@@ -299,7 +299,7 @@ export function sellTokensTransaction(params: {
     tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
     tx.pure.u64(params.minSuiOut),
     tx.pure.u64(deadlineMs),
-    tx.pure.option('address', null), // referrer: Option<address> (null for now)
+    tx.pure.vector('address', []), // referrer: Option<address> (None = empty vector)
     tx.object('0x6'),
   ];
   
