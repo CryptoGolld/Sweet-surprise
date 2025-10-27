@@ -4,7 +4,57 @@
 
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/sui/bcs';
-import { CONTRACTS, COIN_TYPES } from '../constants';
+import { SuiClient } from '@mysten/sui/client';
+import { CONTRACTS, COIN_TYPES, getContractForCurve } from '../constants';
+
+/**
+ * Estimate gas for a transaction with a 30% safety buffer
+ * Export this for advanced users who want manual control over gas estimation
+ */
+export async function estimateGasWithBuffer(
+  tx: Transaction,
+  client: SuiClient,
+  sender: string
+): Promise<string> {
+  try {
+    // Build transaction for dry run
+    tx.setSender(sender);
+    const dryRunTxBytes = await tx.build({ client });
+    
+    // Dry run to get gas estimate
+    const dryRun = await client.dryRunTransactionBlock({
+      transactionBlock: dryRunTxBytes,
+    });
+    
+    if (dryRun.effects.status.status !== 'success') {
+      console.warn('Dry run failed, using default gas budget');
+      return '50000000'; // 0.05 SUI default
+    }
+    
+    // Calculate total gas: computation + storage - rebate
+    const computation = BigInt(dryRun.effects.gasUsed.computationCost);
+    const storage = BigInt(dryRun.effects.gasUsed.storageCost);
+    const rebate = BigInt(dryRun.effects.gasUsed.storageRebate);
+    
+    const totalGas = computation + storage - rebate;
+    
+    // Add 30% buffer for safety
+    const gasWithBuffer = (totalGas * 130n) / 100n;
+    
+    console.log('⛽ Gas Estimation:', {
+      computation: computation.toString(),
+      storage: storage.toString(),
+      total: totalGas.toString(),
+      withBuffer: gasWithBuffer.toString(),
+      inSUI: (Number(gasWithBuffer) / 1_000_000_000).toFixed(4),
+    });
+    
+    return gasWithBuffer.toString();
+  } catch (error) {
+    console.warn('Gas estimation failed:', error);
+    return '50000000'; // 0.05 SUI fallback
+  }
+}
 
 /**
  * Create a new memecoin by compiling on backend and publishing on frontend
@@ -51,11 +101,11 @@ export async function createCoinTransaction(params: {
   
   const { modules, dependencies, moduleName, structName } = result;
   
-  // 2. Build transaction with explicit gas budget
+  // 2. Build transaction - wallet will estimate gas
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for publishing (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Publishing is expensive (~0.05-0.15 SUI depending on package size)
+  // Let wallet estimate automatically for optimal gas usage
   
   // 2a. Publish the package and get UpgradeCap
   const upgradeCap = tx.publish({
@@ -89,8 +139,8 @@ export function createCurveTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for curve creation (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Curve creation costs ~0.01-0.05 SUI
+  // Let wallet estimate automatically for optimal gas usage
   
   const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
   
@@ -111,6 +161,7 @@ export function createCurveTransaction(params: {
 
 /**
  * Buy tokens from bonding curve
+ * Gas is estimated automatically by the wallet - no need to set it
  */
 export function buyTokensTransaction(params: {
   curveId: string;
@@ -121,11 +172,18 @@ export function buyTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for buy (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
-  
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
+  
+  // Detect which contract this curve belongs to based on coinType
+  const contractInfo = getContractForCurve(params.coinType);
+  const { package: platformPackage, state, referralRegistry } = contractInfo;
+  
+  console.log('🔍 Buy Transaction - Contract Detection:', {
+    coinType: params.coinType.substring(0, 80) + '...',
+    detectedPackage: platformPackage,
+    isLegacy: contractInfo.isLegacy,
+  });
   
   // Merge all payment coins first if there are multiple
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
@@ -141,29 +199,50 @@ export function buyTokensTransaction(params: {
     tx.pure.u64(params.maxSuiIn)
   ]);
   
+  // Legacy contracts might have different function signatures
+  // Try to build the right arguments based on contract version
+  const buyArgs = contractInfo.isLegacy
+    ? [
+        // Legacy v0.0.6 signature (might not have referral_registry)
+        tx.object(state), // cfg: &PlatformConfig
+        tx.object(params.curveId), // curve: &mut BondingCurve<T>
+        paymentCoin, // payment: Coin<SUI>
+        tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
+        tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
+        tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
+        tx.object('0x6'), // clk: &Clock
+      ]
+    : [
+        // New v0.0.7 signature (with referral_registry)
+        tx.object(state), // cfg: &PlatformConfig
+        tx.object(params.curveId), // curve: &mut BondingCurve<T>
+        tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
+        paymentCoin, // payment: Coin<SUI>
+        tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
+        tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
+        tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
+        tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
+        tx.object('0x6'), // clk: &Clock
+      ];
+  
   tx.moveCall({
-    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
+    target: `${platformPackage}::bonding_curve::buy`,
     typeArguments: [params.coinType],
-    arguments: [
-      tx.object(CONTRACTS.PLATFORM_STATE), // cfg: &PlatformConfig
-      tx.object(params.curveId), // curve: &mut BondingCurve<T>
-      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      paymentCoin, // payment: Coin<SUI>
-      tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
-      tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
-      tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
-      tx.object('0x6'), // clk: &Clock
-    ],
+    arguments: buyArgs,
   });
   
   // Note: buy is an entry function, tokens are auto-transferred to sender
+  
+  // Don't set gas budget - wallet SDK will estimate automatically
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
   
   return tx;
 }
 
 /**
  * Sell tokens back to bonding curve
+ * Gas is estimated automatically by the wallet - no need to set it
  */
 export function sellTokensTransaction(params: {
   curveId: string;
@@ -174,18 +253,21 @@ export function sellTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for sell (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
-  
   // Deadline: 5 minutes from now
   const deadlineMs = Date.now() + 300000;
   
+  // Detect which contract this curve belongs to based on coinType
+  const contractInfo = getContractForCurve(params.coinType);
+  const { package: platformPackage, state, referralRegistry } = contractInfo;
+  
   // Log transaction details for debugging
-  console.log('Building sell transaction:', {
+  console.log('🔍 Sell Transaction - Contract Detection:', {
+    coinType: params.coinType.substring(0, 80) + '...',
+    detectedPackage: platformPackage,
+    isLegacy: contractInfo.isLegacy,
     numCoins: params.memeTokenCoinIds.length,
     tokensToSell: params.tokensToSell,
     minSuiOut: params.minSuiOut,
-    coinIds: params.memeTokenCoinIds,
   });
   
   // Strategy: Create coin references, merge if needed, then pass to moveCall
@@ -220,21 +302,41 @@ export function sellTokensTransaction(params: {
   // - mut tokens: Coin<T> - the coin to sell from (it handles splitting internally)
   // - amount_tokens: u64 - the amount to sell in SMALLEST UNITS (matches coin balance)
   // It will split if needed and return remainder to sender
+  
+  // Legacy contracts might have different function signatures
+  const sellArgs = contractInfo.isLegacy
+    ? [
+        // Legacy v0.0.6 signature (might not have referral_registry)
+        tx.object(state),
+        tx.object(params.curveId),
+        coinArg, // Pass the coin (single or merged)
+        tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
+        tx.pure.u64(params.minSuiOut),
+        tx.pure.u64(deadlineMs),
+        tx.object('0x6'),
+      ]
+    : [
+        // New v0.0.7 signature (with referral_registry)
+        tx.object(state),
+        tx.object(params.curveId),
+        tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
+        coinArg, // Pass the coin (single or merged)
+        tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
+        tx.pure.u64(params.minSuiOut),
+        tx.pure.u64(deadlineMs),
+        tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
+        tx.object('0x6'),
+      ];
+  
   tx.moveCall({
-    target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::sell`,
+    target: `${platformPackage}::bonding_curve::sell`,
     typeArguments: [params.coinType],
-    arguments: [
-      tx.object(CONTRACTS.PLATFORM_STATE),
-      tx.object(params.curveId),
-      tx.object(CONTRACTS.REFERRAL_REGISTRY), // referral_registry: &mut ReferralRegistry
-      coinArg, // Pass the coin (single or merged)
-      tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
-      tx.pure.u64(params.minSuiOut),
-      tx.pure.u64(deadlineMs),
-      tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
-      tx.object('0x6'),
-    ],
+    arguments: sellArgs,
   });
+  
+  // Don't set gas budget - wallet SDK will estimate automatically
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
   
   return tx;
 }
@@ -245,8 +347,7 @@ export function sellTokensTransaction(params: {
 export function graduateCurveTransaction(curveId: string): Transaction {
   const tx = new Transaction();
   
-  // Set gas budget: 0.1 SUI for graduation (100,000,000 MIST)
-  tx.setGasBudget(100_000_000);
+  // Graduation is complex but wallet will estimate accurately
   
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::try_graduate`,

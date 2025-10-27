@@ -76,9 +76,9 @@ async function indexHistoricalEvents() {
         for (const event of events.data) {
           if (eventType.includes('Created')) {
             await processCreatedEvent(event);
-          } else if (eventType.includes('TokensPurchased')) {
+          } else if (eventType.includes('Bought') || eventType.includes('TokensPurchased')) {
             await processBuyEvent(event);
-          } else if (eventType.includes('TokensSold')) {
+          } else if (eventType.includes('Sold') || eventType.includes('TokensSold')) {
             await processSellEvent(event);
           }
           totalIndexed++;
@@ -114,12 +114,27 @@ async function indexEvents() {
       const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
       const lastTimestamp = stateResult.rows[0]?.last_timestamp || 0;
       
-      console.log(`\n🔄 Polling for new events (after ${new Date(lastTimestamp).toISOString()})...`);
+      // Handle case where timestamp might be null/invalid
+      let lastDate;
+      try {
+        lastDate = lastTimestamp > 0 ? new Date(lastTimestamp).toISOString() : 'beginning';
+      } catch (e) {
+        lastDate = 'beginning';
+      }
+      console.log(`\n🔄 Polling for new events (after ${lastDate})...`);
+      console.log(`   Watching NEW: ${PLATFORM_PACKAGE.substring(0, 20)}...`);
+      console.log(`   Watching LEGACY: ${LEGACY_PLATFORM_PACKAGE.substring(0, 20)}...`);
       
+      // Poll BOTH contracts for new events
       const eventTypes = [
+        // NEW package events
         `${PLATFORM_PACKAGE}::bonding_curve::Created`,
         `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
         `${PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
+        // LEGACY package events
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Created`,
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
       ];
       
       let totalNewEvents = 0;
@@ -153,8 +168,8 @@ async function indexEvents() {
           for (const event of events.data) {
             const eventTimestamp = parseInt(event.timestampMs);
             
-            // Stop if we've reached events we've already processed (use < not <=)
-            if (eventTimestamp < lastTimestamp) {
+            // Stop if we've reached events we've already processed
+            if (eventTimestamp <= lastTimestamp) {
               foundOldEvent = true;
               break;
             }
@@ -164,13 +179,14 @@ async function indexEvents() {
               latestTimestamp = eventTimestamp;
             }
             
-            // Check if already in database (extra safety)
+            // Check if already in database by tx_digest (extra safety)
             const existsResult = await db.query(
               'SELECT 1 FROM trades WHERE tx_digest = $1 LIMIT 1',
               [event.id.txDigest]
             );
             
             if (existsResult.rows.length > 0 && !eventType.includes('Created')) {
+              console.log(`⏭️  Skipping duplicate trade: ${event.id.txDigest.slice(0, 10)}...`);
               continue; // Skip if already processed
             }
             
@@ -178,10 +194,13 @@ async function indexEvents() {
             
             // Process the event
             if (eventType.includes('Created')) {
+              console.log(`   📦 Processing Created event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processCreatedEvent(event);
-            } else if (eventType.includes('TokensPurchased')) {
+            } else if (eventType.includes('Bought') || eventType.includes('TokensPurchased')) {
+              console.log(`   💰 Processing Buy event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processBuyEvent(event);
-            } else if (eventType.includes('TokensSold')) {
+            } else if (eventType.includes('Sold') || eventType.includes('TokensSold')) {
+              console.log(`   💸 Processing Sell event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processSellEvent(event);
             }
           }
@@ -474,12 +493,12 @@ async function processSellEvent(event) {
     // Update token holders (decrease balance)
     await db.query(
       `INSERT INTO token_holders (user_address, coin_type, balance, first_acquired_at, last_updated_at)
-       VALUES ($1, $2, -$3, $4, $4)
+       VALUES ($1, $2, $3, $4, $4)
        ON CONFLICT (user_address, coin_type) 
        DO UPDATE SET 
          balance = token_holders.balance - $3,
          last_updated_at = $4`,
-      [seller, coinType, tokensIn.toString(), timestamp]
+      [seller, coinType, `-${tokensIn.toString()}`, timestamp]
     );
     
     // If balance is now 0 or negative, remove from holders
