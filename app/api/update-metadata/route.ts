@@ -9,10 +9,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'coinType is required' }, { status: 400 });
     }
 
-    // Update token metadata in indexer database via API
-    const indexerApiUrl = process.env.INDEXER_API_URL || 'http://localhost:3002';
+    // Use the same backend API URL as other proxies
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://api.suilfg.fun';
     
-    const response = await fetch(`${indexerApiUrl}/api/update-metadata`, {
+    console.log('Updating metadata:', { coinType, hasImage: !!imageUrl, hasTwitter: !!twitter });
+    
+    const response = await fetch(`${backendUrl}/api/update-metadata`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -27,9 +29,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to update metadata in indexer');
+      const error = await response.text();
+      console.error('Indexer API error:', error);
+      throw new Error(`Failed to update metadata: ${error}`);
     }
 
+    const result = await response.json();
+    console.log('Metadata update success:', result);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Update metadata error:', error);
