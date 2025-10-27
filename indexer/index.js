@@ -113,19 +113,13 @@ async function indexEvents() {
         lastDate = 'beginning';
       }
       console.log(`\n🔄 Polling for new events (after ${lastDate})...`);
-      console.log(`   Watching NEW: ${PLATFORM_PACKAGE.substring(0, 20)}...`);
-      console.log(`   Watching LEGACY: ${LEGACY_PLATFORM_PACKAGE.substring(0, 20)}...`);
+      console.log(`   Watching: ${PLATFORM_PACKAGE.substring(0, 20)}...`);
       
-      // Poll BOTH contracts for new events
+      // Poll v0.0.8 package for new events
       const eventTypes = [
-        // NEW package events (uses new event names)
         `${PLATFORM_PACKAGE}::bonding_curve::Created`,
         `${PLATFORM_PACKAGE}::bonding_curve::Bought`,
         `${PLATFORM_PACKAGE}::bonding_curve::Sold`,
-        // LEGACY package events (uses Bought/Sold event names)
-        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Created`,
-        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Bought`,
-        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Sold`,
       ];
       
       let totalNewEvents = 0;
