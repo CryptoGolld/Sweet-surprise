@@ -287,6 +287,8 @@ async function processCreatedEvent(event) {
       return;
     }
     
+    // Extract package_id from coin type (0xPACKAGE::module::TICKER)
+    const packageId = coinType.split('::')[0];
     const ticker = coinType.split('::').pop() || 'UNKNOWN';
     
     // Fetch metadata
@@ -307,8 +309,8 @@ async function processCreatedEvent(event) {
     
     // Insert into database with initial price of 0
     await db.query(
-      `INSERT INTO tokens (id, coin_type, ticker, name, description, image_url, creator, curve_supply, curve_balance, graduated, created_at, current_price_sui, market_cap_sui)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, 0)
+      `INSERT INTO tokens (id, coin_type, package_id, ticker, name, description, image_url, creator, curve_supply, curve_balance, graduated, created_at, current_price_sui, market_cap_sui)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, 0)
        ON CONFLICT (coin_type) 
        DO UPDATE SET 
          curve_supply = EXCLUDED.curve_supply,
@@ -318,11 +320,12 @@ async function processCreatedEvent(event) {
       [
         curveId,
         coinType,
+        packageId,
         ticker,
         name,
         description,
         imageUrl,
-        fields.creator || '0x0',
+        fields.creator || '0',
         fields.token_supply || '0',
         fields.sui_reserve || '0',
         fields.graduated || false,
@@ -374,10 +377,34 @@ async function processBuyEvent(event) {
     );
     const curveId = curveUsed?.objectId || '';
     
-    // Estimate tokens (we don't have exact amount in event, use cost/price estimation)
-    // This is approximate - for exact amounts, we'd need to parse BalanceChange
-    const pricePerToken = 0.00001; // Rough estimate, will be refined by actual trades
-    const tokensOut = BigInt(suiIn) / BigInt(10000); // Rough estimate
+    // Get actual token amount from balance changes
+    let tokensOut = '0';
+    let pricePerToken = 0;
+    
+    // Look for balance changes to find actual tokens received
+    if (txDetails.effects?.balanceChanges) {
+      const tokenBalanceChange = txDetails.effects.balanceChanges.find(
+        change => change.coinType === coinType && change.owner?.AddressOwner === buyer
+      );
+      
+      if (tokenBalanceChange) {
+        const amountBigInt = BigInt(tokenBalanceChange.amount);
+        tokensOut = amountBigInt > 0n ? amountBigInt.toString() : '0';
+        
+        // Calculate actual price: sui_spent / tokens_received
+        if (BigInt(tokensOut) > 0n) {
+          // Convert to human readable: (sui in mist) / (tokens in smallest unit)
+          pricePerToken = parseFloat(suiIn) / parseFloat(tokensOut);
+        }
+      }
+    }
+    
+    // Fallback to rough estimate if balance changes not available
+    if (tokensOut === '0') {
+      console.warn('Could not extract token amount from balance changes, using estimate');
+      tokensOut = (BigInt(suiIn) * BigInt(100000)).toString(); // Rough estimate
+      pricePerToken = parseFloat(suiIn) / parseFloat(tokensOut);
+    }
     
     // Insert trade
     await db.query(
@@ -464,9 +491,34 @@ async function processSellEvent(event) {
     const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
     const curveId = curveUsed.objectId;
     
-    // Estimate tokens sold (approximate)
-    const pricePerToken = 0.00001; // Rough estimate
-    const tokensIn = BigInt(suiOut) / BigInt(10000); // Rough estimate
+    // Get actual token amount from balance changes
+    let tokensIn = '0';
+    let pricePerToken = 0;
+    
+    // Look for balance changes to find actual tokens sold
+    if (txDetails.effects?.balanceChanges) {
+      const tokenBalanceChange = txDetails.effects.balanceChanges.find(
+        change => change.coinType === coinType && change.owner?.AddressOwner === seller
+      );
+      
+      if (tokenBalanceChange) {
+        const amountBigInt = BigInt(tokenBalanceChange.amount);
+        // For sell, the amount is negative
+        tokensIn = amountBigInt < 0n ? (-amountBigInt).toString() : '0';
+        
+        // Calculate actual price: sui_received / tokens_sold
+        if (BigInt(tokensIn) > 0n) {
+          pricePerToken = parseFloat(suiOut) / parseFloat(tokensIn);
+        }
+      }
+    }
+    
+    // Fallback to rough estimate if balance changes not available
+    if (tokensIn === '0') {
+      console.warn('Could not extract token amount from balance changes, using estimate');
+      tokensIn = (BigInt(suiOut) * BigInt(100000)).toString(); // Rough estimate
+      pricePerToken = parseFloat(suiOut) / parseFloat(tokensIn);
+    }
     
     // Insert trade
     await db.query(

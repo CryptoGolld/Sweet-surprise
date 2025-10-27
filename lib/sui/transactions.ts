@@ -199,25 +199,26 @@ export function buyTokensTransaction(params: {
     tx.pure.u64(params.maxSuiIn)
   ]);
   
-  // Legacy contracts might have different function signatures
-  // Try to build the right arguments based on contract version
+  // Legacy contracts have DIFFERENT function signatures
+  // Legacy: buy(cfg, curve, payment, max_sui_in, min_tokens_out, deadline, clock)
+  // New: buy(cfg, curve, referral_registry, payment, max_sui_in, min_tokens_out, deadline, referrer, clock)
   const buyArgs = contractInfo.isLegacy
     ? [
-        // Legacy v0.0.6 signature (might not have referral_registry)
+        // Legacy v0.0.6 signature (NO referral_registry, NO referrer option)
         tx.object(state), // cfg: &PlatformConfig
         tx.object(params.curveId), // curve: &mut BondingCurve<T>
-        paymentCoin, // payment: Coin<SUI>
+        paymentCoin, // payment: Coin<SUILFG_MEMEFI>
         tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
         tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
         tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
         tx.object('0x6'), // clk: &Clock
       ]
     : [
-        // New v0.0.7 signature (with referral_registry)
+        // New v0.0.7 signature (with referral_registry + referrer)
         tx.object(state), // cfg: &PlatformConfig
         tx.object(params.curveId), // curve: &mut BondingCurve<T>
         tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
-        paymentCoin, // payment: Coin<SUI>
+        paymentCoin, // payment: Coin<SUILFG_MEMEFI>
         tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
         tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
         tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
@@ -303,29 +304,31 @@ export function sellTokensTransaction(params: {
   // - amount_tokens: u64 - the amount to sell in SMALLEST UNITS (matches coin balance)
   // It will split if needed and return remainder to sender
   
-  // Legacy contracts might have different function signatures
+  // Legacy contracts have DIFFERENT function signatures
+  // Legacy: sell(cfg, curve, tokens, amount_tokens, min_sui_out, deadline, clock)
+  // New: sell(cfg, curve, referral_registry, tokens, amount_tokens, min_sui_out, deadline, referrer, clock)
   const sellArgs = contractInfo.isLegacy
     ? [
-        // Legacy v0.0.6 signature (might not have referral_registry)
-        tx.object(state),
-        tx.object(params.curveId),
-        coinArg, // Pass the coin (single or merged)
-        tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
-        tx.pure.u64(params.minSuiOut),
-        tx.pure.u64(deadlineMs),
-        tx.object('0x6'),
+        // Legacy v0.0.6 signature (NO referral_registry, NO referrer option)
+        tx.object(state), // cfg: &PlatformConfig
+        tx.object(params.curveId), // curve: &mut BondingCurve<T>
+        coinArg, // tokens: Coin<T>
+        tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens: u64 (in SMALLEST UNITS!)
+        tx.pure.u64(params.minSuiOut), // min_sui_out: u64
+        tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
+        tx.object('0x6'), // clk: &Clock
       ]
     : [
-        // New v0.0.7 signature (with referral_registry)
-        tx.object(state),
-        tx.object(params.curveId),
+        // New v0.0.7 signature (with referral_registry + referrer)
+        tx.object(state), // cfg: &PlatformConfig
+        tx.object(params.curveId), // curve: &mut BondingCurve<T>
         tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
-        coinArg, // Pass the coin (single or merged)
-        tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
-        tx.pure.u64(params.minSuiOut),
-        tx.pure.u64(deadlineMs),
+        coinArg, // tokens: Coin<T>
+        tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens: u64 (in SMALLEST UNITS!)
+        tx.pure.u64(params.minSuiOut), // min_sui_out: u64
+        tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
         tx.pure(bcs.option(bcs.Address).serialize(null).toBytes()), // referrer: Option<address>
-        tx.object('0x6'),
+        tx.object('0x6'), // clk: &Clock
       ];
   
   tx.moveCall({
