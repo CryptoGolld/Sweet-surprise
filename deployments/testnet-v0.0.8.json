@@ -1,0 +1,63 @@
+{
+  "version": "0.0.8",
+  "network": "testnet",
+  "deployedAt": "2025-10-27T08:30:00.000Z",
+  "transactionDigest": "CZFLVEP58HSFiW1JY1fp8kV4duA7b9uR7nv25TR1H9f7",
+  "explorerUrl": "https://testnet.suivision.xyz/txblock/CZFLVEP58HSFiW1JY1fp8kV4duA7b9uR7nv25TR1H9f7",
+  "deployerAddress": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f",
+  "gasCost": {
+    "totalMist": "164076680",
+    "totalSui": "164.08"
+  },
+  "packageId": "0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348",
+  "objects": {
+    "platformConfig": {
+      "id": "0x3db44f01f62024e124dee24dd6185ce702e2babe24c3fb331507080d13f873f9",
+      "type": "shared"
+    },
+    "adminCap": {
+      "id": "0x7687bb4d6149db3c87ec3b96bbe3d4b59dbd9ed7f0a6de6a447422559332ca11",
+      "type": "owned",
+      "owner": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f"
+    },
+    "upgradeCap": {
+      "id": "0x7ef7bc39eea080ebddb61426c3b81d099690d3d2eab836e80e6e0a70b5cf6c5b",
+      "type": "owned",
+      "owner": "0x488e0c6d14c2334da9d72a309e7b63b37fdf93f2faa910e203aa7f73260df25f"
+    },
+    "referralRegistry": {
+      "id": "0x964b507850a0b51a736d28da9e8868ce82d99fe1faa580c9b4ac3a309e28c836",
+      "type": "shared"
+    },
+    "tickerRegistry": {
+      "id": "0xd8ba248944efc41c995a70679aabde9e05b509a7be7c10050f0a52a9029c0fcb",
+      "type": "shared"
+    }
+  },
+  "modules": [
+    "bonding_curve",
+    "lp_locker",
+    "platform_config",
+    "referral_registry",
+    "ticker_registry"
+  ],
+  "features": [
+    "LP bot address security - Only configured bot can receive LP tokens",
+    "Special launch flag - Simplified bot logic, on-chain control",
+    "prepare_liquidity_for_bot - Single function for all tokens",
+    "set_special_launch - Admin marks special tokens before graduation",
+    "set_lp_bot_address - Admin can change bot address anytime"
+  ],
+  "improvements": [
+    "Security: LP tokens only go to lp_bot_address (not any AdminCap holder)",
+    "Simplicity: Bot calls same function for all tokens",
+    "Transparency: Special launches visible on-chain",
+    "Flexibility: Admin can change bot address via PlatformConfig"
+  ],
+  "notes": [
+    "This is an UPGRADE of the previous contract",
+    "Previous package: 0xf19ee4bbe2183adc6bbe44801988e68982839566ddbca3c38321080d420ca7a5",
+    "All improvements are backwards compatible",
+    "Existing curves from old packages still tracked for incentivized testnet rewards"
+  ]
+}
