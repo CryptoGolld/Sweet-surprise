@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Use the same backend API URL as other proxies
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://api.suilfg.fun';
+    const backendUrl = 'http://13.60.235.109:3002';
     
     console.log('Updating metadata:', { coinType, hasImage: !!imageUrl, hasTwitter: !!twitter });
     

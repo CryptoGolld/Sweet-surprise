@@ -5,6 +5,7 @@
   "ignoreCommand": "git diff --quiet HEAD^ HEAD ./",
   "installCommand": "npm ci --legacy-peer-deps || npm install --legacy-peer-deps",
   "env": {
-    "NEXT_PUBLIC_NETWORK": "testnet"
+    "NEXT_PUBLIC_NETWORK": "testnet",
+    "INDEXER_API_URL": "http://13.60.235.109:3002"
   }
 }
