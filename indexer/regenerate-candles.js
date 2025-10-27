@@ -51,7 +51,7 @@ async function regenerateCandles() {
           GROUP BY candle_time
         )
         INSERT INTO price_snapshots (coin_type, timestamp, open, high, low, close, volume)
-        SELECT $1, candle_time, open, high, low, close, volume::text
+        SELECT $1, candle_time, open, high, low, close, volume
         FROM candle_data
         ON CONFLICT (coin_type, timestamp) 
         DO UPDATE SET 
