@@ -6,16 +6,14 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Configuration - Watch BOTH contracts for backwards compatibility
-const PLATFORM_PACKAGE = process.env.PLATFORM_PACKAGE || '0xf19ee4bbe2183adc6bbe44801988e68982839566ddbca3c38321080d420ca7a5'; // NEW
-const LEGACY_PLATFORM_PACKAGE = process.env.LEGACY_PLATFORM_PACKAGE || '0x98da9f73a80663ec6d8cf0f9d9e1edd030d9255b780f755e6a85ae468545fdd0'; // OLD
+// Configuration - v0.0.8 package only
+const PLATFORM_PACKAGE = process.env.PLATFORM_PACKAGE || '0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348'; // v0.0.8
 const SUI_RPC_URL = process.env.SUI_RPC_URL;
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 const client = new SuiClient({ url: SUI_RPC_URL });
 
-console.log('🚀 Starting Memecoin Indexer...');
-console.log('📦 NEW Package:', PLATFORM_PACKAGE);
-console.log('📦 LEGACY Package:', LEGACY_PLATFORM_PACKAGE);
+console.log('🚀 Starting Memecoin Indexer (v0.0.8 only)...');
+console.log('📦 Package:', PLATFORM_PACKAGE);
 console.log('🌐 RPC:', SUI_RPC_URL);
 
 // Index historical events (run once on first start)
@@ -32,20 +30,13 @@ async function indexHistoricalEvents() {
   console.log('📚 Starting historical event indexing...');
   console.log('⏳ This may take a few minutes for all past events...');
   
-  // Index events from BOTH packages (new + legacy)
+  // Index events from v0.0.8 package only
   const eventTypes = [
-    // NEW package events
     `${PLATFORM_PACKAGE}::bonding_curve::Created`,
     `${PLATFORM_PACKAGE}::bonding_curve::Bought`,
     `${PLATFORM_PACKAGE}::bonding_curve::Sold`,
     `${PLATFORM_PACKAGE}::referral_registry::ReferralRegistered`,
     `${PLATFORM_PACKAGE}::referral_registry::ReferralRewardPaid`,
-    // LEGACY package events
-    `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Created`,
-    `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Bought`,
-    `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Sold`,
-    `${LEGACY_PLATFORM_PACKAGE}::referral_registry::ReferralRegistered`,
-    `${LEGACY_PLATFORM_PACKAGE}::referral_registry::ReferralRewardPaid`,
   ];
   
   let totalIndexed = 0;
@@ -570,44 +561,81 @@ async function processReferralRewardEvent(event) {
   }
 }
 
-// Generate OHLCV candles from trades
+// Generate OHLCV candles from trades with fill-forward for continuous charts
 async function generateCandles() {
   try {
-    // Get all coin types with ANY trades (not just last hour)
-    const coinsResult = await db.query(
-      `SELECT DISTINCT coin_type FROM trades`
-    );
+    // Get all tokens
+    const tokensResult = await db.query('SELECT coin_type, created_at FROM tokens');
     
-    for (const row of coinsResult.rows) {
-      const coinType = row.coin_type;
-      
-      // Aggregate ALL trades into 1-minute candles (not just last hour)
-      // This ensures historical charts are populated
-      const candleResult = await db.query(
-        `WITH candle_data AS (
-          SELECT 
-            date_trunc('minute', timestamp) as candle_time,
-            (array_agg(price_per_token ORDER BY timestamp ASC))[1] as open,
-            MAX(price_per_token) as high,
-            MIN(price_per_token) as low,
-            (array_agg(price_per_token ORDER BY timestamp DESC))[1] as close,
-            SUM(CAST(token_amount AS NUMERIC)) as volume
-          FROM trades
-          WHERE coin_type = $1
-          GROUP BY candle_time
-        )
-        INSERT INTO price_snapshots (coin_type, timestamp, open, high, low, close, volume)
-        SELECT $1, candle_time, open, high, low, close, volume
-        FROM candle_data
-        ON CONFLICT (coin_type, timestamp) 
-        DO UPDATE SET 
-          open = EXCLUDED.open,
-          high = EXCLUDED.high,
-          low = EXCLUDED.low,
-          close = EXCLUDED.close,
-          volume = EXCLUDED.volume`,
-        [coinType]
+    for (const { coin_type, created_at } of tokensResult.rows) {
+      // Get all trades for this token
+      const tradesResult = await db.query(
+        `SELECT timestamp, price_per_token, CAST(token_amount AS NUMERIC) as token_amount
+         FROM trades
+         WHERE coin_type = $1
+         ORDER BY timestamp ASC`,
+        [coin_type]
       );
+
+      if (tradesResult.rows.length === 0) continue;
+
+      const trades = tradesResult.rows;
+      const startTime = new Date(created_at || trades[0].timestamp);
+      const endTime = new Date();
+      
+      let currentPrice = parseFloat(trades[0].price_per_token);
+      let tradeIndex = 0;
+
+      // Generate candles for every minute from creation to now
+      const candles = [];
+      for (let time = new Date(startTime); time <= endTime; time = new Date(time.getTime() + 60000)) {
+        const candleStart = new Date(time);
+        const candleEnd = new Date(time.getTime() + 60000);
+
+        // Find trades in this minute
+        const candleTrades = [];
+        while (tradeIndex < trades.length) {
+          const tradeTime = new Date(trades[tradeIndex].timestamp);
+          if (tradeTime >= candleStart && tradeTime < candleEnd) {
+            candleTrades.push(trades[tradeIndex]);
+            tradeIndex++;
+          } else if (tradeTime >= candleEnd) {
+            break;
+          } else {
+            tradeIndex++;
+          }
+        }
+
+        let open, high, low, close, volume;
+        if (candleTrades.length > 0) {
+          // Candle with trades
+          const prices = candleTrades.map(t => parseFloat(t.price_per_token));
+          open = prices[0];
+          high = Math.max(...prices);
+          low = Math.min(...prices);
+          close = prices[prices.length - 1];
+          volume = candleTrades.reduce((sum, t) => sum + parseFloat(t.token_amount), 0);
+          currentPrice = close;
+        } else {
+          // No trades - flat candle at last price (fill-forward)
+          open = high = low = close = currentPrice;
+          volume = 0;
+        }
+
+        candles.push({ time: candleStart, open, high, low, close, volume });
+      }
+
+      // Batch insert candles
+      for (const candle of candles) {
+        await db.query(
+          `INSERT INTO price_snapshots (coin_type, timestamp, open, high, low, close, volume)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (coin_type, timestamp) DO UPDATE SET
+             open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
+             close = EXCLUDED.close, volume = EXCLUDED.volume`,
+          [coin_type, candle.time, candle.open, candle.high, candle.low, candle.close, candle.volume]
+        );
+      }
     }
   } catch (error) {
     console.error('Failed to generate candles:', error.message);
