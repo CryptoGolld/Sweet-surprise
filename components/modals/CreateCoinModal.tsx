@@ -226,7 +226,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     try {
       // Create bonding curve with gas estimation
       setStatus('Estimating gas...');
-      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
       
       const curveTx = await createCurveTransaction({
         packageId: publishedData.packageId,
@@ -235,7 +235,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         treasuryCapId: publishedData.treasuryCapId,
         metadataId: publishedData.metadataId,
         senderAddress: currentAccount.address,
-        client: client,
+        client: suiClient,
       });
       
       setStatus('Please sign to publish...');
@@ -251,8 +251,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Get the curve ID from transaction
-      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
-      const curveDetails = await client.getTransactionBlock({
+      const curveDetails = await suiClient.getTransactionBlock({
         digest: curveResult.digest,
         options: {
           showEffects: true,
