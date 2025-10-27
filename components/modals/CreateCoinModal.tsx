@@ -216,7 +216,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   async function handleStep2(e: FormEvent) {
     e.preventDefault();
     
-    if (!publishedData) {
+    if (!publishedData || !currentAccount) {
       toast.error('Missing package data. Please restart.');
       return;
     }
@@ -224,14 +224,18 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     setIsProcessing(true);
     
     try {
-      // Create bonding curve
-      setStatus('Creating bonding curve...');
-      const curveTx = createCurveTransaction({
+      // Create bonding curve with gas estimation
+      setStatus('Estimating gas...');
+      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      
+      const curveTx = await createCurveTransaction({
         packageId: publishedData.packageId,
         moduleName: publishedData.moduleName,
         structName: publishedData.structName,
         treasuryCapId: publishedData.treasuryCapId,
         metadataId: publishedData.metadataId,
+        senderAddress: currentAccount.address,
+        client: client,
       });
       
       setStatus('Please sign to publish...');

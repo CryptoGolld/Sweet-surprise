@@ -129,20 +129,18 @@ export async function createCoinTransaction(params: {
 
 /**
  * Create bonding curve after package is published
+ * Estimates gas dynamically with 30% buffer
  */
-export function createCurveTransaction(params: {
+export async function createCurveTransaction(params: {
   packageId: string;
   moduleName: string;
   structName: string;
   treasuryCapId: string;
   metadataId: string;
-}): Transaction {
+  senderAddress: string;
+  client: SuiClient;
+}): Promise<Transaction> {
   const tx = new Transaction();
-  
-  // Curve creation costs ~0.01-0.15 SUI depending on storage
-  // Set explicit gas budget to prevent estimation failures
-  // 0.2 SUI (200M MIST) should cover all cases with buffer
-  tx.setGasBudget(200_000_000);
   
   const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
   
@@ -158,7 +156,62 @@ export function createCurveTransaction(params: {
     ],
   });
   
-  return tx;
+  // Estimate gas with 30% buffer
+  try {
+    tx.setSender(params.senderAddress);
+    const dryRunTxBytes = await tx.build({ client: params.client });
+    
+    const dryRun = await params.client.dryRunTransactionBlock({
+      transactionBlock: dryRunTxBytes,
+    });
+    
+    if (dryRun.effects.status.status === 'success') {
+      // Calculate total gas: computation + storage - rebate
+      const computation = BigInt(dryRun.effects.gasUsed.computationCost);
+      const storage = BigInt(dryRun.effects.gasUsed.storageCost);
+      const rebate = BigInt(dryRun.effects.gasUsed.storageRebate);
+      
+      const totalGas = computation + storage - rebate;
+      
+      // Add 30% buffer for safety
+      const gasWithBuffer = (totalGas * 130n) / 100n;
+      
+      console.log('⛽ Curve Creation Gas Estimation:', {
+        computation: computation.toString(),
+        storage: storage.toString(),
+        rebate: rebate.toString(),
+        total: totalGas.toString(),
+        withBuffer: gasWithBuffer.toString(),
+        inSUI: (Number(gasWithBuffer) / 1_000_000_000).toFixed(4),
+      });
+      
+      // Need to create a fresh transaction with the gas budget
+      const finalTx = new Transaction();
+      finalTx.setGasBudget(Number(gasWithBuffer));
+      
+      finalTx.moveCall({
+        target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::create_new_meme_token`,
+        typeArguments: [coinType],
+        arguments: [
+          finalTx.object(CONTRACTS.PLATFORM_STATE),
+          finalTx.object(CONTRACTS.TICKER_REGISTRY),
+          finalTx.object(params.treasuryCapId),
+          finalTx.object(params.metadataId),
+          finalTx.object('0x6'), // Clock
+        ],
+      });
+      
+      return finalTx;
+    } else {
+      console.warn('Gas estimation dry run failed, using fallback');
+      tx.setGasBudget(100_000_000); // 0.1 SUI fallback
+      return tx;
+    }
+  } catch (error) {
+    console.warn('Gas estimation failed:', error);
+    tx.setGasBudget(100_000_000); // 0.1 SUI fallback
+    return tx;
+  }
 }
 
 /**
