@@ -162,12 +162,14 @@ export function createCurveTransaction(params: {
 /**
  * Buy tokens from bonding curve
  * Gas is estimated automatically by the wallet - no need to set it
+ * 
+ * Note: Payment must be in SUILFG_MEMEFI tokens on testnet (SUI on mainnet)
  */
 export function buyTokensTransaction(params: {
   curveId: string;
   coinType: string;
-  paymentCoinIds: string[]; // Array of payment coin object IDs
-  maxSuiIn: string;
+  paymentCoinIds: string[]; // Array of SUILFG_MEMEFI coin object IDs (not SUI!)
+  maxSuiIn: string; // Amount in MIST (called "SUI" for consistency, but actually SUILFG_MEMEFI)
   minTokensOut: string;
 }): Transaction {
   const tx = new Transaction();
@@ -195,7 +197,7 @@ export function buyTokensTransaction(params: {
   // Split the payment amount from the merged coin
   // The Move function requires coin value <= max_sui_in (aborts if >)
   // It will handle refunds internally if not all is used
-  const paymentCoin = tx.splitCoins(mergedCoin, [
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [
     tx.pure.u64(params.maxSuiIn)
   ]);
   
@@ -204,11 +206,11 @@ export function buyTokensTransaction(params: {
     tx.object(state), // cfg: &PlatformConfig
     tx.object(params.curveId), // curve: &mut BondingCurve<T>
     tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
-    paymentCoin, // payment: Coin<SUI>
+    paymentCoin, // payment: Coin<SUILFG_MEMEFI> (not SUI!)
     tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
     tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
     tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-    tx.pure.vector('address', []), // referrer: Option<address> (None = empty vector)
+    tx.pure(bcs.option(bcs.Address).serialize(null)), // referrer: Option<address>
     tx.object('0x6'), // clk: &Clock
   ];
   
@@ -299,7 +301,7 @@ export function sellTokensTransaction(params: {
     tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
     tx.pure.u64(params.minSuiOut),
     tx.pure.u64(deadlineMs),
-    tx.pure.vector('address', []), // referrer: Option<address> (None = empty vector)
+    tx.pure(bcs.option(bcs.Address).serialize(null)), // referrer: Option<address>
     tx.object('0x6'),
   ];
   

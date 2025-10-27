@@ -36,6 +36,8 @@ export const CONTRACTS = {
 export const COIN_TYPES = {
   SUI: '0x2::sui::SUI',
   SUILFG_MEMEFI: `${CONTRACTS.FAUCET_PACKAGE}::suilfg_memefi::SUILFG_MEMEFI`,
+  // Payment token for trades (testnet uses SUILFG_MEMEFI, mainnet will use SUI)
+  PAYMENT_TOKEN: `${CONTRACTS.FAUCET_PACKAGE}::suilfg_memefi::SUILFG_MEMEFI`,
 } as const;
 
 // Bonding curve constants (from contract)
