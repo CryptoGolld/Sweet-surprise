@@ -322,12 +322,12 @@ export default function TokenPage() {
           <TradeHistory coinType={token.coinType} />
         </div>
 
-        {/* Trading Section - Sticky on Mobile */}
-        <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-3xl p-6 md:p-8 sticky bottom-24 md:relative md:bottom-0">
-          <div className="flex gap-2 mb-6">
+        {/* Trading Section - Compact & Not Sticky */}
+        <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-4 md:p-6">
+          <div className="flex gap-2 mb-4">
             <button
               onClick={() => setMode('buy')}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
+              className={`flex-1 py-2 rounded-lg font-semibold transition-all text-sm ${
                 mode === 'buy'
                   ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                   : 'bg-white/5 text-gray-400 hover:bg-white/10'
@@ -337,7 +337,7 @@ export default function TokenPage() {
             </button>
             <button
               onClick={() => setMode('sell')}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
+              className={`flex-1 py-2 rounded-lg font-semibold transition-all text-sm ${
                 mode === 'sell'
                   ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
                   : 'bg-white/5 text-gray-400 hover:bg-white/10'
@@ -347,7 +347,8 @@ export default function TokenPage() {
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
+            {/* Amount Input */}
             <div>
               <div className="flex justify-between mb-2">
                 <label className="text-sm font-medium">Amount ({tokenSymbol})</label>
@@ -355,7 +356,7 @@ export default function TokenPage() {
                   onClick={() => setAmount(userBalance)}
                   className="text-xs text-meme-purple hover:text-meme-pink transition-colors"
                 >
-                  Balance: {userBalance}
+                  Max: {userBalance}
                 </button>
               </div>
               <input
@@ -363,12 +364,31 @@ export default function TokenPage() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.0"
-                className="w-full px-4 py-4 bg-white/5 border border-white/10 rounded-xl text-xl focus:border-meme-purple outline-none transition-colors"
+                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-lg focus:border-meme-purple outline-none transition-colors"
               />
+              
+              {/* Quick Amount Buttons */}
+              <div className="grid grid-cols-4 gap-2 mt-2">
+                {[25, 50, 75, 100].map(percent => (
+                  <button
+                    key={percent}
+                    onClick={() => {
+                      const rawBalance = mode === 'buy' 
+                        ? Number(paymentBalance) / 1e9 
+                        : Number(memeBalance) / 1e9;
+                      setAmount(((rawBalance * percent) / 100).toFixed(4));
+                    }}
+                    className="py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    {percent}%
+                  </button>
+                ))}
+              </div>
             </div>
 
+            {/* Preview */}
             {tradePreview && (
-              <div className="bg-white/5 rounded-xl p-4 space-y-2">
+              <div className="bg-white/5 rounded-lg p-3 space-y-1">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">You {mode === 'buy' ? 'receive' : 'get'}</span>
                   <span className="font-bold">{tradePreview.output.toFixed(4)} {mode === 'buy' ? token.ticker : 'SUILFG'}</span>
@@ -376,10 +396,11 @@ export default function TokenPage() {
               </div>
             )}
 
+            {/* Trade Button */}
             <button
               onClick={handleTrade}
               disabled={isPending || !currentAccount || !amount}
-              className="w-full py-4 bg-gradient-to-r from-meme-pink to-meme-purple rounded-xl font-bold text-lg hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:hover:scale-100"
+              className="w-full py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-bold hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:hover:scale-100"
             >
               {isPending ? '⏳ Processing...' : !currentAccount ? 'Connect Wallet' : mode === 'buy' ? '💰 Buy' : '💸 Sell'}
             </button>

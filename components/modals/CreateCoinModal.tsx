@@ -446,8 +446,8 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 overflow-y-auto">
-      <div className="bg-sui-dark border-2 border-white/20 rounded-2xl max-w-2xl w-full my-8 animate-in slide-in-from-bottom duration-300">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto p-4 animate-in fade-in duration-200">
+      <div className="bg-sui-dark border-2 border-white/20 rounded-2xl max-w-2xl w-full my-8 mx-auto animate-in slide-in-from-bottom duration-300">
         {/* Header */}
         <div className="sticky top-0 bg-sui-dark border-b border-white/10 p-6">
           <div className="flex items-center justify-between mb-4">
