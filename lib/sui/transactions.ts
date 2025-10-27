@@ -173,8 +173,12 @@ export async function createCurveTransaction(params: {
       
       const totalGas = computation + storage - rebate;
       
-      // Add 30% buffer for safety
-      const gasWithBuffer = (totalGas * 130n) / 100n;
+      // Add 100% buffer (2x) for safety - curve creation can be unpredictable
+      const gasWithBuffer = totalGas * 2n;
+      
+      // Minimum 0.05 SUI to ensure it always works
+      const minGas = 50_000_000n;
+      const finalGas = gasWithBuffer > minGas ? gasWithBuffer : minGas;
       
       console.log('⛽ Curve Creation Gas Estimation:', {
         computation: computation.toString(),
@@ -182,12 +186,13 @@ export async function createCurveTransaction(params: {
         rebate: rebate.toString(),
         total: totalGas.toString(),
         withBuffer: gasWithBuffer.toString(),
-        inSUI: (Number(gasWithBuffer) / 1_000_000_000).toFixed(4),
+        finalGas: finalGas.toString(),
+        inSUI: (Number(finalGas) / 1_000_000_000).toFixed(4),
       });
       
       // Need to create a fresh transaction with the gas budget
       const finalTx = new Transaction();
-      finalTx.setGasBudget(Number(gasWithBuffer));
+      finalTx.setGasBudget(Number(finalGas));
       
       finalTx.moveCall({
         target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::create_new_meme_token`,
@@ -204,12 +209,12 @@ export async function createCurveTransaction(params: {
       return finalTx;
     } else {
       console.warn('Gas estimation dry run failed, using fallback');
-      tx.setGasBudget(100_000_000); // 0.1 SUI fallback
+      tx.setGasBudget(150_000_000); // 0.15 SUI fallback
       return tx;
     }
   } catch (error) {
     console.warn('Gas estimation failed:', error);
-    tx.setGasBudget(100_000_000); // 0.1 SUI fallback
+    tx.setGasBudget(150_000_000); // 0.15 SUI fallback
     return tx;
   }
 }
