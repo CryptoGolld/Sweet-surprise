@@ -88,15 +88,15 @@ app.get('/api/chart/:coinType', async (req, res) => {
     const limit = parseInt(req.query.limit || '100');
 
     const intervalMap = {
-      '1m': '1 minute',
-      '5m': '5 minutes',
-      '15m': '15 minutes',
-      '1h': '1 hour',
-      '4h': '4 hours',
-      '1d': '1 day',
+      '1m': 'minute',
+      '5m': 'minute',
+      '15m': 'minute',
+      '1h': 'hour',
+      '4h': 'hour',
+      '1d': 'day',
     };
 
-    const pgInterval = intervalMap[interval] || '1 minute';
+    const truncUnit = intervalMap[interval] || 'minute';
 
     const result = await db.query(
       `SELECT 
@@ -105,14 +105,14 @@ app.get('/api/chart/:coinType', async (req, res) => {
         MAX(high) as high,
         MIN(low) as low,
         (array_agg(close ORDER BY timestamp DESC))[1] as close,
-        SUM(volume) as volume
+        SUM(CAST(volume AS NUMERIC)) as volume
        FROM price_snapshots
        WHERE coin_type = $1
          AND timestamp > NOW() - INTERVAL '7 days'
        GROUP BY time
        ORDER BY time DESC
        LIMIT $3`,
-      [coinType, pgInterval, limit]
+      [coinType, truncUnit, limit]
     );
 
     const candles = result.rows.map(row => ({
