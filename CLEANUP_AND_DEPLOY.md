@@ -20,11 +20,23 @@ cd /var/www/Sweet-surprise
 # 2. Pull latest changes
 git pull origin main
 
-# 3. Stop indexer (we'll restart after cleanup)
+# 3. Update .env file with v0.0.8 package
+cd indexer
+nano .env
+
+# Update this line (or add it if missing):
+# PLATFORM_PACKAGE=0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348
+
+# Remove or comment out these lines:
+# LEGACY_PLATFORM_PACKAGE=...
+# PREVIOUS_PLATFORM_PACKAGE_V7=...
+
+# Save and exit (Ctrl+X, Y, Enter)
+
+# 4. Stop indexer (we'll restart after cleanup)
 pm2 stop memecoin-indexer
 
-# 4. Backup and clean old data
-cd indexer
+# 5. Backup and clean old data
 node backup-and-clean.js
 
 # This will:
@@ -38,7 +50,36 @@ pm2 restart memecoin-indexer
 
 # 6. Watch logs to verify
 pm2 logs memecoin-indexer --lines 50
+
+# You should see:
+# 🚀 Starting Memecoin Indexer (v0.0.8 only)...
+# 📦 Package: 0xa49978cdb7a2a6...
 ```
+
+---
+
+## 📝 .env File Configuration
+
+Your `/var/www/Sweet-surprise/indexer/.env` should look like:
+
+```bash
+# Database
+DATABASE_URL=postgresql://your_connection_string
+
+# Sui Network
+SUI_RPC_URL=https://fullnode.testnet.sui.io:443
+
+# v0.0.8 Package (Current - deployed Oct 27, 2025)
+PLATFORM_PACKAGE=0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348
+
+# Polling
+POLLING_INTERVAL_MS=5000
+```
+
+**Important:** 
+- ❌ Remove `LEGACY_PLATFORM_PACKAGE`
+- ❌ Remove `PREVIOUS_PLATFORM_PACKAGE_V7`
+- ✅ Only keep `PLATFORM_PACKAGE` with v0.0.8 address
 
 ---
 
