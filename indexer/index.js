@@ -112,7 +112,7 @@ async function indexEvents() {
     try {
       // Get last processed timestamp
       const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
-      const lastTimestamp = stateResult.rows[0]?.last_timestamp || 0;
+      const lastTimestamp = parseInt(stateResult.rows[0]?.last_timestamp) || 0;
       
       // Handle case where timestamp might be null/invalid
       let lastDate;
@@ -127,14 +127,14 @@ async function indexEvents() {
       
       // Poll BOTH contracts for new events
       const eventTypes = [
-        // NEW package events
+        // NEW package events (uses new event names)
         `${PLATFORM_PACKAGE}::bonding_curve::Created`,
-        `${PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
-        `${PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
-        // LEGACY package events
+        `${PLATFORM_PACKAGE}::bonding_curve::Bought`,
+        `${PLATFORM_PACKAGE}::bonding_curve::Sold`,
+        // LEGACY package events (uses Bought/Sold event names)
         `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Created`,
-        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::TokensPurchased`,
-        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::TokensSold`,
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Bought`,
+        `${LEGACY_PLATFORM_PACKAGE}::bonding_curve::Sold`,
       ];
       
       let totalNewEvents = 0;
@@ -493,12 +493,12 @@ async function processSellEvent(event) {
     // Update token holders (decrease balance)
     await db.query(
       `INSERT INTO token_holders (user_address, coin_type, balance, first_acquired_at, last_updated_at)
-       VALUES ($1, $2, $3, $4, $4)
+       VALUES ($1, $2, -$3::bigint, $4, $4)
        ON CONFLICT (user_address, coin_type) 
        DO UPDATE SET 
-         balance = token_holders.balance - $3,
+         balance = token_holders.balance - $3::bigint,
          last_updated_at = $4`,
-      [seller, coinType, `-${tokensIn.toString()}`, timestamp]
+      [seller, coinType, tokensIn.toString(), timestamp]
     );
     
     // If balance is now 0 or negative, remove from holders
@@ -591,7 +591,7 @@ async function generateCandles() {
             MAX(price_per_token) as high,
             MIN(price_per_token) as low,
             (array_agg(price_per_token ORDER BY timestamp DESC))[1] as close,
-            SUM(token_amount) as volume
+            SUM(CAST(token_amount AS NUMERIC)) as volume
           FROM trades
           WHERE coin_type = $1
           GROUP BY candle_time
