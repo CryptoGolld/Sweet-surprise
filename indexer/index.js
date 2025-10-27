@@ -493,12 +493,12 @@ async function processSellEvent(event) {
     // Update token holders (decrease balance)
     await db.query(
       `INSERT INTO token_holders (user_address, coin_type, balance, first_acquired_at, last_updated_at)
-       VALUES ($1, $2, -$3, $4, $4)
+       VALUES ($1, $2, $3, $4, $4)
        ON CONFLICT (user_address, coin_type) 
        DO UPDATE SET 
          balance = token_holders.balance - $3,
          last_updated_at = $4`,
-      [seller, coinType, tokensIn.toString(), timestamp]
+      [seller, coinType, `-${tokensIn.toString()}`, timestamp]
     );
     
     // If balance is now 0 or negative, remove from holders
