@@ -6,6 +6,7 @@ import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transac
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
+import { ImageUpload } from '@/components/ImageUpload';
 
 interface CreateCoinModalProps {
   isOpen: boolean;
@@ -445,8 +446,8 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-sui-dark border-2 border-white/20 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200 overflow-y-auto">
+      <div className="bg-sui-dark border-2 border-white/20 rounded-2xl max-w-2xl w-full my-8 animate-in slide-in-from-bottom duration-300">
         {/* Header */}
         <div className="sticky top-0 bg-sui-dark border-b border-white/10 p-6">
           <div className="flex items-center justify-between mb-4">
@@ -513,7 +514,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
 
         {/* Step 1: Create Coin */}
         {currentStep === 1 && (
-          <form onSubmit={handleStep1} className="p-6 space-y-6">
+          <form onSubmit={handleStep1} className="p-4 md:p-6 space-y-4 md:space-y-6">
             {/* Ticker */}
             <div>
               <label className="block text-sm font-semibold mb-2">
@@ -566,17 +567,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               </p>
             </div>
 
-            {/* Image URL */}
-            <div>
-              <label className="block text-sm font-semibold mb-2">Image URL</label>
-              <input
-                type="url"
-                placeholder="https://..."
-                value={formData.imageUrl}
-                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-              />
-            </div>
+            {/* Image Upload */}
+            <ImageUpload
+              value={formData.imageUrl}
+              onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+            />
 
             {/* Socials */}
             <div className="space-y-3">
@@ -640,7 +635,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
 
         {/* Step 2: Publish */}
         {currentStep === 2 && publishedData && (
-          <form onSubmit={handleStep2} className="p-6 space-y-6">
+          <form onSubmit={handleStep2} className="p-4 md:p-6 space-y-4 md:space-y-6">
             {/* Success Info */}
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
               <p className="font-semibold text-green-400">✅ Coin Package Created!</p>
@@ -695,7 +690,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
 
         {/* Step 3: Initial Buy (Optional) */}
         {currentStep === 3 && publishedData && curveData && (
-          <form onSubmit={handleStep3} className="p-6 space-y-6">
+          <form onSubmit={handleStep3} className="p-4 md:p-6 space-y-4 md:space-y-6">
             {/* Success Info */}
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
               <p className="font-semibold text-green-400">🎉 Coin Published Successfully!</p>
