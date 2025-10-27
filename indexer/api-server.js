@@ -74,10 +74,10 @@ app.get('/api/tokens', async (req, res) => {
       allTimeHigh: parseFloat(row.all_time_high_sui) || 0,
       allTimeLow: parseFloat(row.all_time_low_sui) || 0,
       lastTradeAt: row.last_trade_at ? new Date(row.last_trade_at).getTime() : null,
-      // Social links
-      twitter: row.twitter,
-      telegram: row.telegram,
-      website: row.website,
+      // Social links (may be undefined if columns don't exist yet)
+      twitter: row.twitter || null,
+      telegram: row.telegram || null,
+      website: row.website || null,
     }));
 
     res.json({
