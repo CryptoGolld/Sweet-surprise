@@ -224,18 +224,14 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     setIsProcessing(true);
     
     try {
-      // Create bonding curve with gas estimation
-      setStatus('Estimating gas...');
-      const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
-      
-      const curveTx = await createCurveTransaction({
+      // Create bonding curve
+      setStatus('Creating bonding curve...');
+      const curveTx = createCurveTransaction({
         packageId: publishedData.packageId,
         moduleName: publishedData.moduleName,
         structName: publishedData.structName,
         treasuryCapId: publishedData.treasuryCapId,
         metadataId: publishedData.metadataId,
-        senderAddress: currentAccount.address,
-        client: suiClient,
       });
       
       setStatus('Please sign to publish...');
@@ -251,7 +247,8 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Get the curve ID from transaction
-      const curveDetails = await suiClient.getTransactionBlock({
+      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      const curveDetails = await client.getTransactionBlock({
         digest: curveResult.digest,
         options: {
           showEffects: true,
@@ -279,6 +276,25 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         curveDigest: curveResult.digest,
         coinType,
       });
+      
+      // Submit metadata (image, socials) to indexer
+      if (formData.imageUrl || formData.twitter || formData.telegram || formData.website) {
+        try {
+          await fetch('/api/update-metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              coinType,
+              imageUrl: formData.imageUrl,
+              twitter: formData.twitter,
+              telegram: formData.telegram,
+              website: formData.website,
+            }),
+          });
+        } catch (e) {
+          console.warn('Failed to submit metadata:', e);
+        }
+      }
       
       setCurrentStep(3);
       setStatus('');
