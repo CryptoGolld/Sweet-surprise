@@ -139,8 +139,10 @@ export function createCurveTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Curve creation costs ~0.01-0.05 SUI
-  // Let wallet estimate automatically for optimal gas usage
+  // Curve creation costs ~0.01-0.15 SUI depending on storage
+  // Set explicit gas budget to prevent estimation failures
+  // 0.2 SUI (200M MIST) should cover all cases with buffer
+  tx.setGasBudget(200_000_000);
   
   const coinType = `${params.packageId}::${params.moduleName}::${params.structName}`;
   
