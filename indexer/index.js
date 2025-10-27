@@ -591,7 +591,7 @@ async function generateCandles() {
             MAX(price_per_token) as high,
             MIN(price_per_token) as low,
             (array_agg(price_per_token ORDER BY timestamp DESC))[1] as close,
-            SUM(token_amount) as volume
+            SUM(CAST(token_amount AS NUMERIC)) as volume
           FROM trades
           WHERE coin_type = $1
           GROUP BY candle_time
