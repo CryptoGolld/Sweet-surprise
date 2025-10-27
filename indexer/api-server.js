@@ -34,17 +34,24 @@ app.get('/api/tokens', async (req, res) => {
     if (sort === 'price_change') orderBy = 'price_change_24h DESC NULLS LAST';
     if (sort === 'progress') orderBy = 'curve_supply DESC';
 
-    const result = await db.query(
-      `SELECT id, coin_type, ticker, name, description, image_url, creator, 
+    // Try to get social links, fallback if columns don't exist yet
+    let query = `SELECT id, coin_type, ticker, name, description, image_url, creator, 
               curve_supply, curve_balance, graduated, created_at,
               current_price_sui, market_cap_sui, fully_diluted_valuation_sui,
               volume_24h_sui, price_change_24h, all_time_high_sui, all_time_low_sui,
-              last_trade_at, twitter, telegram, website
-       FROM tokens
-       ORDER BY ${orderBy}
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
+              last_trade_at`;
+    
+    // Check if social columns exist
+    try {
+      await db.query(`SELECT twitter FROM tokens LIMIT 0`);
+      query += `, twitter, telegram, website`;
+    } catch (e) {
+      // Social columns don't exist yet, skip them
+    }
+    
+    query += ` FROM tokens ORDER BY ${orderBy} LIMIT $1 OFFSET $2`;
+    
+    const result = await db.query(query, [limit, offset]);
 
     const tokens = result.rows.map(row => ({
       id: row.id,
