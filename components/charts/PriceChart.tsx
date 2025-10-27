@@ -42,7 +42,7 @@ export function PriceChart({ coinType }: PriceChartProps) {
     );
   }
 
-  if (isLoading || !data?.candles) {
+  if (isLoading) {
     return (
       <div className="bg-white/5 rounded-lg p-8 flex items-center justify-center">
         <div className="animate-pulse">Loading chart...</div>
@@ -50,7 +50,18 @@ export function PriceChart({ coinType }: PriceChartProps) {
     );
   }
 
-  const candles: Candle[] = data.candles;
+  const candles: Candle[] = data?.candles || [];
+  
+  // Show message if no trade data yet
+  if (candles.length === 0) {
+    return (
+      <div className="bg-white/5 rounded-lg p-8 text-center">
+        <div className="text-6xl mb-4">📊</div>
+        <div className="text-white/60">No trading data yet</div>
+        <div className="text-sm text-white/40 mt-2">Chart will appear after first trade</div>
+      </div>
+    );
+  }
 
   // Calculate price change
   const firstCandle = candles[candles.length - 1];

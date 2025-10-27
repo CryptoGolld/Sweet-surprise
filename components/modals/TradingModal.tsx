@@ -89,10 +89,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
     BONDING_CURVE.MAX_CURVE_SUPPLY.toString()
   );
   
-  // Calculate volume in USD (SUILFG_MEMEFI traded, not token count)
-  // curve.curveBalance is in MIST (smallest units), so divide by 1e9
-  const volumeInSUILFG = Number(curve.curveBalance) / 1e9;
-  const volumeUsd = volumeInSUILFG * suiPrice;
+  // Get 24h volume from indexed data (if available)
+  // This comes from actual trades, not curve balance
+  const volume24h = (curve as any).volume_24h_sui ? Number((curve as any).volume_24h_sui) / 1e9 : 0;
+  const volumeUsd = volume24h * suiPrice;
 
   async function handleTrade() {
     if (!currentAccount) {
@@ -288,59 +288,61 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
   // Render as full page or modal overlay based on fullPage prop
   const containerClasses = fullPage
-    ? "w-full" // Full page - no fixed positioning
+    ? "w-full min-h-screen" // Full page - takes full height
     : "fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200";
   
   const contentClasses = fullPage
-    ? "bg-sui-dark w-full" // Full width for page, no border/rounded for full screen
-    : "bg-sui-dark border-2 border-white/20 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"; // Modal size
+    ? "bg-sui-dark w-full min-h-screen" // Full screen for page
+    : "bg-sui-dark border-2 border-white/20 rounded-2xl max-w-7xl w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"; // Modal size
   
   return (
     <div className={containerClasses}>
       <div className={contentClasses}>
         {/* Header - Compact on full page */}
-        <div className={`sticky top-0 bg-sui-dark border-b border-white/10 flex items-center justify-between ${fullPage ? 'p-3 md:p-4' : 'p-6'}`}>
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-meme-pink/20 to-sui-blue/20 rounded-lg flex items-center justify-center text-3xl overflow-hidden">
+        <div className={`sticky top-0 bg-sui-dark/95 backdrop-blur-sm border-b border-white/10 flex items-center justify-between z-10 ${fullPage ? 'p-4 md:p-6' : 'p-6'}`}>
+          <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+            <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-meme-pink/20 to-sui-blue/20 rounded-lg flex items-center justify-center text-2xl md:text-3xl overflow-hidden flex-shrink-0">
               {curve.imageUrl ? (
                 <img src={curve.imageUrl} alt={curve.ticker} className="w-full h-full object-cover" />
               ) : (
                 '🚀'
               )}
             </div>
-            <div>
-              <h2 className="text-2xl font-bold">${curve.ticker}</h2>
-              <p className="text-gray-400">{curve.name}</p>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl md:text-2xl font-bold truncate">${curve.ticker}</h2>
+              <p className="text-gray-400 text-sm truncate">{curve.name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
             <button
               onClick={handleShare}
               className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               title="Share this token"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
               </svg>
             </button>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-white text-2xl transition-colors"
-            >
-              ×
-            </button>
+            {!fullPage && (
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-white text-2xl transition-colors p-1"
+              >
+                ×
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Charts Section - Compact padding on full page */}
-        <div className={`border-b border-white/10 ${fullPage ? 'p-3 md:p-4' : 'p-6'}`}>
-          <div className="grid md:grid-cols-2 gap-3 md:gap-4">
+        {/* Charts Section */}
+        <div className={`border-b border-white/10 ${fullPage ? 'p-4 md:p-6' : 'p-6'}`}>
+          <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
             <PriceChart coinType={curve.coinType} />
             <TradeHistory coinType={curve.coinType} />
           </div>
         </div>
 
-        <div className={`grid md:grid-cols-2 gap-4 md:gap-6 ${fullPage ? 'p-3 md:p-4' : 'p-6'}`}>
+        <div className={`grid lg:grid-cols-2 gap-4 md:gap-6 ${fullPage ? 'p-4 md:p-6' : 'p-6'}`}>
           {/* Left: Info */}
           <div className="space-y-6">
             {/* Description */}
