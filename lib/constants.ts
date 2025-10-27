@@ -60,29 +60,18 @@ export const UI = {
 } as const;
 
 /**
- * Helper to detect which contract a curve belongs to
- * Curve types look like: "0xPACKAGE::bonding_curve::BondingCurve<TOKEN>"
+ * Helper to get current contract addresses
+ * Frontend only uses v0.0.8 package (legacy tracked by indexer for rewards)
  */
 export function getContractForCurve(curveTypeOrPackage: string) {
-  const isLegacy = curveTypeOrPackage.includes(CONTRACTS.LEGACY_PLATFORM_PACKAGE);
-  
+  // Always use current package for all operations
   return {
-    package: isLegacy ? CONTRACTS.LEGACY_PLATFORM_PACKAGE : CONTRACTS.PLATFORM_PACKAGE,
-    state: isLegacy ? CONTRACTS.LEGACY_PLATFORM_STATE : CONTRACTS.PLATFORM_STATE,
-    referralRegistry: isLegacy ? CONTRACTS.LEGACY_REFERRAL_REGISTRY : CONTRACTS.REFERRAL_REGISTRY,
-    tickerRegistry: isLegacy ? CONTRACTS.LEGACY_TICKER_REGISTRY : CONTRACTS.TICKER_REGISTRY,
-    isLegacy,
+    package: CONTRACTS.PLATFORM_PACKAGE,
+    state: CONTRACTS.PLATFORM_STATE,
+    referralRegistry: CONTRACTS.REFERRAL_REGISTRY,
+    tickerRegistry: CONTRACTS.TICKER_REGISTRY,
+    isLegacy: false,
   };
-}
-
-/**
- * Get all packages to watch (for indexer)
- */
-export function getAllPlatformPackages() {
-  return [
-    CONTRACTS.PLATFORM_PACKAGE,
-    CONTRACTS.LEGACY_PLATFORM_PACKAGE,
-  ];
 }
 
 // RPC endpoints
