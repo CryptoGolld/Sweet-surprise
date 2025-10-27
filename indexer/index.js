@@ -76,9 +76,9 @@ async function indexHistoricalEvents() {
         for (const event of events.data) {
           if (eventType.includes('Created')) {
             await processCreatedEvent(event);
-          } else if (eventType.includes('TokensPurchased')) {
+          } else if (eventType.includes('Bought') || eventType.includes('TokensPurchased')) {
             await processBuyEvent(event);
-          } else if (eventType.includes('TokensSold')) {
+          } else if (eventType.includes('Sold') || eventType.includes('TokensSold')) {
             await processSellEvent(event);
           }
           totalIndexed++;
@@ -196,10 +196,10 @@ async function indexEvents() {
             if (eventType.includes('Created')) {
               console.log(`   📦 Processing Created event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processCreatedEvent(event);
-            } else if (eventType.includes('TokensPurchased')) {
+            } else if (eventType.includes('Bought') || eventType.includes('TokensPurchased')) {
               console.log(`   💰 Processing Buy event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processBuyEvent(event);
-            } else if (eventType.includes('TokensSold')) {
+            } else if (eventType.includes('Sold') || eventType.includes('TokensSold')) {
               console.log(`   💸 Processing Sell event from ${eventType.split('::')[0].substring(0, 20)}...`);
               await processSellEvent(event);
             }
