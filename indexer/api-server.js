@@ -39,7 +39,7 @@ app.get('/api/tokens', async (req, res) => {
               curve_supply, curve_balance, graduated, created_at,
               current_price_sui, market_cap_sui, fully_diluted_valuation_sui,
               volume_24h_sui, price_change_24h, all_time_high_sui, all_time_low_sui,
-              last_trade_at
+              last_trade_at, twitter, telegram, website
        FROM tokens
        ORDER BY ${orderBy}
        LIMIT $1 OFFSET $2`,
