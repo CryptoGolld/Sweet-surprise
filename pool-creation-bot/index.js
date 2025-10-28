@@ -35,7 +35,7 @@ const CONFIG = {
   adminCap: process.env.ADMIN_CAP,
   cetusGlobalConfig: process.env.CETUS_GLOBAL_CONFIG,
   cetusPools: process.env.CETUS_POOLS,
-  tickSpacing: parseInt(process.env.TICK_SPACING || '60'),
+  tickSpacing: parseInt(process.env.TICK_SPACING || '200'), // 1% fee tier
   pollingInterval: parseInt(process.env.POLLING_INTERVAL_MS || '10000'),
   maxRetries: parseInt(process.env.MAX_RETRIES || '3'),
   gasBudget: parseInt(process.env.GAS_BUDGET || '100000000'),
@@ -77,6 +77,7 @@ class PoolCreationBot {
 
       this.cetusSDK = new CetusClmmSDK(sdkOptions);
       logger.info('Cetus SDK initialized');
+      logger.info('Pool configuration: 1% fee tier (tick spacing 200)');
     } catch (error) {
       logger.error('Failed to initialize Cetus SDK', { error: error.message });
       throw error;
@@ -90,6 +91,7 @@ class PoolCreationBot {
         client: this.client,
       });
       logger.info('Cetus Burn Manager initialized');
+      logger.info('LP will be burned but fees can still be claimed! 🔥');
     } catch (error) {
       logger.error('Failed to initialize Burn Manager', { error: error.message });
       throw error;
@@ -165,10 +167,10 @@ class PoolCreationBot {
       // Step 1: Prepare liquidity (extract from curve)
       const { suiAmount, tokenAmount } = await this.prepareLiquidity(curveId, coinType);
 
-      // Step 2: Create Cetus pool
+      // Step 2: Create Cetus pool (1% fee tier)
       const poolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount);
 
-      // Step 3: Burn LP tokens (permanent lock)
+      // Step 3: Burn LP tokens (permanent lock, but can still claim fees!)
       await this.burnLPTokens(poolAddress, coinType);
 
       logger.info('✅ Pool creation complete!', {
@@ -246,9 +248,16 @@ class PoolCreationBot {
       const createPoolPayload = await this.cetusSDK.Pool.createPoolTransactionPayload({
         coinTypeA: coinA,
         coinTypeB: coinB,
-        tickSpacing: CONFIG.tickSpacing,
+        tickSpacing: CONFIG.tickSpacing, // 200 = 1% fee tier
         initializeSqrtPrice: sqrtPrice.toString(),
         uri: '',
+      });
+
+      logger.info('Creating pool with 1% fees', {
+        coinA: coinA.slice(0, 20) + '...',
+        coinB: coinB.slice(0, 20) + '...',
+        feeTier: '1%',
+        tickSpacing: CONFIG.tickSpacing,
       });
 
       const result = await this.client.signAndExecuteTransaction({
@@ -349,7 +358,7 @@ class PoolCreationBot {
   }
 
   async burnLPTokens(poolAddress, coinType) {
-    logger.info('🔥 Burning LP tokens', { poolAddress });
+    logger.info('🔥 Burning LP tokens (permanent lock)', { poolAddress });
 
     try {
       // Get all positions for this pool
@@ -361,10 +370,11 @@ class PoolCreationBot {
       }
 
       // Burn each position using Cetus Burn Manager
+      // This permanently locks liquidity but ALLOWS fee collection!
       for (const position of positions) {
         const burnTx = await this.burnManager.createBurnTransaction({
           positionId: position.id,
-          recipient: this.botAddress,
+          recipient: this.botAddress, // Who can claim fees
         });
 
         const result = await this.client.signAndExecuteTransaction({
@@ -376,9 +386,10 @@ class PoolCreationBot {
         });
 
         if (result.effects?.status?.status === 'success') {
-          logger.info('✅ LP tokens burned!', {
+          logger.info('✅ LP position burned!', {
             positionId: position.id,
             txDigest: result.digest,
+            note: 'Liquidity locked forever, but can still claim 1% trading fees!',
           });
         } else {
           logger.error('Burn failed', {
@@ -387,6 +398,8 @@ class PoolCreationBot {
           });
         }
       }
+      
+      logger.info('🎉 Pool complete! Liquidity burned + 1% fees claimable');
     } catch (error) {
       logger.error('LP burn failed', { error: error.message });
       throw error;
