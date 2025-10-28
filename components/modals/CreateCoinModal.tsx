@@ -109,6 +109,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       newErrors.name = 'Name must be 50 characters or less';
     }
     
+    if (!formData.imageUrl) {
+      newErrors.imageUrl = 'Token image is required';
+    }
+    
     if (formData.description && formData.description.length > 500) {
       newErrors.description = 'Description must be 500 characters or less';
     }
@@ -571,7 +575,16 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
                 placeholder="PEPE"
                 maxLength={10}
                 value={formData.ticker}
-                onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
+                onChange={(e) => {
+                  // Auto-trim spaces and convert to uppercase
+                  const trimmedValue = e.target.value.trim().toUpperCase();
+                  setFormData({ ...formData, ticker: trimmedValue });
+                }}
+                onBlur={(e) => {
+                  // Extra trim on blur to catch any trailing spaces
+                  const trimmedValue = e.target.value.trim().toUpperCase();
+                  setFormData({ ...formData, ticker: trimmedValue });
+                }}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
               />
               {errors.ticker && (
@@ -626,6 +639,9 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               }}
               onUploadingChange={setIsImageUploading}
             />
+            {errors.imageUrl && (
+              <p className="text-red-400 text-sm -mt-3">{errors.imageUrl}</p>
+            )}
 
             {/* Socials */}
             <div className="space-y-3">
