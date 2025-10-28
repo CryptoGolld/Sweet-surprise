@@ -8,6 +8,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // Log the imageUrl being sent for debugging
+    console.log('📸 Compile request - imageUrl:', body.imageUrl || '(empty)');
+    console.log('📦 Compile request - ticker:', body.ticker, 'name:', body.name);
+    
     // Forward to Ubuntu compilation service
     const ubuntuUrl = process.env.COMPILE_SERVICE_URL || 'http://13.60.235.109:3001';
     

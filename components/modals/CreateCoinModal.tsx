@@ -84,6 +84,13 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     }
   }, [isOpen, currentAccount, formData, publishedData, curveData, currentStep]);
 
+  // Debug: Log formData changes (especially imageUrl)
+  useEffect(() => {
+    if (isOpen && formData.imageUrl) {
+      console.log('📋 formData.imageUrl updated:', formData.imageUrl);
+    }
+  }, [formData.imageUrl, isOpen]);
+
   if (!isOpen) return null;
 
   function validateForm(): boolean {
@@ -121,6 +128,16 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     if (!validateForm()) {
       toast.error('Please fix form errors');
       return;
+    }
+
+    // Log imageUrl for debugging
+    console.log('🎨 Creating coin with imageUrl:', formData.imageUrl || '(empty)');
+    if (!formData.imageUrl) {
+      console.warn('⚠️  No image URL provided - coin will be created without an icon');
+      toast.warning('No image uploaded', {
+        description: 'Your coin will be created without an icon. You can continue, but adding an image is recommended.',
+        duration: 5000,
+      });
     }
 
     setIsProcessing(true);
@@ -590,7 +607,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
             {/* Image Upload */}
             <ImageUpload
               value={formData.imageUrl}
-              onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+              onChange={(url) => {
+                console.log('📸 ImageUpload onChange called with URL:', url);
+                setFormData({ ...formData, imageUrl: url });
+              }}
             />
 
             {/* Socials */}

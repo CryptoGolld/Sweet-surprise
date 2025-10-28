@@ -42,6 +42,9 @@ app.post('/compile', async (req, res) => {
   try {
     const { ticker, name, description, imageUrl } = req.body;
     
+    // Log imageUrl for debugging
+    console.log(`📸 Compilation request - imageUrl: ${imageUrl || '(empty)'}`);
+    
     // Validate inputs
     if (!ticker || typeof ticker !== 'string' || ticker.length > 10) {
       return res.status(400).json({

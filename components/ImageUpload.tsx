@@ -53,6 +53,7 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
       }
 
       const data = await response.json();
+      console.log('✅ IPFS upload successful, URL:', data.url);
       onChange(data.url);
       toast.success('Image uploaded to IPFS!');
     } catch (error: any) {
