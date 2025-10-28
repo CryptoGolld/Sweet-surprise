@@ -42,8 +42,13 @@ app.post('/compile', async (req, res) => {
   try {
     const { ticker, name, description, imageUrl } = req.body;
     
-    // Log imageUrl for debugging
-    console.log(`📸 Compilation request - imageUrl: ${imageUrl || '(empty)'}`);
+    // Log ALL request data for debugging
+    console.log('=== COMPILATION REQUEST START ===');
+    console.log('📸 Ticker:', ticker);
+    console.log('📸 Name:', name);
+    console.log('📸 ImageUrl:', imageUrl || '(empty)');
+    console.log('📸 Request body keys:', Object.keys(req.body));
+    console.log('=== COMPILATION REQUEST END ===');
     
     // Validate inputs
     if (!ticker || typeof ticker !== 'string' || ticker.length > 10) {
