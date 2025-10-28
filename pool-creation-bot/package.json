@@ -1,0 +1,26 @@
+{
+  "name": "suilfg-pool-creation-bot",
+  "version": "1.0.0",
+  "description": "Automated Cetus pool creation and LP burning bot for graduated tokens",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "build": "tsc",
+    "test": "node test-bot.js"
+  },
+  "dependencies": {
+    "@mysten/sui": "^1.18.0",
+    "@cetusprotocol/cetus-sui-clmm-sdk": "^4.1.0",
+    "@cetusprotocol/cetus-lp-burn-sdk": "latest",
+    "dotenv": "^16.4.5",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  }
+}
