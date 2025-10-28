@@ -6,9 +6,10 @@ import { toast } from 'sonner';
 interface ImageUploadProps {
   value: string;
   onChange: (url: string) => void;
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
-export function ImageUpload({ value, onChange }: ImageUploadProps) {
+export function ImageUpload({ value, onChange, onUploadingChange }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(value);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +39,7 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
 
     // Upload to Pinata
     setUploading(true);
+    onUploadingChange?.(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -60,6 +62,7 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
       setPreview(value); // Revert preview
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   }
 

@@ -142,6 +142,110 @@ app.get('/api/chart/:coinType', async (req, res) => {
   }
 });
 
+// Admin: Rebuild candles from trades (on-demand)
+app.post('/api/rebuild-candles', async (req, res) => {
+  try {
+    const { mode } = req.query; // mode=ff to fill-forward
+
+    // Kick off regeneration asynchronously to avoid request timeout
+    setImmediate(async () => {
+      try {
+        // Get all coin types that have trades or exist in tokens
+        const coinsResult = await db.query(`SELECT DISTINCT coin_type FROM tokens`);
+        const coinTypes = coinsResult.rows.map(r => r.coin_type);
+
+        // Optionally clear existing candles first
+        await db.query('TRUNCATE price_snapshots');
+
+        for (const coinType of coinTypes) {
+          if (mode === 'ff') {
+            // Fill-forward generation using per-minute steps
+            const tokenResult = await db.query(
+              'SELECT created_at FROM tokens WHERE coin_type = $1',
+              [coinType]
+            );
+            const createdAt = tokenResult.rows[0]?.created_at || new Date();
+
+            const tradesResult = await db.query(
+              `SELECT timestamp, price_per_token AS price, CAST(token_amount AS NUMERIC) AS token_amount
+               FROM trades WHERE coin_type = $1 ORDER BY timestamp ASC`,
+              [coinType]
+            );
+            if (tradesResult.rows.length === 0) continue;
+
+            let currentPrice = parseFloat(tradesResult.rows[0].price);
+            let tradeIndex = 0;
+            const endTime = new Date();
+            for (let t = new Date(createdAt); t <= endTime; t = new Date(t.getTime() + 60000)) {
+              const start = new Date(t);
+              const end = new Date(t.getTime() + 60000);
+              const candleTrades = [];
+              while (tradeIndex < tradesResult.rows.length) {
+                const trade = tradesResult.rows[tradeIndex];
+                const ts = new Date(trade.timestamp);
+                if (ts >= start && ts < end) { candleTrades.push(trade); tradeIndex++; }
+                else if (ts >= end) { break; }
+                else { tradeIndex++; }
+              }
+              let open, high, low, close, volume;
+              if (candleTrades.length > 0) {
+                const prices = candleTrades.map(x => parseFloat(x.price));
+                open = prices[0];
+                high = Math.max(...prices);
+                low = Math.min(...prices);
+                close = prices[prices.length - 1];
+                volume = candleTrades.reduce((s, x) => s + parseFloat(x.token_amount), 0);
+                currentPrice = close;
+              } else {
+                open = high = low = close = currentPrice;
+                volume = 0;
+              }
+              await db.query(
+                `INSERT INTO price_snapshots (coin_type, timestamp, open, high, low, close, volume)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 ON CONFLICT (coin_type, timestamp) DO UPDATE SET
+                   open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
+                   close = EXCLUDED.close, volume = EXCLUDED.volume`,
+                [coinType, start, open, high, low, close, volume]
+              );
+            }
+          } else {
+            // Simple aggregation: 1m candles where trades exist
+            await db.query(
+              `WITH candle_data AS (
+                SELECT 
+                  date_trunc('minute', timestamp) as candle_time,
+                  (array_agg(price_per_token ORDER BY timestamp ASC))[1] as open,
+                  MAX(price_per_token) as high,
+                  MIN(price_per_token) as low,
+                  (array_agg(price_per_token ORDER BY timestamp DESC))[1] as close,
+                  SUM(CAST(token_amount AS NUMERIC)) as volume
+                FROM trades
+                WHERE coin_type = $1
+                GROUP BY candle_time
+              )
+              INSERT INTO price_snapshots (coin_type, timestamp, open, high, low, close, volume)
+              SELECT $1, candle_time, open, high, low, close, volume
+              FROM candle_data
+              ON CONFLICT (coin_type, timestamp) DO UPDATE SET
+                open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
+                close = EXCLUDED.close, volume = EXCLUDED.volume`,
+              [coinType]
+            );
+          }
+        }
+        console.log('✅ Candle regeneration complete');
+      } catch (e) {
+        console.error('Candle regeneration error:', e);
+      }
+    });
+
+    res.json({ started: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update token metadata (image, social links)
 app.post('/api/update-metadata', async (req, res) => {
   try {

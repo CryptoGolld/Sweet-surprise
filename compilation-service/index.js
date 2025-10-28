@@ -65,7 +65,7 @@ app.post('/compile', async (req, res) => {
       return res.json(cached);
     }
     
-    console.log(`📦 Compiling: ${ticker} - ${name}`);
+  console.log(`📦 Compiling: ${ticker} - ${name}`);
     
     // Generate temp directory
     const tempId = `${ticker.toLowerCase()}_${Date.now()}`;
@@ -90,13 +90,22 @@ ${moduleName} = "0x0"
     
     fs.writeFileSync(path.join(tempDir, 'Move.toml'), moveToml);
     
+    // Helpers to safely embed strings in Move byte string literals
+    const escapeBytesLiteral = (s = '') =>
+      String(s)
+        .replace(/\\/g, '\\\\')
+        .replace(/\"/g, '\\"');
+
     // Generate Move source
     const witnessName = ticker.toUpperCase(); // Must match module name for one-time witness
+    const safeName = escapeBytesLiteral(name);
     const desc = description || `${name} - Launched on SuiLFG MemeFi`;
+    const safeDesc = escapeBytesLiteral(desc);
+    const safeImageUrl = imageUrl ? escapeBytesLiteral(imageUrl) : '';
     
     // Handle image URL
     const iconOption = imageUrl 
-      ? `option::some(url::new_unsafe_from_bytes(b"${imageUrl}"))` 
+      ? `option::some(url::new_unsafe_from_bytes(b"${safeImageUrl}"))` 
       : `option::none()`;
     
     const moveSource = `module ${moduleName}::${moduleName} {
@@ -104,7 +113,8 @@ ${moduleName} = "0x0"
     use std::option;
     use sui::url;
     use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
+    use sui::tx_context::{TxContext};
+    use sui::tx_context as tx_context;
 
     /// One-time witness (must match module name in uppercase)
     public struct ${witnessName} has drop {}
@@ -115,8 +125,8 @@ ${moduleName} = "0x0"
             witness,
             9,
             b"${ticker.toUpperCase()}",
-            b"${name}",
-            b"${desc}",
+            b"${safeName}",
+            b"${safeDesc}",
             ${iconOption},
             ctx
         );

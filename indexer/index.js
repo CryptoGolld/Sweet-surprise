@@ -322,6 +322,35 @@ async function processCreatedEvent(event) {
   }
 }
 
+function extractBalanceValue(bal) {
+  // Sui Balance<T> can appear as nested { fields: { value } } or direct numeric/string
+  if (!bal) return '0';
+  if (typeof bal === 'string' || typeof bal === 'number') return bal.toString();
+  if (typeof bal === 'object') {
+    if (bal.value !== undefined) return bal.value.toString();
+    if (bal.fields && bal.fields.value !== undefined) return bal.fields.value.toString();
+  }
+  return '0';
+}
+
+async function fetchCurveState(curveId) {
+  try {
+    const curveObject = await client.getObject({
+      id: curveId,
+      options: { showContent: true, showType: true },
+    });
+    const content = curveObject.data?.content;
+    const fields = content?.fields || {};
+    const tokenSupply = fields.token_supply?.toString?.() || `${fields.token_supply || '0'}`;
+    const reserve = extractBalanceValue(fields.sui_reserve);
+    const graduated = !!fields.graduated;
+    return { tokenSupply, reserve, graduated };
+  } catch (e) {
+    console.warn('Failed to fetch curve state:', e.message);
+    return { tokenSupply: '0', reserve: '0', graduated: false };
+  }
+}
+
 // Process Buy event
 async function processBuyEvent(event) {
   try {
@@ -329,28 +358,21 @@ async function processBuyEvent(event) {
     
     // Extract data from Bought event
     const buyer = fields.buyer;
-    const suiIn = fields.amount_sui;
+    const suiIn = fields.amount_sui; // exact used amount (after fees/refunds)
     const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts
     const txDetails = await client.getTransactionBlock({
       digest: event.id.txDigest,
-      options: { showObjectChanges: true },
+      options: { showObjectChanges: true, showBalanceChanges: true },
     });
     
-    // Find minted tokens (newly created coins of the memecoin type)
+    // Find the curve and coin type from object changes
     const mintedCoins = txDetails.objectChanges?.filter(
       obj => obj.type === 'created' && obj.objectType?.includes('::coin::Coin<') && !obj.objectType?.includes('SUILFG_MEMEFI')
-    );
-    
-    if (!mintedCoins || mintedCoins.length === 0) {
-      console.warn('No minted tokens found in buy tx:', event.id.txDigest);
-      return;
-    }
-    
-    // Extract coin type from minted coin
-    const coinTypeMatch = mintedCoins[0].objectType.match(/<(.+)>/);
+    ) || [];
+    const coinTypeMatch = mintedCoins[0]?.objectType?.match(/<(.+)>/);
     const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
     
     // Get curve ID from transaction
@@ -358,11 +380,21 @@ async function processBuyEvent(event) {
       obj => obj.type === 'mutated' && obj.objectType?.includes('bonding_curve::BondingCurve')
     );
     const curveId = curveUsed?.objectId || '';
-    
-    // Estimate tokens (we don't have exact amount in event, use cost/price estimation)
-    // This is approximate - for exact amounts, we'd need to parse BalanceChange
-    const pricePerToken = 0.00001; // Rough estimate, will be refined by actual trades
-    const tokensOut = BigInt(suiIn) / BigInt(10000); // Rough estimate
+    if (!coinType || !curveId) {
+      console.warn('Could not determine coinType/curveId for buy tx:', event.id.txDigest);
+      return;
+    }
+
+    // Compute exact minted token amount from balance changes
+    const mintedAmountSmallest = (txDetails.balanceChanges || [])
+      .filter(ch => ch.coinType === coinType && BigInt(ch.amount) > 0n)
+      .reduce((sum, ch) => sum + BigInt(ch.amount), 0n);
+    if (mintedAmountSmallest <= 0n) {
+      console.warn('No positive balance change for token in buy tx:', event.id.txDigest);
+      return;
+    }
+    const tokensOut = mintedAmountSmallest; // in smallest units (1e-9)
+    const pricePerToken = Number(suiIn) / Number(tokensOut); // SUILFG per token (both in smallest units)
     
     // Insert trade
     await db.query(
@@ -407,10 +439,23 @@ async function processBuyEvent(event) {
       );
     }
     
+    // Update curve state in tokens table from chain (accurate supply/reserve)
+    const curveState = await fetchCurveState(curveId);
+    await db.query(
+      `UPDATE tokens SET 
+        curve_supply = $2,
+        curve_balance = $3,
+        graduated = $4,
+        last_trade_at = $5,
+        updated_at = NOW()
+       WHERE coin_type = $1`,
+      [coinType, curveState.tokenSupply, curveState.reserve, curveState.graduated, timestamp]
+    );
+
     // Update token price and market data
     await updateTokenPriceAndMarketCap(coinType);
     
-    console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${suiIn} SUI`);
+    console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${suiIn} (mist), tokens: ${tokensOut.toString()}`);
     
   } catch (error) {
     console.error('Failed to process buy event:', error.message);
@@ -424,14 +469,14 @@ async function processSellEvent(event) {
     
     // Extract data from Sold event
     const seller = fields.seller;
-    const suiOut = fields.amount_sui;
+    const suiOut = fields.amount_sui; // net to seller
     const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts
     const txDetails = await client.getTransactionBlock({
       digest: event.id.txDigest,
-      options: { showObjectChanges: true },
+      options: { showObjectChanges: true, showBalanceChanges: true },
     });
     
     // Find curve from mutated objects
@@ -449,9 +494,16 @@ async function processSellEvent(event) {
     const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
     const curveId = curveUsed.objectId;
     
-    // Estimate tokens sold (approximate)
-    const pricePerToken = 0.00001; // Rough estimate
-    const tokensIn = BigInt(suiOut) / BigInt(10000); // Rough estimate
+    // Compute exact tokens sold from balance changes (negative amount for seller)
+    const tokensInSmallest = (txDetails.balanceChanges || [])
+      .filter(ch => ch.coinType === coinType && BigInt(ch.amount) < 0n)
+      .reduce((sum, ch) => sum + (BigInt(ch.amount) < 0n ? -BigInt(ch.amount) : 0n), 0n);
+    if (tokensInSmallest <= 0n) {
+      console.warn('No negative balance change for token in sell tx:', event.id.txDigest);
+      return;
+    }
+    const tokensIn = tokensInSmallest; // in smallest units
+    const pricePerToken = Number(suiOut) / Number(tokensIn); // SUILFG per token
     
     // Insert trade
     await db.query(
@@ -504,10 +556,23 @@ async function processSellEvent(event) {
       );
     }
     
+    // Update curve state in tokens table from chain
+    const curveState = await fetchCurveState(curveId);
+    await db.query(
+      `UPDATE tokens SET 
+        curve_supply = $2,
+        curve_balance = $3,
+        graduated = $4,
+        last_trade_at = $5,
+        updated_at = NOW()
+       WHERE coin_type = $1`,
+      [coinType, curveState.tokenSupply, curveState.reserve, curveState.graduated, timestamp]
+    );
+
     // Update token price and market data
     await updateTokenPriceAndMarketCap(coinType);
     
-    console.log(`💸 Sell: ${seller.slice(0, 10)}... received ${suiOut} SUI`);
+    console.log(`💸 Sell: ${seller.slice(0, 10)}... received ${suiOut} (mist), tokens: ${tokensIn.toString()}`);
     
   } catch (error) {
     console.error('Failed to process sell event:', error.message);

@@ -22,6 +22,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('');
   const [buyAmount, setBuyAmount] = useState('');
+  const [isImageUploading, setIsImageUploading] = useState(false);
   
   // Form Data
   const [formData, setFormData] = useState({
@@ -101,6 +102,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       newErrors.name = 'Name must be 50 characters or less';
     }
     
+    // Image is required to permanently set on-chain icon in metadata at creation time
+    if (!formData.imageUrl) {
+      newErrors.imageUrl = 'Image is required before creation (on-chain icon is immutable)';
+    }
+    
     if (formData.description && formData.description.length > 500) {
       newErrors.description = 'Description must be 500 characters or less';
     }
@@ -120,6 +126,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     
     if (!validateForm()) {
       toast.error('Please fix form errors');
+      return;
+    }
+    if (isImageUploading) {
+      toast.error('Please wait for image upload to finish');
       return;
     }
 
@@ -591,7 +601,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
             <ImageUpload
               value={formData.imageUrl}
               onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+              onUploadingChange={setIsImageUploading}
             />
+            {errors.imageUrl && (
+              <p className="text-red-400 text-sm mt-1">{errors.imageUrl}</p>
+            )}
 
             {/* Socials */}
             <div className="space-y-3">
@@ -629,6 +643,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
                 <li>Compiles your coin smart contract</li>
                 <li>Publishes package to Sui blockchain</li>
                 <li>Cost: ~0.1 SUI for gas</li>
+                <li className="text-meme-purple/90">Image must be set now; icon becomes immutable after publish</li>
               </ul>
             </div>
 
