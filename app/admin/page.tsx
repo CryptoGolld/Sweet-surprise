@@ -8,16 +8,9 @@ import { CONTRACTS } from '@/lib/constants';
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
 
-// Admin addresses - add your wallet address here
-const ADMIN_ADDRESSES = [
-  // Add your admin wallet addresses here
-  // '0x...',
-];
-
 export default function AdminPage() {
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
-  const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
 
@@ -28,13 +21,6 @@ export default function AdminPage() {
   const [feePercent, setFeePercent] = useState('');
   const [referralPercent, setReferralPercent] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-
-  useEffect(() => {
-    if (currentAccount) {
-      const isAdminAddress = ADMIN_ADDRESSES.includes(currentAccount.address);
-      setIsAdmin(isAdminAddress);
-    }
-  }, [currentAccount]);
 
   function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -235,10 +221,15 @@ export default function AdminPage() {
           </div>
         )}
 
-        {currentAccount && !isAdmin && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
-            <p className="text-red-400">❌ Your wallet address is not authorized as admin</p>
-            <p className="text-sm text-gray-400 mt-2">Connected: {currentAccount.address.slice(0, 10)}...</p>
+        {currentAccount && (
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6">
+            <p className="text-blue-400">✅ Wallet connected</p>
+            <p className="text-sm text-gray-400 mt-2">
+              Connected: {currentAccount.address.slice(0, 10)}...{currentAccount.address.slice(-8)}
+            </p>
+            <p className="text-xs text-gray-500 mt-2">
+              💡 Only wallets with AdminCap can execute commands (enforced on-chain)
+            </p>
           </div>
         )}
 
@@ -260,7 +251,7 @@ export default function AdminPage() {
             />
             <button
               onClick={updateFeePercent}
-              disabled={isProcessing || !currentAccount || !isAdmin}
+              disabled={isProcessing || !currentAccount}
               className="px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
             >
               {isProcessing ? '⏳' : 'Update'}
@@ -286,7 +277,7 @@ export default function AdminPage() {
             />
             <button
               onClick={updateReferralPercent}
-              disabled={isProcessing || !currentAccount || !isAdmin}
+              disabled={isProcessing || !currentAccount}
               className="px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
             >
               {isProcessing ? '⏳' : 'Update'}
@@ -302,14 +293,14 @@ export default function AdminPage() {
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={pausePlatform}
-              disabled={isProcessing || !currentAccount || !isAdmin}
+              disabled={isProcessing || !currentAccount}
               className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 rounded-lg font-semibold transition-colors disabled:opacity-50"
             >
               ⏸️ Pause Platform
             </button>
             <button
               onClick={unpausePlatform}
-              disabled={isProcessing || !currentAccount || !isAdmin}
+              disabled={isProcessing || !currentAccount}
               className="px-6 py-3 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 rounded-lg font-semibold transition-colors disabled:opacity-50"
             >
               ▶️ Unpause Platform
@@ -320,10 +311,13 @@ export default function AdminPage() {
         {/* Info Box */}
         <div className="mt-6 bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
           <p className="text-blue-400 text-sm">
-            <strong>ℹ️ Note:</strong> All commands require the AdminCap object. Make sure you have it in your wallet.
+            <strong>ℹ️ Security:</strong> All commands require the AdminCap object. The blockchain enforces this - only the wallet holding the AdminCap can execute these transactions.
           </p>
           <p className="text-gray-400 text-sm mt-2">
-            AdminCap Object ID: {CONTRACTS.ADMIN_CAP || '(Not configured)'}
+            AdminCap Object ID: {CONTRACTS.ADMIN_CAP || '(Not configured in constants)'}
+          </p>
+          <p className="text-gray-500 text-xs mt-2">
+            If a transaction fails, make sure you have the AdminCap object in your wallet.
           </p>
         </div>
       </main>
