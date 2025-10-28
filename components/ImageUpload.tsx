@@ -6,12 +6,19 @@ import { toast } from 'sonner';
 interface ImageUploadProps {
   value: string;
   onChange: (url: string) => void;
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
-export function ImageUpload({ value, onChange }: ImageUploadProps) {
+export function ImageUpload({ value, onChange, onUploadingChange }: ImageUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(value);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Notify parent when upload state changes
+  const setUploadingWithNotify = (state: boolean) => {
+    setUploading(state);
+    onUploadingChange?.(state);
+  };
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -37,7 +44,7 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
     reader.readAsDataURL(file);
 
     // Upload to Pinata
-    setUploading(true);
+    setUploadingWithNotify(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -54,13 +61,27 @@ export function ImageUpload({ value, onChange }: ImageUploadProps) {
 
       const data = await response.json();
       console.log('✅ IPFS upload successful, URL:', data.url);
+      
+      if (!data.url) {
+        throw new Error('No URL returned from upload');
+      }
+      
+      // Update state with the URL
       onChange(data.url);
-      toast.success('Image uploaded to IPFS!');
+      
+      // Wait a tick to ensure state is updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      toast.success('Image uploaded to IPFS!', {
+        description: 'Your image is ready',
+        duration: 3000,
+      });
     } catch (error: any) {
+      console.error('❌ Upload error:', error);
       toast.error(error.message || 'Failed to upload image');
       setPreview(value); // Revert preview
     } finally {
-      setUploading(false);
+      setUploadingWithNotify(false);
     }
   }
 

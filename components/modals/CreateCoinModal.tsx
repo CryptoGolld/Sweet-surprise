@@ -22,6 +22,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState('');
   const [buyAmount, setBuyAmount] = useState('');
+  const [isImageUploading, setIsImageUploading] = useState(false);
   
   // Form Data
   const [formData, setFormData] = useState({
@@ -130,8 +131,16 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       return;
     }
 
+    // Check if image is still uploading
+    if (isImageUploading) {
+      toast.error('Please wait for image upload to complete');
+      return;
+    }
+
     // Log imageUrl for debugging
     console.log('🎨 Creating coin with imageUrl:', formData.imageUrl || '(empty)');
+    console.log('🎨 Full formData:', JSON.stringify(formData, null, 2));
+    
     if (!formData.imageUrl) {
       console.warn('⚠️  No image URL provided - coin will be created without an icon');
       toast.warning('No image uploaded', {
@@ -609,8 +618,13 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               value={formData.imageUrl}
               onChange={(url) => {
                 console.log('📸 ImageUpload onChange called with URL:', url);
-                setFormData({ ...formData, imageUrl: url });
+                setFormData(prev => {
+                  const updated = { ...prev, imageUrl: url };
+                  console.log('📸 Updated formData:', updated);
+                  return updated;
+                });
               }}
+              onUploadingChange={setIsImageUploading}
             />
 
             {/* Socials */}
@@ -664,10 +678,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               </button>
               <button
                 type="submit"
-                disabled={isProcessing || !currentAccount}
+                disabled={isProcessing || !currentAccount || isImageUploading}
                 className="flex-1 px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
               >
-                {isProcessing ? (status || '⏳ Processing...') : '🚀 Create Coin'}
+                {isImageUploading ? '⏳ Uploading image...' : isProcessing ? (status || '⏳ Processing...') : '🚀 Create Coin'}
               </button>
             </div>
           </form>
