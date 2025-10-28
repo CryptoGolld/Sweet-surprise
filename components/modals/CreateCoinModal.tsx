@@ -132,6 +132,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         ticker: formData.ticker.toUpperCase(),
         name: formData.name,
         description: formData.description,
+        imageUrl: formData.imageUrl,
         senderAddress: currentAccount.address,
       });
       

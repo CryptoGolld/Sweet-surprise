@@ -64,6 +64,7 @@ export async function createCoinTransaction(params: {
   ticker: string;
   name: string;
   description: string;
+  imageUrl?: string;
   senderAddress: string;
 }): Promise<{
   transaction: Transaction;

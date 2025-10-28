@@ -40,7 +40,7 @@ app.get('/health', (req, res) => {
 // Compilation endpoint
 app.post('/compile', async (req, res) => {
   try {
-    const { ticker, name, description } = req.body;
+    const { ticker, name, description, imageUrl } = req.body;
     
     // Validate inputs
     if (!ticker || typeof ticker !== 'string' || ticker.length > 10) {
@@ -94,29 +94,38 @@ ${moduleName} = "0x0"
     const witnessName = ticker.toUpperCase(); // Must match module name for one-time witness
     const desc = description || `${name} - Launched on SuiLFG MemeFi`;
     
+    // Handle image URL
+    const iconOption = imageUrl 
+      ? `option::some(url::new_unsafe_from_bytes(b"${imageUrl}"))` 
+      : `option::none()`;
+    
     const moveSource = `module ${moduleName}::${moduleName} {
     use sui::coin;
+    use std::option;
+    use sui::url;
+    use sui::transfer;
+    use sui::tx_context::{Self, TxContext};
 
     /// One-time witness (must match module name in uppercase)
     public struct ${witnessName} has drop {}
 
     /// Initialize the coin and create TreasuryCap
-    fun init(witness: ${witnessName}, ctx: &mut sui::tx_context::TxContext) {
+    fun init(witness: ${witnessName}, ctx: &mut TxContext) {
         let (treasury, metadata) = coin::create_currency(
             witness,
             9,
             b"${ticker.toUpperCase()}",
             b"${name}",
             b"${desc}",
-            option::none(),
+            ${iconOption},
             ctx
         );
         
         // Freeze metadata so it can't be changed
-        sui::transfer::public_freeze_object(metadata);
+        transfer::public_freeze_object(metadata);
         
         // Transfer TreasuryCap to sender (will be used by bonding curve)
-        sui::transfer::public_transfer(treasury, sui::tx_context::sender(ctx));
+        transfer::public_transfer(treasury, tx_context::sender(ctx));
     }
 }
 `;
