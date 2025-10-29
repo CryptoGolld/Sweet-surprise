@@ -5,10 +5,10 @@
 ### Prerequisites
 
 - [ ] Ubuntu server access (your existing server at 13.60.235.109)
-- [ ] Bot wallet with:
-  - [ ] AdminCap object
-  - [ ] Some SUI for gas (~1-2 SUI)
-- [ ] LP bot address already configured (already done ✅)
+- [ ] Bot wallet configured as LP bot address in platform_config (already done ✅)
+- [ ] Initial SUI for first transaction (~0.5-1 SUI)
+  - Bot will self-fund from pools after first few creations!
+  - Keeps 0.5 SUI from each pool for future gas
 
 ---
 
@@ -93,7 +93,8 @@ BOT_PRIVATE_KEY=suiprivkey1234567890abcdef...
 # Platform Contracts (Testnet - Already Correct)
 PLATFORM_PACKAGE=0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348
 PLATFORM_STATE=0x3db44f01f62024e124dee24dd6185ce702e2babe24c3fb331507080d13f873f9
-ADMIN_CAP=0x7687bb4d6149db3c87ec3b96bbe3d4b59dbd9ed7f0a6de6a447422559332ca11
+
+# Note: No AdminCap needed! Bot uses configured LP bot address from platform_config
 
 # Cetus Configuration (Testnet)
 CETUS_GLOBAL_CONFIG=0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e
@@ -134,34 +135,12 @@ sui keytool export --key-identity <new-address>
 - Never commit to git
 - This wallet needs AdminCap object
 
-### Step 7: Verify AdminCap in Bot Wallet
+### Step 7: Fund Bot Wallet with Initial Gas
+
+Bot needs minimal initial SUI (it will self-fund after first pools):
 
 ```bash
-# Check if bot wallet has AdminCap
-sui client objects --address <YOUR_BOT_ADDRESS>
-
-# Look for AdminCap object:
-# ╭───────────────┬──────────────────────────────────────────────╮
-# │ objectId      │ 0x7687bb4d6149db3c87ec3b96bbe3d4b59dbd9ed7... │
-# │ objectType    │ 0xa49...::platform_config::AdminCap           │
-# ╰───────────────┴──────────────────────────────────────────────╯
-```
-
-**If AdminCap is NOT in bot wallet:**
-
-```bash
-# Transfer AdminCap to bot wallet
-sui client transfer --object-id 0x7687bb4d6149db3c87ec3b96bbe3d4b59dbd9ed7f0a6de6a447422559332ca11 \
-  --to <BOT_WALLET_ADDRESS> \
-  --gas-budget 10000000
-```
-
-### Step 8: Fund Bot Wallet with Gas
-
-Bot needs SUI for gas:
-
-```bash
-# Get testnet SUI from faucet
+# Get testnet SUI from faucet (just need 1 SUI to start!)
 curl --location --request POST 'https://faucet.testnet.sui.io/gas' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -174,9 +153,13 @@ curl --location --request POST 'https://faucet.testnet.sui.io/gas' \
 sui client balance --address <BOT_WALLET_ADDRESS>
 ```
 
-**Recommended:** At least 2 SUI for gas
+**Initial funding:** 0.5-1 SUI is enough!
 
-### Step 9: Test Configuration
+**Why so little?** Bot keeps 0.5 SUI from each pool for future gas, so it self-funds! ✅
+
+After 10 pools: ~6 SUI (never need to refill)
+
+### Step 8: Test Configuration
 
 ```bash
 # Test that .env is configured correctly
@@ -189,7 +172,7 @@ Network: testnet
 Bot key exists: true
 ```
 
-### Step 10: Start Bot with PM2
+### Step 9: Start Bot with PM2
 
 ```bash
 # Start the pool creation bot
@@ -221,7 +204,7 @@ LP will be burned but fees can still be claimed! 🔥
 🤖 Pool Creation Bot Started { network: 'testnet', pollingInterval: 10000 }
 ```
 
-### Step 11: Monitor Bot
+### Step 10: Monitor Bot & Watch Self-Funding
 
 ```bash
 # Real-time logs
@@ -234,10 +217,12 @@ tail -f logs/combined.log
 **What to look for:**
 - ✅ "Bot initialized" - Startup successful
 - ✅ "Cetus SDK initialized" - Cetus connection OK
+- ✅ "0.5 SUI kept for future operations" - Bot is self-funding!
+- ✅ Bot balance growing after each pool
 - ✅ No ERROR logs
 - ⏳ Bot quietly polling every 10 seconds
 
-### Step 12: Save PM2 Configuration
+### Step 11: Save PM2 Configuration
 
 ```bash
 # Save PM2 processes
