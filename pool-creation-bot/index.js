@@ -98,15 +98,15 @@ class PoolCreationBot {
 
   initializeBurnSDK() {
     try {
-      this.lpBurnSDK = new LpBurnSDK({
+      this.burnSDK = new CetusBurnSDK({
         network: CONFIG.network === 'mainnet' ? 'mainnet' : 'testnet',
         fullNodeUrl: CONFIG.rpcUrl,
       });
       
-      logger.info('LP Burn SDK initialized');
+      logger.info('Cetus Burn SDK initialized');
       logger.info('🔥 LP will be burned but fees can still be claimed!');
     } catch (error) {
-      logger.error('Failed to initialize LP Burn SDK', { error: error.message });
+      logger.error('Failed to initialize Cetus Burn SDK', { error: error.message });
       throw error;
     }
   }
@@ -595,7 +595,7 @@ class PoolCreationBot {
         let burnPayload;
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            burnPayload = await this.lpBurnSDK.burnPositionTransactionPayload({
+            burnPayload = await this.burnSDK.Burn.createBurnPositionTransactionPayload({
               pool_id: poolAddress,
               position_id: position.pos_object_id,
               collect_fee: true, // Collect any existing fees before burning
