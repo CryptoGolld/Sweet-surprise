@@ -43,7 +43,7 @@ This is the standard fee tier for most tokens on Cetus.
 
 When a bonding curve sells all 737M tokens:
 ```
-Event: GraduationEvent
+Event: Graduated (auto-emitted during buy when supply hits 737M)
 - curve_id: 0x...
 - coin_type: 0x...::coin::COIN
 - sui_raised: ~13,000

@@ -64,7 +64,7 @@ After graduation, the total 1B token supply is distributed:
 // Bot queries blockchain every 10 seconds
 const events = await client.queryEvents({
   query: {
-    MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::GraduationEvent`
+    MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::Graduated`
   }
 });
 ```

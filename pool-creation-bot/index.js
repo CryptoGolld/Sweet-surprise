@@ -132,10 +132,12 @@ class PoolCreationBot {
 
   async checkForGraduations() {
     try {
-      // Query graduation events (GraduationReady is emitted when token reaches threshold)
+      // Query graduation events (Graduated is emitted on auto-graduation from buy())
+      // Note: We listen for "Graduated" not "GraduationReady" because tokens auto-graduate
+      // when they hit 737M supply during a buy transaction
       const events = await this.client.queryEvents({
         query: {
-          MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady`,
+          MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated`,
         },
         limit: 50,
         order: 'descending',
@@ -190,27 +192,32 @@ class PoolCreationBot {
   }
 
   async handleGraduation(event, retryData = null) {
-    // GraduationReady event doesn't have curve_id, need to get it from transaction
+    // Graduated event is emitted during auto-graduation in buy() function
     const txDigest = event.id.txDigest;
     
     // Get the transaction to find curve_id and coin_type
     const tx = await this.client.getTransactionBlock({
       digest: txDigest,
-      options: { showInput: true, showObjectChanges: true },
+      options: { showInput: true, showObjectChanges: true, showEvents: true },
     });
     
-    // Extract curve_id from transaction input objects
-    const curveId = tx.transaction?.data?.transaction?.inputs?.find(input => 
-      input.type === 'object'
-    )?.valueType?.includes('BondingCurve') ? 
-      tx.objectChanges?.find(change => change.objectType?.includes('BondingCurve'))?.objectId : null;
+    // Extract curve_id from transaction - it's the BondingCurve object that was mutated
+    const curveObject = tx.objectChanges?.find(change => 
+      change.type === 'mutated' && 
+      change.objectType?.includes('BondingCurve')
+    );
     
-    // Extract coin type from event or object changes
-    const coinType = event.parsedJson?.coin_type || 
-      tx.objectChanges?.find(change => change.objectType?.includes('BondingCurve'))?.objectType?.match(/<(.+)>/)?.[1];
+    const curveId = curveObject?.objectId;
+    
+    // Extract coin type from the BondingCurve object type parameter
+    const coinType = curveObject?.objectType?.match(/BondingCurve<(.+)>/)?.[1];
 
     if (!curveId || !coinType) {
-      logger.error('Could not extract curve_id or coin_type', { event, tx });
+      logger.error('Could not extract curve_id or coin_type from Graduated event', { 
+        event, 
+        curveObject,
+        objectChanges: tx.objectChanges 
+      });
       return;
     }
 

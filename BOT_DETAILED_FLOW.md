@@ -54,7 +54,7 @@ async checkForGraduations() {
   // Query blockchain for graduation events
   const events = await client.queryEvents({
     query: {
-      MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::GraduationEvent`
+      MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::Graduated`
     },
     limit: 50,
     order: 'descending',
@@ -88,7 +88,7 @@ async checkForGraduations() {
     "tokens_sold": "737000000000000000",  // 737M in smallest units
     "timestamp": "1234567890"
   },
-  "type": "0xPKG::bonding_curve::GraduationEvent"
+  "type": "0xPKG::bonding_curve::Graduated"
 }
 ```
 
