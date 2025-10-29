@@ -51,7 +51,6 @@ class PoolCreationBot {
     this.client = new SuiClient({ url: CONFIG.rpcUrl });
     this.initializeKeypair();
     this.initializeCetusSDK();
-    this.initializeBurnManager();
   }
 
   initializeKeypair() {
