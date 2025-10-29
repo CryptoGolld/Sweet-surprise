@@ -39,6 +39,7 @@ const CONFIG = {
   pollingInterval: parseInt(process.env.POLLING_INTERVAL_MS || '10000'),
   maxRetries: parseInt(process.env.MAX_RETRIES || '3'),
   gasBudget: parseInt(process.env.GAS_BUDGET || '100000000'),
+  maxConcurrentPools: parseInt(process.env.MAX_CONCURRENT_POOLS || '10'),
 };
 
 // State tracking
@@ -142,21 +143,44 @@ class PoolCreationBot {
       if (events.data.length > 0) {
         lastCheckedCursor = events.nextCursor;
         
-        for (const event of events.data.reverse()) {
-          const eventId = event.id.txDigest;
-          
-          if (processedGraduations.has(eventId)) {
-            continue; // Already processed
-          }
+        // Filter only new events
+        const newEvents = events.data.filter(event => 
+          !processedGraduations.has(event.id.txDigest)
+        ).reverse();
 
-          logger.info('🎓 Graduation detected!', {
-            txDigest: eventId,
-            curveId: event.parsedJson?.curve_id,
-          });
-
-          await this.handleGraduation(event);
-          processedGraduations.add(eventId);
+        if (newEvents.length > 0) {
+          logger.info(`📊 Found ${newEvents.length} new graduation(s) to process`);
         }
+
+        // Process graduations in batches to avoid overwhelming the system
+        const batchSize = CONFIG.maxConcurrentPools;
+        
+        for (let i = 0; i < newEvents.length; i += batchSize) {
+          const batch = newEvents.slice(i, i + batchSize);
+          
+          logger.info(`Processing batch ${Math.floor(i / batchSize) + 1}: ${batch.length} graduations`);
+          
+          // Process batch in parallel
+          const promises = batch.map(event => 
+            this.handleGraduation(event).catch(error => {
+              logger.error('Graduation handling failed', {
+                txDigest: event.id.txDigest,
+                error: error.message,
+              });
+              // Continue with other graduations even if one fails
+            })
+          );
+
+          // Wait for batch to complete before next batch
+          await Promise.all(promises);
+          
+          logger.info(`Batch complete. Processed ${Math.min(i + batchSize, newEvents.length)}/${newEvents.length} graduations`);
+        }
+
+        // Mark all as processed
+        newEvents.forEach(event => {
+          processedGraduations.add(event.id.txDigest);
+        });
       }
     } catch (error) {
       logger.error('Error checking graduations', { error: error.message });
