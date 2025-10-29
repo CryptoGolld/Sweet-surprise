@@ -32,6 +32,7 @@ const CONFIG = {
   rpcUrl: process.env.RPC_URL || 'https://fullnode.testnet.sui.io:443',
   platformPackage: process.env.PLATFORM_PACKAGE,
   platformState: process.env.PLATFORM_STATE,
+  adminCap: process.env.ADMIN_CAP,
   cetusGlobalConfig: process.env.CETUS_GLOBAL_CONFIG,
   cetusPools: process.env.CETUS_POOLS,
   tickSpacing: parseInt(process.env.TICK_SPACING || '200'), // 1% fee tier
@@ -132,10 +133,10 @@ class PoolCreationBot {
 
   async checkForGraduations() {
     try {
-      // Query graduation events
+      // Query graduation events (GraduationReady is emitted when token reaches threshold)
       const events = await this.client.queryEvents({
         query: {
-          MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationEvent`,
+          MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady`,
         },
         limit: 50,
         order: 'descending',
@@ -190,11 +191,27 @@ class PoolCreationBot {
   }
 
   async handleGraduation(event, retryData = null) {
-    const curveId = event.parsedJson?.curve_id;
-    const coinType = event.parsedJson?.coin_type;
+    // GraduationReady event doesn't have curve_id, need to get it from transaction
+    const txDigest = event.id.txDigest;
+    
+    // Get the transaction to find curve_id and coin_type
+    const tx = await this.client.getTransactionBlock({
+      digest: txDigest,
+      options: { showInput: true, showObjectChanges: true },
+    });
+    
+    // Extract curve_id from transaction input objects
+    const curveId = tx.transaction?.data?.transaction?.inputs?.find(input => 
+      input.type === 'object'
+    )?.valueType?.includes('BondingCurve') ? 
+      tx.objectChanges?.find(change => change.objectType?.includes('BondingCurve'))?.objectId : null;
+    
+    // Extract coin type from event or object changes
+    const coinType = event.parsedJson?.coin_type || 
+      tx.objectChanges?.find(change => change.objectType?.includes('BondingCurve'))?.objectType?.match(/<(.+)>/)?.[1];
 
     if (!curveId || !coinType) {
-      logger.error('Invalid graduation event', { event });
+      logger.error('Could not extract curve_id or coin_type', { event, tx });
       return;
     }
 
@@ -209,6 +226,9 @@ class PoolCreationBot {
       try {
         logger.info(`Attempt ${attempt}/${maxRetries}`, { curveId });
 
+        // Step 0: Distribute payouts first (required before prepare_liquidity_for_bot)
+        await this.distributePayouts(curveId, coinType);
+        
         // Step 1: Prepare liquidity
         // If this is a retry and we already have the coins, reuse them
         if (retryData?.suiCoinId) {
@@ -314,19 +334,44 @@ class PoolCreationBot {
     });
   }
 
+  async distributePayouts(curveId, coinType) {
+    logger.info('💰 Distributing payouts', { curveId });
+
+    const tx = new Transaction();
+
+    // Call distribute_payouts first (required before prepare_liquidity_for_bot)
+    tx.moveCall({
+      target: `${CONFIG.platformPackage}::bonding_curve::distribute_payouts`,
+      typeArguments: [coinType],
+      arguments: [
+        tx.object(CONFIG.platformState),
+        tx.object(curveId),
+      ],
+    });
+
+    tx.setGasBudget(CONFIG.gasBudget);
+
+    const result = await this.executeTransaction(tx);
+
+    logger.info('✅ Payouts distributed', {
+      txDigest: result.digest,
+      note: 'Platform cut + creator reward sent',
+    });
+  }
+
   async prepareLiquidity(curveId, coinType) {
     logger.info('📦 Preparing liquidity', { curveId });
 
     const tx = new Transaction();
 
-    // Call prepare_liquidity_for_bot (no AdminCap needed - uses configured LP bot address)
+    // Call prepare_liquidity_for_bot (requires AdminCap + reward_paid = true)
     const [suiCoin, tokenCoin] = tx.moveCall({
       target: `${CONFIG.platformPackage}::bonding_curve::prepare_liquidity_for_bot`,
       typeArguments: [coinType],
       arguments: [
+        tx.object(CONFIG.adminCap),
         tx.object(CONFIG.platformState),
         tx.object(curveId),
-        tx.object('0x6'), // Clock
       ],
     });
 
