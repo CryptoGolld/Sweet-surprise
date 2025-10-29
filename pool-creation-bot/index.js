@@ -7,7 +7,7 @@
  * 
  * Flow:
  * 1. Monitor blockchain for graduation events
- * 2. Call prepare_liquidity_for_bot() to extract liquidity
+ * 2. Call prepare_pool_liquidity() to extract liquidity
  * 3. Create Cetus pool using Cetus SDK
  * 4. Add liquidity to pool
  * 5. Burn LP tokens using Cetus Burn Manager (permanent lock)
@@ -225,7 +225,7 @@ class PoolCreationBot {
       try {
         logger.info(`Attempt ${attempt}/${maxRetries}`, { curveId });
 
-        // Step 0: Distribute payouts first (required before prepare_liquidity_for_bot)
+        // Step 0: Distribute payouts first (required before prepare_pool_liquidity)
         await this.distributePayouts(curveId, coinType);
         
         // Step 1: Prepare liquidity
@@ -338,7 +338,7 @@ class PoolCreationBot {
 
     const tx = new Transaction();
 
-    // Call distribute_payouts first (required before prepare_liquidity_for_bot)
+    // Call distribute_payouts first (required before prepare_pool_liquidity)
     tx.moveCall({
       target: `${CONFIG.platformPackage}::bonding_curve::distribute_payouts`,
       typeArguments: [coinType],
@@ -363,9 +363,9 @@ class PoolCreationBot {
 
     const tx = new Transaction();
 
-    // Call prepare_liquidity_for_bot (requires reward_paid = true + sender is lp_bot_address)
+    // Call prepare_pool_liquidity (no AdminCap needed!)
     const [suiCoin, tokenCoin] = tx.moveCall({
-      target: `${CONFIG.platformPackage}::bonding_curve::prepare_liquidity_for_bot`,
+      target: `${CONFIG.platformPackage}::bonding_curve::prepare_pool_liquidity`,
       typeArguments: [coinType],
       arguments: [
         tx.object(CONFIG.platformState),

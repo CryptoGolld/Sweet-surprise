@@ -607,11 +607,59 @@ module suilfg_launch_memefi::bonding_curve {
         // Note: Remaining 12,000 SUI stays in reserve for LP seeding (90% of 13,333)
     }
     
+    /// DEPRECATED: Legacy function - Use prepare_pool_liquidity() instead
     /// BOT: Extract liquidity for bot-driven manual pool creation
     /// SECURITY: Only configured bot address can call this function and receive LP tokens
     /// Automatically handles 54M tokens based on special_launch flag
-    /// NOTE: No AdminCap required - authorization is via configured lp_bot_address
+    /// NOTE: AdminCap parameter is unused - kept for backward compatibility only
     public entry fun prepare_liquidity_for_bot<T: drop>(
+        _admin: &AdminCap,
+        cfg: &PlatformConfig,
+        curve: &mut BondingCurve<T>,
+        ctx: &mut TxContext
+    ) {
+        assert!(curve.graduated, E_NOT_GRADUATED);
+        assert!(!curve.lp_seeded, E_LP_ALREADY_SEEDED);
+        assert!(curve.reward_paid, 9010);
+        
+        // SECURITY: Only configured bot address can call and receive LP tokens
+        let bot_address = platform_config::get_lp_bot_address(cfg);
+        assert!(sender(ctx) == bot_address, E_UNAUTHORIZED_BOT);
+        
+        let sui_for_lp = 12_000_000_000_000;
+        let tokens_for_lp = 207_000_000;
+        let team_allocation = 2_000_000;
+        let burn_or_treasury_amount = 54_000_000;
+        
+        let treasury_address = platform_config::get_treasury_address(cfg);
+        let lp_sui = coin::from_balance(balance::split(&mut curve.sui_reserve, sui_for_lp), ctx);
+        let lp_tokens = coin::mint(&mut curve.treasury, tokens_for_lp * 1_000_000_000, ctx);
+        let team_tokens = coin::mint(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
+        transfer::public_transfer(team_tokens, treasury_address);
+        
+        // Handle 54M tokens based on special_launch flag
+        let treasury_tokens = coin::mint(&mut curve.treasury, burn_or_treasury_amount * 1_000_000_000, ctx);
+        if (curve.special_launch) {
+            // Special launch: send 54M to treasury instead of burning
+            transfer::public_transfer(treasury_tokens, treasury_address);
+        } else {
+            // Normal launch: burn 54M tokens
+            coin::burn(&mut curve.treasury, treasury_tokens);
+        };
+        
+        // Send LP tokens to configured bot address
+        transfer::public_transfer(lp_sui, bot_address);
+        transfer::public_transfer(lp_tokens, bot_address);
+        
+        curve.token_supply = curve.token_supply + tokens_for_lp + team_allocation + burn_or_treasury_amount;
+        curve.lp_seeded = true;
+    }
+    
+    /// BOT: Extract liquidity for pool creation (RECOMMENDED)
+    /// SECURITY: Only configured bot address can call this function and receive LP tokens
+    /// Automatically handles 54M tokens based on special_launch flag
+    /// This is the clean version without AdminCap requirement
+    public entry fun prepare_pool_liquidity<T: drop>(
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         ctx: &mut TxContext

@@ -2,12 +2,12 @@
 
 ## 📝 What's Changing
 
-**Single change:** Remove AdminCap requirement from `prepare_liquidity_for_bot()`
+**Single change:** Add new `prepare_pool_liquidity()` function without AdminCap requirement
 
 ### Before (v0.0.8):
 ```move
 public entry fun prepare_liquidity_for_bot<T: drop>(
-    _admin: &AdminCap,  // ← Had to pass AdminCap (even though unused)
+    _admin: &AdminCap,  // ← Had to pass AdminCap
     cfg: &PlatformConfig,
     curve: &mut BondingCurve<T>,
     ctx: &mut TxContext
@@ -18,14 +18,24 @@ public entry fun prepare_liquidity_for_bot<T: drop>(
 
 ### After (v0.0.9):
 ```move
+// OLD function kept for backward compatibility
 public entry fun prepare_liquidity_for_bot<T: drop>(
-    cfg: &PlatformConfig,  // ← AdminCap removed!
+    _admin: &AdminCap,  // ← Still here (deprecated)
+    // ...
+)
+
+// NEW function - use this!
+public entry fun prepare_pool_liquidity<T: drop>(
+    cfg: &PlatformConfig,  // ← No AdminCap!
     curve: &mut BondingCurve<T>,
     ctx: &mut TxContext
 )
 ```
 
-**Better:** Authorization via `lp_bot_address` only (cleaner, safer!)
+**Better:** 
+- New clean function without AdminCap
+- Old function kept for compatibility
+- Authorization via `lp_bot_address` only (cleaner, safer!)
 
 ---
 
