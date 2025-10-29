@@ -18,7 +18,7 @@ import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { fromHEX } from '@mysten/sui/utils';
 import { CetusClmmSDK } from '@cetusprotocol/cetus-sui-clmm-sdk';
-import { BurnManager } from '@cetusprotocol/cetus-lp-burn-sdk';
+import { CetusBurnSDK } from '@cetusprotocol/cetus-burn-sdk';
 import dotenv from 'dotenv';
 import { createLogger } from './logger.js';
 
@@ -111,19 +111,6 @@ class PoolCreationBot {
     }
   }
 
-  async initializeBurnManager() {
-    try {
-      this.burnManager = new BurnManager({
-        network: CONFIG.network,
-        client: this.client,
-      });
-      logger.info('Cetus Burn Manager initialized');
-      logger.info('LP will be burned but fees can still be claimed! 🔥');
-    } catch (error) {
-      logger.error('Failed to initialize Burn Manager', { error: error.message });
-      throw error;
-    }
-  }
 
   async start() {
     logger.info('🤖 Pool Creation Bot Started', {
