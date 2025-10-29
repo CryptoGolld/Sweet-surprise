@@ -187,7 +187,7 @@ class PoolCreationBot {
     }
   }
 
-  async handleGraduation(event) {
+  async handleGraduation(event, retryData = null) {
     const curveId = event.parsedJson?.curve_id;
     const coinType = event.parsedJson?.coin_type;
 
@@ -196,24 +196,52 @@ class PoolCreationBot {
       return;
     }
 
-    logger.info('Processing graduation', { curveId, coinType });
+    logger.info('Processing graduation', { curveId, coinType, isRetry: !!retryData });
 
     // Retry logic with exponential backoff
     const maxRetries = CONFIG.maxRetries || 3;
     let lastError = null;
+    let suiCoinId, suiAmount, tokenAmount;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         logger.info(`Attempt ${attempt}/${maxRetries}`, { curveId });
 
-        // Step 1: Prepare liquidity (extract from curve)
-        const { suiAmount, tokenAmount, suiCoinId } = await this.prepareLiquidity(curveId, coinType);
+        // Step 1: Prepare liquidity
+        // If this is a retry and we already have the coins, reuse them
+        if (retryData?.suiCoinId) {
+          logger.info('♻️ Reusing previously extracted SUI/tokens', { 
+            curveId,
+            suiCoinId: retryData.suiCoinId,
+            note: 'Not extracting from curve again'
+          });
+          suiCoinId = retryData.suiCoinId;
+          suiAmount = retryData.suiAmount;
+          tokenAmount = retryData.tokenAmount;
+        } else {
+          // First attempt - extract from curve
+          const prepared = await this.prepareLiquidity(curveId, coinType);
+          suiCoinId = prepared.suiCoinId;
+          suiAmount = prepared.suiAmount;
+          tokenAmount = prepared.tokenAmount;
+          
+          // Store these in case we need to retry
+          if (failedGraduations.has(curveId)) {
+            const existing = failedGraduations.get(curveId);
+            failedGraduations.set(curveId, {
+              ...existing,
+              suiCoinId,
+              suiAmount,
+              tokenAmount,
+            });
+          }
+        }
 
         // Step 2: Create Cetus pool (1% fee tier) - uses SUI from curve for gas
         const poolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount, suiCoinId);
 
-      // Step 3: Burn LP tokens (permanent lock, but can still claim fees!)
-      await this.burnLPTokens(poolAddress, coinType, suiCoinId);
+        // Step 3: Burn LP tokens (permanent lock, but can still claim fees!)
+        await this.burnLPTokens(poolAddress, coinType, suiCoinId);
 
         logger.info('✅ Pool creation complete!', {
           curveId,
@@ -258,17 +286,29 @@ class PoolCreationBot {
 
     // Store failed graduation for retry later
     const currentAttempts = failedGraduations.get(curveId)?.attempts || 0;
-    failedGraduations.set(curveId, {
+    
+    // IMPORTANT: Store which SUI/tokens belong to this pool
+    // This prevents mixing up SUI from different graduations
+    const failedData = {
       attempts: currentAttempts + 1,
       lastError: lastError?.message,
       lastAttempt: Date.now(),
       event,
-    });
+      coinType,
+      // These will be set if prepareLiquidity succeeded
+      suiCoinId: null,
+      suiAmount: null,
+      tokenAmount: null,
+    };
+    
+    failedGraduations.set(curveId, failedData);
 
-    logger.warn('Stored failed graduation for later retry', {
+    logger.warn('⚠️ Stored failed graduation for later retry', {
       curveId,
+      coinType,
       totalAttempts: currentAttempts + 1,
       nextRetryIn: '10 minutes',
+      note: 'Will retry with same coins to avoid mixing pools',
     });
   }
 
