@@ -228,7 +228,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       setStatus('');
       
       toast.success('✅ Step 1 Complete!', {
-        description: 'Coin package created. Now publish to bonding curve.',
+        description: formData.initialBuyAmount ? 'Next: Launch and buy tokens together!' : 'Coin package created. Now publish to bonding curve.',
         duration: 4000,
       });
       
@@ -243,7 +243,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     }
   }
 
-  // Step 2: Publish (Create Bonding Curve)
+  // Step 2: Publish (Create Bonding Curve) + Optional immediate buy
   async function handleStep2(e: FormEvent) {
     e.preventDefault();
     
@@ -255,7 +255,86 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     setIsProcessing(true);
     
     try {
-      // Create bonding curve
+      // Check if user wants to buy immediately
+      const shouldBuyImmediately = formData.initialBuyAmount && parseFloat(formData.initialBuyAmount) > 0;
+      
+      if (shouldBuyImmediately) {
+        // COMBINED: Create curve + buy in one transaction (faster!)
+        setStatus('Creating curve and buying tokens...');
+        
+        const buyAmountMist = Math.floor(parseFloat(formData.initialBuyAmount!) * 1_000_000_000).toString();
+        const minTokensOut = '1'; // Accept any amount (user buying at launch price)
+        
+        // Get user's payment coins
+        const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+        const coins = await client.getCoins({
+          owner: currentAccount.address,
+          coinType: COIN_TYPES.PAYMENT_TOKEN,
+        });
+        
+        if (coins.data.length === 0) {
+          throw new Error('No payment tokens found. Get some from the faucet!');
+        }
+        
+        const { createCurveAndBuyTransaction } = await import('@/lib/sui/combined-transactions');
+        
+        const combinedTx = createCurveAndBuyTransaction({
+          packageId: publishedData.packageId,
+          moduleName: publishedData.moduleName,
+          structName: publishedData.structName,
+          treasuryCapId: publishedData.treasuryCapId,
+          metadataId: publishedData.metadataId,
+          paymentCoinIds: coins.data.map(c => c.coinObjectId),
+          maxSuiIn: buyAmountMist,
+          minTokensOut: minTokensOut,
+          referrerAddress: undefined,
+        });
+        
+        setStatus('Please sign to create and buy...');
+        const result = await signAndExecute({
+          transaction: combinedTx,
+        });
+        
+        if (!result.digest) {
+          throw new Error('Transaction failed - no digest returned');
+        }
+        
+        // Wait for transaction to be indexed
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Get the curve ID from transaction
+        const txDetails = await client.getTransactionBlock({
+          digest: result.digest,
+          options: {
+            showEffects: true,
+            showObjectChanges: true,
+          },
+        });
+        
+        const curveObj = txDetails.objectChanges?.find(
+          (obj: any) => obj.type === 'created' && obj.objectType?.includes('BondingCurve')
+        );
+        
+        if (!curveObj) {
+          throw new Error('Failed to find bonding curve object');
+        }
+        
+        const curveId = (curveObj as any).objectId;
+        
+        // Skip step 3 (already bought)
+        setCurveId(curveId);
+        onSuccess?.(curveId);
+        onOpenChange(false);
+        
+        toast.success('🎉 Token Launched!', {
+          description: `You bought ${formData.initialBuyAmount} tokens at launch. Head start achieved!`,
+          duration: 5000,
+        });
+        
+        return;
+      }
+      
+      // NORMAL PATH: Just create curve (no immediate buy)
       setStatus('Creating bonding curve...');
       const curveTx = createCurveTransaction({
         packageId: publishedData.packageId,
@@ -275,7 +354,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       }
       
       // Wait for curve creation to be indexed
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       
       // Get the curve ID from transaction
       const client = new SuiClient({ url: getFullnodeUrl('testnet') });

@@ -214,8 +214,9 @@ async function indexEvents() {
         console.log('📭 No new events');
       }
       
-      // Wait 2 seconds before next poll
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait before next poll (configurable via POLLING_INTERVAL_MS env var, default 5 seconds)
+      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '5000');
+      await new Promise(resolve => setTimeout(resolve, pollingInterval));
       
     } catch (error) {
       console.error('❌ Indexing error:', error.message);
