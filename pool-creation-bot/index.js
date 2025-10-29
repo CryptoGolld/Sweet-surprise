@@ -51,6 +51,7 @@ class PoolCreationBot {
     this.client = new SuiClient({ url: CONFIG.rpcUrl });
     this.initializeKeypair();
     this.initializeCetusSDK();
+    this.initializeBurnSDK();
   }
 
   initializeKeypair() {
@@ -91,6 +92,21 @@ class PoolCreationBot {
       logger.info('Pool configuration: 1% fee tier (tick spacing 200)');
     } catch (error) {
       logger.error('Failed to initialize Cetus SDK', { error: error.message });
+      throw error;
+    }
+  }
+
+  initializeBurnSDK() {
+    try {
+      this.lpBurnSDK = new LpBurnSDK({
+        network: CONFIG.network === 'mainnet' ? 'mainnet' : 'testnet',
+        fullNodeUrl: CONFIG.rpcUrl,
+      });
+      
+      logger.info('LP Burn SDK initialized');
+      logger.info('🔥 LP will be burned but fees can still be claimed!');
+    } catch (error) {
+      logger.error('Failed to initialize LP Burn SDK', { error: error.message });
       throw error;
     }
   }
@@ -548,7 +564,7 @@ class PoolCreationBot {
   }
 
   async burnLPTokens(poolAddress, coinType, suiCoinId) {
-    logger.info('🔥 Locking LP tokens (permanent lock)', { poolAddress });
+    logger.info('🔥 Burning LP tokens (permanent lock with fee claiming)', { poolAddress });
 
     try {
       // Get all positions for this pool with retry
@@ -565,26 +581,73 @@ class PoolCreationBot {
       }
 
       if (positions.length === 0) {
-        logger.warn('No positions found');
+        logger.warn('No positions found to burn');
         return;
       }
 
-      // For now, just log the positions
-      // LP tokens remain in bot's control
-      // Can implement burning later when Cetus provides the functionality
+      logger.info(`Found ${positions.length} position(s) to burn`);
+
+      // Burn each position using Cetus LP Burn SDK
       for (const position of positions) {
-        logger.info('✅ LP position created', {
-          positionId: position.id,
-          poolAddress,
-          note: 'LP controlled by bot address - effectively locked',
+        logger.info('Burning position', { positionId: position.pos_object_id });
+
+        // Create burn transaction with retry
+        let burnPayload;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            burnPayload = await this.lpBurnSDK.burnPositionTransactionPayload({
+              pool_id: poolAddress,
+              position_id: position.pos_object_id,
+              collect_fee: true, // Collect any existing fees before burning
+            });
+            break;
+          } catch (error) {
+            logger.warn(`SDK burnPosition attempt ${attempt}/3 failed`, { error: error.message });
+            if (attempt === 3) throw error;
+            await this.sleep(1000 * attempt);
+          }
+        }
+
+        // Use SUI from curve for gas
+        if (suiCoinId) {
+          burnPayload.setGasPayment([{ 
+            objectId: suiCoinId, 
+            version: null, 
+            digest: null 
+          }]);
+          logger.info('Using SUI from curve for gas', { suiCoinId });
+        }
+
+        const result = await this.client.signAndExecuteTransaction({
+          signer: this.keypair,
+          transaction: burnPayload,
+          options: {
+            showEffects: true,
+            showEvents: true,
+          },
         });
+
+        if (result.effects?.status?.status === 'success') {
+          logger.info('✅ LP position burned!', {
+            positionId: position.pos_object_id,
+            txDigest: result.digest,
+            note: 'Liquidity permanently locked, but can still claim trading fees!',
+          });
+        } else {
+          logger.error('Burn transaction failed', {
+            positionId: position.pos_object_id,
+            error: result.effects?.status?.error,
+          });
+        }
       }
       
-      logger.info('🎉 Pool complete! Liquidity locked in full-range position');
+      logger.info('🎉 Pool complete! All LP burned - liquidity locked forever, fees claimable');
     } catch (error) {
-      logger.error('LP lock check failed', { error: error.message });
-      // Don't throw - pool was created successfully even if we can't verify positions
-      logger.warn('Pool created but could not verify positions', { poolAddress });
+      logger.error('LP burn failed', { 
+        error: error.message,
+        stack: error.stack 
+      });
+      throw error;
     }
   }
 
