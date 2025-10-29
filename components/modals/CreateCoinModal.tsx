@@ -33,6 +33,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     twitter: '',
     telegram: '',
     website: '',
+    initialBuyAmount: '', // Optional: Amount to buy immediately after launch
   });
   
   // Published Package Data (from step 1)
