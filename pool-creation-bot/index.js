@@ -132,23 +132,37 @@ class PoolCreationBot {
 
   async checkForGraduations() {
     try {
-      // Query graduation events (Graduated is emitted on auto-graduation from buy())
-      // Note: We listen for "Graduated" not "GraduationReady" because tokens auto-graduate
-      // when they hit 737M supply during a buy transaction
-      const events = await this.client.queryEvents({
-        query: {
-          MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated`,
-        },
-        limit: 50,
-        order: 'descending',
-        ...(lastCheckedCursor ? { cursor: lastCheckedCursor } : {}),
-      });
+      // Query BOTH types of graduation events:
+      // 1. "Graduated" - Auto-graduation when buy() hits 737M supply
+      // 2. "GraduationReady" - Manual graduation via try_graduate() 
+      // We need both because users might call try_graduate() manually
+      
+      const [graduatedEvents, graduationReadyEvents] = await Promise.all([
+        this.client.queryEvents({
+          query: {
+            MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated`,
+          },
+          limit: 25,
+          order: 'descending',
+        }),
+        this.client.queryEvents({
+          query: {
+            MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady`,
+          },
+          limit: 25,
+          order: 'descending',
+        })
+      ]);
 
-      if (events.data.length > 0) {
-        lastCheckedCursor = events.nextCursor;
+      // Combine both event types
+      const allEvents = [...graduatedEvents.data, ...graduationReadyEvents.data];
+      
+      if (allEvents.length > 0) {
+        // Sort by timestamp descending (newest first)
+        allEvents.sort((a, b) => parseInt(b.timestampMs) - parseInt(a.timestampMs));
         
         // Filter only new events
-        const newEvents = events.data.filter(event => 
+        const newEvents = allEvents.filter(event => 
           !processedGraduations.has(event.id.txDigest)
         ).reverse();
 
@@ -192,8 +206,11 @@ class PoolCreationBot {
   }
 
   async handleGraduation(event, retryData = null) {
-    // Graduated event is emitted during auto-graduation in buy() function
+    // Can be either "Graduated" (auto) or "GraduationReady" (manual) event
     const txDigest = event.id.txDigest;
+    const eventType = event.type.includes('Graduated') ? 'Graduated' : 'GraduationReady';
+    
+    logger.info(`Detected ${eventType} event`, { txDigest: txDigest.slice(0, 16) + '...' });
     
     // Get the transaction to find curve_id and coin_type
     const tx = await this.client.getTransactionBlock({
@@ -213,7 +230,8 @@ class PoolCreationBot {
     const coinType = curveObject?.objectType?.match(/BondingCurve<(.+)>/)?.[1];
 
     if (!curveId || !coinType) {
-      logger.error('Could not extract curve_id or coin_type from Graduated event', { 
+      logger.error('Could not extract curve_id or coin_type from graduation event', { 
+        eventType,
         event, 
         curveObject,
         objectChanges: tx.objectChanges 
