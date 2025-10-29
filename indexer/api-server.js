@@ -49,6 +49,14 @@ app.get('/api/tokens', async (req, res) => {
       // Social columns don't exist yet, skip them
     }
     
+    // Check if cetus_pool_address column exists
+    try {
+      await db.query(`SELECT cetus_pool_address FROM tokens LIMIT 0`);
+      query += `, cetus_pool_address`;
+    } catch (e) {
+      // Column doesn't exist yet, skip it
+    }
+    
     query += ` FROM tokens ORDER BY ${orderBy} LIMIT $1 OFFSET $2`;
     
     const result = await db.query(query, [limit, offset]);
@@ -78,6 +86,7 @@ app.get('/api/tokens', async (req, res) => {
       twitter: row.twitter || null,
       telegram: row.telegram || null,
       website: row.website || null,
+      cetusPoolAddress: row.cetus_pool_address || null,
     }));
 
     res.json({
@@ -167,6 +176,32 @@ app.post('/api/update-metadata', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Update metadata error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update Cetus pool address (called by bot after pool creation)
+app.post('/api/update-pool', async (req, res) => {
+  try {
+    const { coinType, poolAddress } = req.body;
+
+    if (!coinType || !poolAddress) {
+      return res.status(400).json({ error: 'coinType and poolAddress are required' });
+    }
+
+    // Update token with Cetus pool address
+    await db.query(
+      `UPDATE tokens SET
+        cetus_pool_address = $2,
+        updated_at = NOW()
+       WHERE coin_type = $1`,
+      [coinType, poolAddress]
+    );
+
+    console.log(`🏊 Updated Cetus pool for ${coinType}: ${poolAddress}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update pool error:', error);
     res.status(500).json({ error: error.message });
   }
 });

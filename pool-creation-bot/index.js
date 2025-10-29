@@ -43,6 +43,7 @@ const CONFIG = {
 
 // State tracking
 let processedGraduations = new Set();
+let failedGraduations = new Map(); // curveId -> { attempts, lastError, event }
 let lastCheckedCursor = null;
 
 class PoolCreationBot {
@@ -221,6 +222,15 @@ class PoolCreationBot {
           attempt,
         });
 
+        // Remove from failed graduations if it was there
+        if (failedGraduations.has(curveId)) {
+          failedGraduations.delete(curveId);
+          logger.info('✅ Previously failed graduation now succeeded', { curveId });
+        }
+
+        // Report pool address to indexer
+        await this.reportPoolToIndexer(coinType, poolAddress);
+
         return; // Success! Exit retry loop
       } catch (error) {
         lastError = error;
@@ -239,11 +249,26 @@ class PoolCreationBot {
       }
     }
 
-    // All retries failed
+    // All retries failed - store for later retry
     logger.error('❌ All retries exhausted', {
       curveId,
       attempts: maxRetries,
       finalError: lastError?.message,
+    });
+
+    // Store failed graduation for retry later
+    const currentAttempts = failedGraduations.get(curveId)?.attempts || 0;
+    failedGraduations.set(curveId, {
+      attempts: currentAttempts + 1,
+      lastError: lastError?.message,
+      lastAttempt: Date.now(),
+      event,
+    });
+
+    logger.warn('Stored failed graduation for later retry', {
+      curveId,
+      totalAttempts: currentAttempts + 1,
+      nextRetryIn: '10 minutes',
     });
   }
 
@@ -656,6 +681,32 @@ class PoolCreationBot {
       ownerAddress: this.botAddress,
     });
     return positions;
+  }
+
+  async reportPoolToIndexer(coinType, poolAddress) {
+    try {
+      const indexerApiUrl = process.env.INDEXER_API_URL || 'http://localhost:3002';
+      
+      const response = await fetch(`${indexerApiUrl}/api/update-pool`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coinType, poolAddress }),
+      });
+
+      if (response.ok) {
+        logger.info('✅ Reported pool to indexer', { coinType, poolAddress });
+      } else {
+        logger.warn('⚠️ Failed to report pool to indexer', { 
+          coinType, 
+          status: response.status 
+        });
+      }
+    } catch (error) {
+      logger.warn('⚠️ Could not report pool to indexer', { 
+        error: error.message,
+        note: 'Pool created successfully, just indexer notification failed'
+      });
+    }
   }
 
   sleep(ms) {

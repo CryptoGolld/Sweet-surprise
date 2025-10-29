@@ -38,6 +38,17 @@ export default function TokenPage() {
   
   const token = tokensResponse?.tokens?.find((t: any) => t.id === tokenId);
   
+  // Redirect to Cetus if token graduated
+  useEffect(() => {
+    if (token?.graduated && token?.cetusPoolAddress) {
+      const cetusUrl = `https://app.cetus.zone/swap/?from=0x2::sui::SUI&to=${encodeURIComponent(token.coinType)}&poolAddress=${token.cetusPoolAddress}`;
+      toast.info('Token graduated! Redirecting to Cetus...', { duration: 2000 });
+      setTimeout(() => {
+        window.location.href = cetusUrl;
+      }, 2000);
+    }
+  }, [token]);
+  
   // Get user balances
   const { balance: paymentBalance, coins: paymentCoins } = useCoinBalance();
   const { balance: memeBalance, coins: memeCoins } = useCoinBalance(token?.coinType);
@@ -188,6 +199,25 @@ export default function TokenPage() {
             >
               Browse Tokens
             </button>
+          </div>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // Show "Redirecting to Cetus" screen if graduated
+  if (token.graduated && token.cetusPoolAddress) {
+    return (
+      <div className="min-h-screen pb-20 md:pb-0 bg-sui-dark">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-20">
+            <div className="text-6xl mb-4 animate-bounce">🎉</div>
+            <h3 className="text-2xl font-bold mb-4">Token Graduated!</h3>
+            <p className="text-gray-300 mb-6">This token has graduated to Cetus DEX.</p>
+            <p className="text-gray-400 mb-8">Redirecting you to trade on Cetus...</p>
+            <div className="animate-spin inline-block w-8 h-8 border-4 border-meme-purple border-t-transparent rounded-full"></div>
           </div>
         </main>
         <BottomNav />
