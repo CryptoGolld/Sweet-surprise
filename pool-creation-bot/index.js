@@ -32,7 +32,6 @@ const CONFIG = {
   rpcUrl: process.env.RPC_URL || 'https://fullnode.testnet.sui.io:443',
   platformPackage: process.env.PLATFORM_PACKAGE,
   platformState: process.env.PLATFORM_STATE,
-  adminCap: process.env.ADMIN_CAP,
   cetusGlobalConfig: process.env.CETUS_GLOBAL_CONFIG,
   cetusPools: process.env.CETUS_POOLS,
   tickSpacing: parseInt(process.env.TICK_SPACING || '200'), // 1% fee tier
@@ -364,12 +363,11 @@ class PoolCreationBot {
 
     const tx = new Transaction();
 
-    // Call prepare_liquidity_for_bot (requires AdminCap + reward_paid = true)
+    // Call prepare_liquidity_for_bot (requires reward_paid = true + sender is lp_bot_address)
     const [suiCoin, tokenCoin] = tx.moveCall({
       target: `${CONFIG.platformPackage}::bonding_curve::prepare_liquidity_for_bot`,
       typeArguments: [coinType],
       arguments: [
-        tx.object(CONFIG.adminCap),
         tx.object(CONFIG.platformState),
         tx.object(curveId),
       ],

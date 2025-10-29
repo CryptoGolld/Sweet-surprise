@@ -607,11 +607,11 @@ module suilfg_launch_memefi::bonding_curve {
         // Note: Remaining 12,000 SUI stays in reserve for LP seeding (90% of 13,333)
     }
     
-    /// ADMIN: Extract liquidity for bot-driven manual pool creation
-    /// SECURITY: Only configured bot address can receive LP tokens
+    /// BOT: Extract liquidity for bot-driven manual pool creation
+    /// SECURITY: Only configured bot address can call this function and receive LP tokens
     /// Automatically handles 54M tokens based on special_launch flag
+    /// NOTE: No AdminCap required - authorization is via configured lp_bot_address
     public entry fun prepare_liquidity_for_bot<T: drop>(
-        _admin: &AdminCap,
         cfg: &PlatformConfig,
         curve: &mut BondingCurve<T>,
         ctx: &mut TxContext
