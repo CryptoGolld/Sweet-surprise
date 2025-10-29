@@ -404,10 +404,10 @@ class PoolCreationBot {
     ]);
 
     // Transfer gas reserve to bot (builds up over time)
-    tx.transferObjects([botGasReserve], tx.pure.address(this.botAddress));
+    tx.transferObjects([botGasReserve], this.botAddress);
     
     // Transfer pool coins to bot address (for pool creation)
-    tx.transferObjects([poolSui, tokenCoin], tx.pure.address(this.botAddress));
+    tx.transferObjects([poolSui, tokenCoin], this.botAddress);
 
     tx.setGasBudget(CONFIG.gasBudget);
 
