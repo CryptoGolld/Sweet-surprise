@@ -476,12 +476,22 @@ class PoolCreationBot {
     }
   }
 
-  async burnLPTokens(poolAddress, coinType) {
+  async burnLPTokens(poolAddress, coinType, suiCoinId) {
     logger.info('🔥 Burning LP tokens (permanent lock)', { poolAddress });
 
     try {
-      // Get all positions for this pool
-      const positions = await this.getPositionsForPool(poolAddress);
+      // Get all positions for this pool with retry
+      let positions;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          positions = await this.getPositionsForPool(poolAddress);
+          break;
+        } catch (error) {
+          logger.warn(`SDK getPositions attempt ${attempt}/3 failed`, { error: error.message });
+          if (attempt === 3) throw error;
+          await this.sleep(1000 * attempt);
+        }
+      }
 
       if (positions.length === 0) {
         logger.warn('No positions found to burn');
@@ -491,10 +501,27 @@ class PoolCreationBot {
       // Burn each position using Cetus Burn Manager
       // This permanently locks liquidity but ALLOWS fee collection!
       for (const position of positions) {
-        const burnTx = await this.burnManager.createBurnTransaction({
-          positionId: position.id,
-          recipient: this.botAddress, // Who can claim fees
-        });
+        // Create burn transaction with retry
+        let burnTx;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            burnTx = await this.burnManager.createBurnTransaction({
+              positionId: position.id,
+              recipient: this.botAddress, // Who can claim fees
+            });
+            break;
+          } catch (error) {
+            logger.warn(`SDK createBurnTransaction attempt ${attempt}/3 failed`, { error: error.message });
+            if (attempt === 3) throw error;
+            await this.sleep(1000 * attempt);
+          }
+        }
+
+        // Use SUI from curve for gas
+        if (suiCoinId) {
+          burnTx.setGasPayment([{ objectId: suiCoinId, version: null, digest: null }]);
+          logger.info('Using SUI from curve for gas', { suiCoinId });
+        }
 
         const result = await this.client.signAndExecuteTransaction({
           signer: this.keypair,
