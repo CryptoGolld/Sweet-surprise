@@ -2,7 +2,7 @@
 
 ## Problem Identified
 
-The Cetus pool bot was **listening for the wrong event** and therefore not detecting any graduations.
+The Cetus pool bot was **listening for only ONE event type** but graduations can happen TWO ways, so it was missing manual graduations.
 
 ### Root Cause
 
@@ -20,12 +20,13 @@ The contract has **TWO different graduation paths**:
 
 ### The Bug
 
-The bot was listening for `GraduationReady` events:
-```javascript
-MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady`
-```
+The bot was only listening for `Graduated` events, but on testnet users are manually calling `try_graduate()` which emits `GraduationReady` events instead!
 
-But tokens graduate automatically through the `buy()` function, which emits `Graduated` events instead!
+**Reality:** Tokens can graduate TWO ways:
+1. **Auto-graduation**: When `buy()` hits 737M supply → emits `Graduated` 
+2. **Manual graduation**: Someone calls `try_graduate()` → emits `GraduationReady`
+
+The bot was only listening for #1, but testnet users are doing #2!
 
 ## The Fix
 
@@ -44,23 +45,31 @@ const events = await this.client.queryEvents({
 
 ### After:
 ```javascript
-// Query graduation events (Graduated is emitted on auto-graduation from buy())
-// Note: We listen for "Graduated" not "GraduationReady" because tokens auto-graduate
-// when they hit 737M supply during a buy transaction
-const events = await this.client.queryEvents({
-  query: {
-    MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated`,
-  },
-  ...
-});
+// Query BOTH types of graduation events:
+// 1. "Graduated" - Auto-graduation when buy() hits 737M supply
+// 2. "GraduationReady" - Manual graduation via try_graduate()
+const [graduatedEvents, graduationReadyEvents] = await Promise.all([
+  this.client.queryEvents({
+    query: { MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::Graduated` },
+    ...
+  }),
+  this.client.queryEvents({
+    query: { MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::GraduationReady` },
+    ...
+  })
+]);
+
+// Combine and process both event types
+const allEvents = [...graduatedEvents.data, ...graduationReadyEvents.data];
 ```
 
 ## Changes Made
 
 ### 1. `/workspace/pool-creation-bot/index.js`
-- ✅ Changed event query from `GraduationReady` to `Graduated` (line 140)
-- ✅ Updated event extraction logic to properly parse `Graduated` events (lines 194-222)
-- ✅ Added better comments explaining the auto-graduation flow
+- ✅ Now queries BOTH `Graduated` AND `GraduationReady` events (lines 140-155)
+- ✅ Combines and deduplicates events from both sources
+- ✅ Detects which event type triggered and logs accordingly
+- ✅ Handles both auto-graduation (buy) and manual graduation (try_graduate)
 
 ### 2. `/workspace/pool-creation-bot/README.md`
 - ✅ Updated documentation to reflect correct event name
