@@ -198,28 +198,54 @@ class PoolCreationBot {
 
     logger.info('Processing graduation', { curveId, coinType });
 
-    try {
-      // Step 1: Prepare liquidity (extract from curve)
-      const { suiAmount, tokenAmount } = await this.prepareLiquidity(curveId, coinType);
+    // Retry logic with exponential backoff
+    const maxRetries = CONFIG.maxRetries || 3;
+    let lastError = null;
 
-      // Step 2: Create Cetus pool (1% fee tier)
-      const poolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        logger.info(`Attempt ${attempt}/${maxRetries}`, { curveId });
+
+        // Step 1: Prepare liquidity (extract from curve)
+        const { suiAmount, tokenAmount, suiCoinId } = await this.prepareLiquidity(curveId, coinType);
+
+        // Step 2: Create Cetus pool (1% fee tier) - uses SUI from curve for gas
+        const poolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount, suiCoinId);
 
       // Step 3: Burn LP tokens (permanent lock, but can still claim fees!)
-      await this.burnLPTokens(poolAddress, coinType);
+      await this.burnLPTokens(poolAddress, coinType, suiCoinId);
 
-      logger.info('✅ Pool creation complete!', {
-        curveId,
-        poolAddress,
-        status: 'success',
-      });
-    } catch (error) {
-      logger.error('Failed to handle graduation', {
-        curveId,
-        error: error.message,
-        stack: error.stack,
-      });
+        logger.info('✅ Pool creation complete!', {
+          curveId,
+          poolAddress,
+          status: 'success',
+          attempt,
+        });
+
+        return; // Success! Exit retry loop
+      } catch (error) {
+        lastError = error;
+        logger.error(`Attempt ${attempt}/${maxRetries} failed`, {
+          curveId,
+          error: error.message,
+          stack: error.stack,
+        });
+
+        // If not last attempt, wait before retrying (exponential backoff)
+        if (attempt < maxRetries) {
+          const backoffMs = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s...
+          logger.info(`Retrying in ${backoffMs}ms...`, { curveId });
+          await this.sleep(backoffMs);
+        }
+      }
     }
+
+    // All retries failed
+    logger.error('❌ All retries exhausted', {
+      curveId,
+      attempts: maxRetries,
+      finalError: lastError?.message,
+    });
   }
 
   async prepareLiquidity(curveId, coinType) {
@@ -228,7 +254,7 @@ class PoolCreationBot {
     const tx = new Transaction();
 
     // Call prepare_liquidity_for_bot
-    tx.moveCall({
+    const [suiCoin, tokenCoin] = tx.moveCall({
       target: `${CONFIG.platformPackage}::bonding_curve::prepare_liquidity_for_bot`,
       typeArguments: [coinType],
       arguments: [
@@ -239,23 +265,31 @@ class PoolCreationBot {
       ],
     });
 
+    // Transfer coins to bot address (so we can use them)
+    tx.transferObjects([suiCoin, tokenCoin], tx.pure.address(this.botAddress));
+
     tx.setGasBudget(CONFIG.gasBudget);
 
     const result = await this.executeTransaction(tx);
+
+    // Get the SUI coin object ID that was transferred to bot
+    const suiCoinId = this.extractTransferredSuiCoin(result);
 
     // Extract amounts from transaction effects
     const suiAmount = await this.getSuiBalanceFromResult(result);
     const tokenAmount = await this.getTokenBalanceFromResult(result, coinType);
 
-    logger.info('Liquidity prepared', {
+    logger.info('✅ Liquidity prepared', {
       suiAmount: suiAmount.toString(),
       tokenAmount: tokenAmount.toString(),
+      suiCoinId,
+      note: 'Will use this SUI for all gas payments',
     });
 
-    return { suiAmount, tokenAmount };
+    return { suiAmount, tokenAmount, suiCoinId };
   }
 
-  async createCetusPool(coinType, suiAmount, tokenAmount) {
+  async createCetusPool(coinType, suiAmount, tokenAmount, suiCoinId) {
     logger.info('🏊 Creating Cetus pool', { coinType });
 
     // Determine coin order (Cetus requires lexicographic order)
@@ -288,11 +322,18 @@ class PoolCreationBot {
         uri: '',
       });
 
+      // Use SUI from curve for gas payment
+      if (suiCoinId) {
+        createPoolPayload.setGasPayment([{ objectId: suiCoinId, version: null, digest: null }]);
+        logger.info('Using SUI from curve for gas', { suiCoinId });
+      }
+
       logger.info('Creating pool with 1% fees', {
         coinA: coinA.slice(0, 20) + '...',
         coinB: coinB.slice(0, 20) + '...',
         feeTier: '1%',
         tickSpacing: CONFIG.tickSpacing,
+        gasPayment: suiCoinId ? 'from curve' : 'from bot wallet',
       });
 
       const result = await this.client.signAndExecuteTransaction({
@@ -320,8 +361,8 @@ class PoolCreationBot {
       // Wait for pool to be indexed
       await this.sleep(3000);
 
-      // Add liquidity
-      await this.addLiquidity(poolAddress, coinType, suiAmount, tokenAmount);
+      // Add liquidity (also uses SUI from curve for gas)
+      await this.addLiquidity(poolAddress, coinType, suiAmount, tokenAmount, suiCoinId);
 
       return poolAddress;
     } catch (error) {
@@ -330,25 +371,45 @@ class PoolCreationBot {
     }
   }
 
-  async addLiquidity(poolAddress, coinType, suiAmount, tokenAmount) {
+  async addLiquidity(poolAddress, coinType, suiAmount, tokenAmount, suiCoinId) {
     logger.info('💧 Adding liquidity', { poolAddress });
 
     try {
-      // Get pool info
-      const pool = await this.cetusSDK.Pool.getPool(poolAddress);
+      // Get pool info with retry
+      let pool;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          pool = await this.cetusSDK.Pool.getPool(poolAddress);
+          break;
+        } catch (error) {
+          logger.warn(`SDK getPool attempt ${attempt}/3 failed`, { error: error.message });
+          if (attempt === 3) throw error;
+          await this.sleep(1000 * attempt);
+        }
+      }
 
       // Calculate position range (full range)
       const lowerTick = pool.tickSpacing * Math.floor(-443636 / pool.tickSpacing);
       const upperTick = pool.tickSpacing * Math.floor(443636 / pool.tickSpacing);
 
-      // Open position and add liquidity
-      const openPositionPayload = await this.cetusSDK.Position.openPositionTransactionPayload({
-        poolAddress,
-        tickLower: lowerTick.toString(),
-        tickUpper: upperTick.toString(),
-        coinTypeA: pool.coinTypeA,
-        coinTypeB: pool.coinTypeB,
-      });
+      // Open position and add liquidity with retry
+      let openPositionPayload;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          openPositionPayload = await this.cetusSDK.Position.openPositionTransactionPayload({
+            poolAddress,
+            tickLower: lowerTick.toString(),
+            tickUpper: upperTick.toString(),
+            coinTypeA: pool.coinTypeA,
+            coinTypeB: pool.coinTypeB,
+          });
+          break;
+        } catch (error) {
+          logger.warn(`SDK openPosition attempt ${attempt}/3 failed`, { error: error.message });
+          if (attempt === 3) throw error;
+          await this.sleep(1000 * attempt);
+        }
+      }
 
       // Get coin objects
       const paymentCoinType = process.env.PAYMENT_COIN_TYPE || '0x2::sui::SUI';
@@ -356,15 +417,38 @@ class PoolCreationBot {
         ? [await this.getCoinObjects(paymentCoinType), await this.getCoinObjects(coinType)]
         : [await this.getCoinObjects(coinType), await this.getCoinObjects(paymentCoinType)];
 
-      // Add liquidity to position
-      const addLiquidityPayload = await this.cetusSDK.Position.addLiquidityTransactionPayload({
+      // Add liquidity to position with retry
+      let addLiquidityPayload;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          addLiquidityPayload = await this.cetusSDK.Position.addLiquidityTransactionPayload({
+            poolAddress,
+            positionId: openPositionPayload.positionId,
+            deltaLiquidity: '1000000', // Will be calculated by SDK
+            maxAmountA: suiAmount.toString(),
+            maxAmountB: tokenAmount.toString(),
+            coinTypeA: pool.coinTypeA,
+            coinTypeB: pool.coinTypeB,
+          });
+          break;
+        } catch (error) {
+          logger.warn(`SDK addLiquidity attempt ${attempt}/3 failed`, { error: error.message });
+          if (attempt === 3) throw error;
+          await this.sleep(1000 * attempt);
+        }
+      }
+
+      // Use SUI from curve for gas
+      if (suiCoinId) {
+        addLiquidityPayload.setGasPayment([{ objectId: suiCoinId, version: null, digest: null }]);
+        logger.info('Using SUI from curve for gas', { suiCoinId });
+      }
+
+      logger.info('Adding full-range liquidity', {
         poolAddress,
-        positionId: openPositionPayload.positionId,
-        deltaLiquidity: '1000000', // Will be calculated by SDK
-        maxAmountA: suiAmount.toString(),
-        maxAmountB: tokenAmount.toString(),
-        coinTypeA: pool.coinTypeA,
-        coinTypeB: pool.coinTypeB,
+        lowerTick,
+        upperTick,
+        gasPayment: suiCoinId ? 'from curve' : 'from bot wallet',
       });
 
       const result = await this.client.signAndExecuteTransaction({
@@ -499,6 +583,28 @@ class PoolCreationBot {
     const balanceChanges = result.balanceChanges || [];
     const tokenChange = balanceChanges.find(c => c.coinType === coinType);
     return BigInt(tokenChange?.amount || '0');
+  }
+
+  extractTransferredSuiCoin(result) {
+    // Find the SUI coin object that was created/transferred to bot
+    const suiObject = result.objectChanges?.find(
+      (change) => 
+        (change.type === 'created' || change.type === 'mutated') && 
+        change.objectType?.includes('0x2::coin::Coin') &&
+        change.objectType?.includes('SUI') &&
+        change.owner?.AddressOwner === this.botAddress
+    );
+    
+    if (suiObject) {
+      logger.info('Found SUI coin for gas payment', { 
+        coinId: suiObject.objectId,
+        owner: this.botAddress 
+      });
+      return suiObject.objectId;
+    }
+    
+    logger.warn('Could not find transferred SUI coin, will use bot wallet for gas');
+    return null;
   }
 
   async getCoinObjects(coinType) {

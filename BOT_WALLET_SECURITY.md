@@ -2,7 +2,22 @@
 
 ## 🔐 Why "Funded but Not Over-Funded"?
 
-### The Risk
+### ⚠️ UPDATE: Gas Now Paid from Curve SUI!
+
+**Important:** The bot now uses **SUI from the bonding curve** for gas, not from bot wallet funding!
+
+See `GAS_PAYMENT_EXPLAINED.md` for full details.
+
+### Bot Wallet Now Needs:
+
+**Testnet:** 0.5-1 SUI (just for AdminCap calls)  
+**Mainnet:** 1-2 SUI (minimal buffer)
+
+All pool creation gas is paid from the ~12K SUI extracted from each curve! ✅
+
+---
+
+### The Risk (Still Relevant for Security)
 
 Your bot wallet contains a **private key/seed phrase stored in plaintext** on your server (`.env` file).
 
@@ -21,7 +36,7 @@ cat /var/www/Sweet-surprise/pool-creation-bot/.env
 
 **Therefore:**
 - ❌ **Don't** put 10,000 SUI in bot wallet (huge risk!)
-- ✅ **Do** put enough for operations (minimal risk)
+- ✅ **Do** put 1-2 SUI (minimal risk, enough for AdminCap calls)
 
 ---
 
