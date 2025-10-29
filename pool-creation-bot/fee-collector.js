@@ -36,12 +36,21 @@ class FeeCollector {
 
   initializeKeypair() {
     const privateKey = process.env.LP_LOCKER_PRIVATE_KEY;
-    if (!privateKey) {
-      throw new Error('LP_LOCKER_PRIVATE_KEY not set');
+    const seedPhrase = process.env.LP_LOCKER_SEED_PHRASE;
+    
+    if (!privateKey && !seedPhrase) {
+      throw new Error('Either LP_LOCKER_PRIVATE_KEY or LP_LOCKER_SEED_PHRASE must be set');
     }
 
-    const keyHex = privateKey.replace(/^suiprivkey/, '');
-    this.keypair = Ed25519Keypair.fromSecretKey(fromHEX(keyHex));
+    if (seedPhrase) {
+      logger.info('Initializing from seed phrase');
+      this.keypair = Ed25519Keypair.deriveKeypair(seedPhrase);
+    } else {
+      logger.info('Initializing from private key');
+      const keyHex = privateKey.replace(/^suiprivkey/, '');
+      this.keypair = Ed25519Keypair.fromSecretKey(fromHEX(keyHex));
+    }
+
     this.address = this.keypair.getPublicKey().toSuiAddress();
 
     logger.info('Fee Collector initialized', { address: this.address });

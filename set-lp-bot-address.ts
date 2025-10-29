@@ -28,22 +28,29 @@ async function setLpBotAddress() {
   // Initialize Sui client
   const client = new SuiClient({ url: getFullnodeUrl('testnet') });
 
-  // Get private key from environment variable
+  // Get credentials from environment variable
   const privateKey = process.env.ADMIN_PRIVATE_KEY;
+  const seedPhrase = process.env.ADMIN_SEED_PHRASE;
   
-  if (!privateKey) {
-    throw new Error('ADMIN_PRIVATE_KEY environment variable not set. Run: export ADMIN_PRIVATE_KEY=suiprivkey...');
+  if (!privateKey && !seedPhrase) {
+    throw new Error('Either ADMIN_PRIVATE_KEY or ADMIN_SEED_PHRASE environment variable must be set');
   }
 
-  // Create keypair from private key
+  // Create keypair from seed phrase or private key
   let keypair: Ed25519Keypair;
   
   try {
-    // Handle both formats: with or without 'suiprivkey' prefix
-    const keyHex = privateKey.replace(/^suiprivkey/, '');
-    keypair = Ed25519Keypair.fromSecretKey(fromHEX(keyHex));
+    if (seedPhrase) {
+      console.log('Using seed phrase...');
+      keypair = Ed25519Keypair.deriveKeypair(seedPhrase);
+    } else {
+      console.log('Using private key...');
+      // Handle both formats: with or without 'suiprivkey' prefix
+      const keyHex = privateKey.replace(/^suiprivkey/, '');
+      keypair = Ed25519Keypair.fromSecretKey(fromHEX(keyHex));
+    }
   } catch (error) {
-    throw new Error('Invalid private key format. Expected suiprivkey... format');
+    throw new Error('Invalid credentials format. Expected seed phrase (12 words) or suiprivkey... format');
   }
 
   const activeAddress = keypair.getPublicKey().toSuiAddress();

@@ -55,12 +55,23 @@ class PoolCreationBot {
 
   initializeKeypair() {
     const privateKey = process.env.BOT_PRIVATE_KEY;
-    if (!privateKey) {
-      throw new Error('BOT_PRIVATE_KEY not set in environment');
+    const seedPhrase = process.env.BOT_SEED_PHRASE;
+    
+    if (!privateKey && !seedPhrase) {
+      throw new Error('Either BOT_PRIVATE_KEY or BOT_SEED_PHRASE must be set in environment');
     }
 
-    const keyHex = privateKey.replace(/^suiprivkey/, '');
-    this.keypair = Ed25519Keypair.fromSecretKey(fromHEX(keyHex));
+    if (seedPhrase) {
+      // Use seed phrase (mnemonic)
+      logger.info('Initializing from seed phrase');
+      this.keypair = Ed25519Keypair.deriveKeypair(seedPhrase);
+    } else {
+      // Use private key
+      logger.info('Initializing from private key');
+      const keyHex = privateKey.replace(/^suiprivkey/, '');
+      this.keypair = Ed25519Keypair.fromSecretKey(fromHEX(keyHex));
+    }
+
     this.botAddress = this.keypair.getPublicKey().toSuiAddress();
 
     logger.info('Bot initialized', { address: this.botAddress });
