@@ -32,7 +32,6 @@ const CONFIG = {
   rpcUrl: process.env.RPC_URL || 'https://fullnode.testnet.sui.io:443',
   platformPackage: process.env.PLATFORM_PACKAGE,
   platformState: process.env.PLATFORM_STATE,
-  adminCap: process.env.ADMIN_CAP,
   cetusGlobalConfig: process.env.CETUS_GLOBAL_CONFIG,
   cetusPools: process.env.CETUS_POOLS,
   tickSpacing: parseInt(process.env.TICK_SPACING || '200'), // 1% fee tier
@@ -253,26 +252,33 @@ class PoolCreationBot {
 
     const tx = new Transaction();
 
-    // Call prepare_liquidity_for_bot
+    // Call prepare_liquidity_for_bot (no AdminCap needed - uses configured LP bot address)
     const [suiCoin, tokenCoin] = tx.moveCall({
       target: `${CONFIG.platformPackage}::bonding_curve::prepare_liquidity_for_bot`,
       typeArguments: [coinType],
       arguments: [
-        tx.object(CONFIG.adminCap),
         tx.object(CONFIG.platformState),
         tx.object(curveId),
         tx.object('0x6'), // Clock
       ],
     });
 
-    // Transfer coins to bot address (so we can use them)
-    tx.transferObjects([suiCoin, tokenCoin], tx.pure.address(this.botAddress));
+    // Split 0.5 SUI for bot's gas reserve
+    const [botGasReserve, poolSui] = tx.splitCoins(suiCoin, [
+      tx.pure.u64(500_000_000), // 0.5 SUI in MIST
+    ]);
+
+    // Transfer gas reserve to bot (builds up over time)
+    tx.transferObjects([botGasReserve], tx.pure.address(this.botAddress));
+    
+    // Transfer pool coins to bot address (for pool creation)
+    tx.transferObjects([poolSui, tokenCoin], tx.pure.address(this.botAddress));
 
     tx.setGasBudget(CONFIG.gasBudget);
 
     const result = await this.executeTransaction(tx);
 
-    // Get the SUI coin object ID that was transferred to bot
+    // Get the SUI coin object ID that was transferred to bot for pool
     const suiCoinId = this.extractTransferredSuiCoin(result);
 
     // Extract amounts from transaction effects
@@ -283,7 +289,8 @@ class PoolCreationBot {
       suiAmount: suiAmount.toString(),
       tokenAmount: tokenAmount.toString(),
       suiCoinId,
-      note: 'Will use this SUI for all gas payments',
+      botGasReserve: '0.5 SUI kept for future operations',
+      poolAmount: '~11,999.5 SUI for pool',
     });
 
     return { suiAmount, tokenAmount, suiCoinId };
