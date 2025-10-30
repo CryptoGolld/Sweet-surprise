@@ -315,8 +315,15 @@ class PoolCreationBot {
       try {
         logger.info(`Attempt ${attempt}/${maxRetries}`, { curveId });
 
+        // Check if LP was already seeded (in case previous attempt succeeded but we didn't realize)
+        const freshState = await this.getCurveState(curveId, coinType);
+        if (freshState.lp_seeded) {
+          logger.info('✅ LP already seeded (previous attempt succeeded)', { curveId });
+          return; // Success! No need to retry
+        }
+
         // Step 0: Distribute payouts first (only if not already paid)
-        if (!curveState.reward_paid) {
+        if (!freshState.reward_paid) {
           await this.distributePayouts(curveId, coinType);
         } else {
           logger.info('Payouts already distributed, skipping');
@@ -331,8 +338,9 @@ class PoolCreationBot {
             note: 'Not extracting from curve again'
           });
           suiCoinId = retryData.suiCoinId;
-          suiAmount = retryData.suiAmount;
-          tokenAmount = retryData.tokenAmount;
+          // Convert back to BigInt from stored string
+          suiAmount = BigInt(retryData.suiAmount);
+          tokenAmount = BigInt(retryData.tokenAmount);
         } else {
           // First attempt - extract from curve
           // Always use V2 functions even for V1 graduations (upgrade compatible)
@@ -341,14 +349,14 @@ class PoolCreationBot {
           suiAmount = prepared.suiAmount;
           tokenAmount = prepared.tokenAmount;
           
-          // Store these in case we need to retry
+          // Store these in case we need to retry (convert BigInt to string for JSON safety)
           if (failedGraduations.has(curveId)) {
             const existing = failedGraduations.get(curveId);
             failedGraduations.set(curveId, {
               ...existing,
               suiCoinId,
-              suiAmount,
-              tokenAmount,
+              suiAmount: suiAmount.toString(),
+              tokenAmount: tokenAmount.toString(),
             });
           }
         }
