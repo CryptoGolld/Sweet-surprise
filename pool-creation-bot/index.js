@@ -258,6 +258,26 @@ class PoolCreationBot {
 
     logger.info('Processing graduation', { curveId, coinType, isRetry: !!retryData });
 
+    // Check curve state before processing
+    const curveState = await this.getCurveState(curveId, coinType);
+    
+    if (curveState.lp_seeded) {
+      logger.warn('⚠️  LP already seeded for this curve - skipping', { curveId });
+      return;
+    }
+    
+    if (!curveState.graduated) {
+      logger.warn('⚠️  Curve not yet graduated - skipping', { curveId });
+      return;
+    }
+
+    logger.info('Curve state', {
+      curveId,
+      graduated: curveState.graduated,
+      lp_seeded: curveState.lp_seeded,
+      reward_paid: curveState.reward_paid,
+    });
+
     // Retry logic with exponential backoff
     const maxRetries = CONFIG.maxRetries || 3;
     let lastError = null;
@@ -267,8 +287,12 @@ class PoolCreationBot {
       try {
         logger.info(`Attempt ${attempt}/${maxRetries}`, { curveId });
 
-        // Step 0: Distribute payouts first (required before prepare_pool_liquidity)
-        await this.distributePayouts(curveId, coinType);
+        // Step 0: Distribute payouts first (only if not already paid)
+        if (!curveState.reward_paid) {
+          await this.distributePayouts(curveId, coinType);
+        } else {
+          logger.info('Payouts already distributed, skipping');
+        }
         
         // Step 1: Prepare liquidity
         // If this is a retry and we already have the coins, reuse them
@@ -374,6 +398,29 @@ class PoolCreationBot {
       nextRetryIn: '10 minutes',
       note: 'Will retry with same coins to avoid mixing pools',
     });
+  }
+
+  async getCurveState(curveId, coinType) {
+    try {
+      const curve = await this.client.getObject({
+        id: curveId,
+        options: { showContent: true },
+      });
+
+      if (curve.data?.content?.dataType === 'moveObject') {
+        const fields = curve.data.content.fields;
+        return {
+          graduated: fields.graduated || false,
+          lp_seeded: fields.lp_seeded || false,
+          reward_paid: fields.reward_paid || false,
+        };
+      }
+
+      return { graduated: false, lp_seeded: false, reward_paid: false };
+    } catch (error) {
+      logger.error('Failed to get curve state', { curveId, error: error.message });
+      return { graduated: false, lp_seeded: false, reward_paid: false };
+    }
   }
 
   async distributePayouts(curveId, coinType) {
