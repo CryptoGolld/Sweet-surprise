@@ -388,46 +388,64 @@ class PoolCreationBot {
 
     const tx = new Transaction();
 
-    // Call prepare_pool_liquidity (no AdminCap needed!)
-    const [suiCoin, tokenCoin] = tx.moveCall({
-      target: `${CONFIG.platformPackage}::bonding_curve::prepare_pool_liquidity`,
+    // Call seed_pool_prepare (extracts liquidity to lp_recipient_address)
+    // Note: This transfers SUI and tokens directly to the configured recipient
+    // Make sure lp_recipient_address in platform_config is set to bot address!
+    tx.moveCall({
+      target: `${CONFIG.platformPackage}::bonding_curve::seed_pool_prepare`,
       typeArguments: [coinType],
       arguments: [
         tx.object(CONFIG.platformState),
         tx.object(curveId),
+        tx.pure.u64(0), // bump_bps = 0 to use default
       ],
     });
-
-    // Split 0.5 SUI for bot's gas reserve
-    // Note: splitCoins returns only the split-off coin(s), the original keeps the remainder
-    const botGasReserve = tx.splitCoins(suiCoin, [
-      tx.pure.u64(500_000_000), // 0.5 SUI in MIST
-    ])[0];
-
-    // Transfer gas reserve to bot (builds up over time)
-    tx.transferObjects([botGasReserve], this.botAddress);
-    
-    // Transfer pool coins to bot address (for pool creation)
-    // suiCoin now contains the remainder (~11,999.5 SUI)
-    tx.transferObjects([suiCoin, tokenCoin], this.botAddress);
 
     tx.setGasBudget(CONFIG.gasBudget);
 
     const result = await this.executeTransaction(tx);
 
-    // Get the SUI coin object ID that was transferred to bot for pool
-    const suiCoinId = this.extractTransferredSuiCoin(result);
+    logger.info('✅ seed_pool_prepare executed', {
+      txDigest: result.digest,
+      note: 'Coins should now be in bot wallet',
+    });
 
-    // Extract amounts from transaction effects
-    const suiAmount = await this.getSuiBalanceFromResult(result);
-    const tokenAmount = await this.getTokenBalanceFromResult(result, coinType);
+    // Give the network a moment to update
+    await this.sleep(2000);
+
+    // Query bot wallet to get the coins that were just transferred
+    const [suiCoinsResult, tokenCoinsResult] = await Promise.all([
+      this.client.getCoins({
+        owner: this.botAddress,
+        coinType: '0x2::sui::SUI',
+      }),
+      this.client.getCoins({
+        owner: this.botAddress,
+        coinType: coinType,
+      })
+    ]);
+
+    if (suiCoinsResult.data.length === 0) {
+      throw new Error('No SUI coins found in bot wallet after seed_pool_prepare');
+    }
+
+    if (tokenCoinsResult.data.length === 0) {
+      throw new Error('No token coins found in bot wallet after seed_pool_prepare');
+    }
+
+    // Get the largest coin objects (should be the ones just transferred)
+    const suiCoin = suiCoinsResult.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
+    const tokenCoin = tokenCoinsResult.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
+
+    const suiAmount = BigInt(suiCoin.balance);
+    const tokenAmount = BigInt(tokenCoin.balance);
+    const suiCoinId = suiCoin.coinObjectId;
 
     logger.info('✅ Liquidity prepared', {
       suiAmount: suiAmount.toString(),
       tokenAmount: tokenAmount.toString(),
       suiCoinId,
-      botGasReserve: '0.5 SUI kept for future operations',
-      poolAmount: '~11,999.5 SUI for pool',
+      note: 'Coins retrieved from bot wallet',
     });
 
     return { suiAmount, tokenAmount, suiCoinId };
