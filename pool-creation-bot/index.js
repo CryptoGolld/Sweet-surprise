@@ -32,6 +32,7 @@ const CONFIG = {
   rpcUrl: process.env.RPC_URL || 'https://fullnode.testnet.sui.io:443',
   platformPackage: process.env.PLATFORM_PACKAGE,
   platformState: process.env.PLATFORM_STATE,
+  v1PlatformPackage: process.env.V1_PLATFORM_PACKAGE, // For processing old graduations
   cetusGlobalConfig: process.env.CETUS_GLOBAL_CONFIG,
   cetusPools: process.env.CETUS_POOLS,
   tickSpacing: parseInt(process.env.TICK_SPACING || '200'), // 1% fee tier
@@ -133,21 +134,28 @@ class PoolCreationBot {
   async checkForGraduations() {
     try {
       // Query graduation events from BOTH V1 and V2 packages
-      // V1 package: 0xa49978... (graduations happened here before upgrade)
-      // V2 package: 0x84ac8c... (current upgraded version)
-      const V1_PACKAGE = '0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348';
+      // V1 package: graduations that happened before upgrade
+      // V2 package: current upgraded version
+      const queries = [];
       
-      const [v1GraduatedEvents, v1ReadyEvents, v2GraduatedEvents, v2ReadyEvents] = await Promise.all([
-        this.client.queryEvents({
-          query: { MoveEventType: `${V1_PACKAGE}::bonding_curve::Graduated` },
-          limit: 25,
-          order: 'descending',
-        }),
-        this.client.queryEvents({
-          query: { MoveEventType: `${V1_PACKAGE}::bonding_curve::GraduationReady` },
-          limit: 25,
-          order: 'descending',
-        }),
+      // Add V1 queries if V1 package is configured
+      if (CONFIG.v1PlatformPackage) {
+        queries.push(
+          this.client.queryEvents({
+            query: { MoveEventType: `${CONFIG.v1PlatformPackage}::bonding_curve::Graduated` },
+            limit: 25,
+            order: 'descending',
+          }),
+          this.client.queryEvents({
+            query: { MoveEventType: `${CONFIG.v1PlatformPackage}::bonding_curve::GraduationReady` },
+            limit: 25,
+            order: 'descending',
+          })
+        );
+      }
+      
+      // Add V2 queries
+      queries.push(
         this.client.queryEvents({
           query: { MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated` },
           limit: 25,
@@ -158,15 +166,12 @@ class PoolCreationBot {
           limit: 25,
           order: 'descending',
         })
-      ]);
+      );
+      
+      const results = await Promise.all(queries);
 
-      // Combine all event types from both packages
-      const allEvents = [
-        ...v1GraduatedEvents.data, 
-        ...v1ReadyEvents.data, 
-        ...v2GraduatedEvents.data, 
-        ...v2ReadyEvents.data
-      ];
+      // Combine all event types from all packages
+      const allEvents = results.flatMap(result => result.data);
       
       if (allEvents.length > 0) {
         // Sort by timestamp descending (newest first)
