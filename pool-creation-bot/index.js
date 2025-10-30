@@ -226,7 +226,13 @@ class PoolCreationBot {
     const txDigest = event.id.txDigest;
     const eventType = event.type.includes('Graduated') ? 'Graduated' : 'GraduationReady';
     
-    logger.info(`Detected ${eventType} event`, { txDigest: txDigest.slice(0, 16) + '...' });
+    // Detect which package version this graduation came from
+    const isV1Graduation = event.packageId === CONFIG.v1PlatformPackage;
+    
+    logger.info(`Detected ${eventType} event`, { 
+      txDigest: txDigest.slice(0, 16) + '...',
+      packageVersion: isV1Graduation ? 'V1' : 'V2'
+    });
     
     // Get the transaction to find curve_id and coin_type
     const tx = await this.client.getTransactionBlock({
@@ -282,7 +288,7 @@ class PoolCreationBot {
           tokenAmount = retryData.tokenAmount;
         } else {
           // First attempt - extract from curve
-          const prepared = await this.prepareLiquidity(curveId, coinType);
+          const prepared = await this.prepareLiquidity(curveId, coinType, isV1Graduation);
           suiCoinId = prepared.suiCoinId;
           suiAmount = prepared.suiAmount;
           tokenAmount = prepared.tokenAmount;
@@ -399,14 +405,19 @@ class PoolCreationBot {
     });
   }
 
-  async prepareLiquidity(curveId, coinType) {
-    logger.info('📦 Preparing liquidity', { curveId });
+  async prepareLiquidity(curveId, coinType, isV1 = false) {
+    logger.info('📦 Preparing liquidity', { curveId, packageVersion: isV1 ? 'V1' : 'V2' });
 
     const tx = new Transaction();
 
-    // Call prepare_pool_liquidity (no AdminCap needed!)
+    // V1 uses prepare_liquidity_for_bot, V2 uses prepare_pool_liquidity
+    const functionName = isV1 ? 'prepare_liquidity_for_bot' : 'prepare_pool_liquidity';
+    const packageId = isV1 ? CONFIG.v1PlatformPackage : CONFIG.platformPackage;
+    
+    logger.info(`Calling ${functionName} on package ${packageId.slice(0, 10)}...`);
+
     const [suiCoin, tokenCoin] = tx.moveCall({
-      target: `${CONFIG.platformPackage}::bonding_curve::prepare_pool_liquidity`,
+      target: `${packageId}::bonding_curve::${functionName}`,
       typeArguments: [coinType],
       arguments: [
         tx.object(CONFIG.platformState),
