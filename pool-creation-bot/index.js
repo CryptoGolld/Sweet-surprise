@@ -21,10 +21,12 @@ import { CetusClmmSDK } from '@cetusprotocol/cetus-sui-clmm-sdk';
 import { CetusBurnSDK } from '@cetusprotocol/cetus-burn-sdk';
 import dotenv from 'dotenv';
 import { createLogger } from './logger.js';
+import { GraduationState } from './graduation-state.js';
 
 dotenv.config();
 
 const logger = createLogger();
+const graduationState = new GraduationState();
 
 // Configuration
 const CONFIG = {
@@ -113,11 +115,113 @@ class PoolCreationBot {
   }
 
 
+  /**
+   * Resume a partially completed graduation after bot restart
+   * This uses stored coin IDs to avoid extracting from contract again
+   */
+  async resumeGraduation(grad) {
+    const { curveId, coinType, steps, coins, poolAddress } = grad;
+    
+    try {
+      // Check if curve was already completed by someone/something else
+      const curveState = await this.getCurveState(curveId, coinType);
+      if (curveState.lp_seeded && !coins) {
+        logger.warn('⚠️  Curve was seeded but we have no coins - may have been done externally', {
+          curveId,
+        });
+        graduationState.markFailed(curveId, 'Seeded externally without our tracking');
+        return;
+      }
+      
+      // If liquidity was prepared, we have coin IDs to work with
+      if (steps.liquidity && coins) {
+        const suiCoinId = coins.suiCoinId;
+        const suiAmount = BigInt(coins.suiAmount);
+        const tokenAmount = BigInt(coins.tokenAmount);
+        
+        logger.info('🔄 Resuming with tracked coins', {
+          curveId,
+          suiCoinId,
+          suiAmount: suiAmount.toString(),
+          tokenAmount: tokenAmount.toString(),
+        });
+        
+        // Resume from pool creation if not done
+        let currentPoolAddress = poolAddress;
+        if (!steps.pool) {
+          logger.info('📦 Creating pool (resumed)...', { curveId });
+          currentPoolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount, suiCoinId);
+          graduationState.markPoolComplete(curveId, currentPoolAddress);
+        } else {
+          logger.info('✅ Pool already created', { poolAddress: currentPoolAddress });
+        }
+        
+        // Resume from burn if not done
+        if (!steps.burn) {
+          logger.info('🔥 Burning LP (resumed)...', { curveId });
+          await this.burnLPTokens(currentPoolAddress, coinType, suiCoinId);
+          graduationState.markBurnComplete(curveId);
+        } else {
+          logger.info('✅ LP already burned');
+        }
+        
+        logger.info('✅ Resumed graduation complete!', { curveId, poolAddress: currentPoolAddress });
+        
+        // Report to indexer
+        await this.reportPoolToIndexer(coinType, currentPoolAddress);
+        
+        // Clean up
+        graduationState.removeCompleted(curveId);
+      } else {
+        // No coins tracked - can't resume, need to start fresh
+        logger.warn('⚠️  No coins tracked for this graduation - will restart from scratch', {
+          curveId,
+        });
+        
+        // Mark as failed so it doesn't retry endlessly
+        graduationState.markFailed(curveId, 'No coins tracked, cannot resume');
+      }
+    } catch (error) {
+      logger.error('Failed to resume graduation', {
+        curveId,
+        error: error.message,
+        stack: error.stack,
+      });
+      
+      graduationState.markFailed(curveId, error.message);
+    }
+  }
+
   async start() {
     logger.info('🤖 Pool Creation Bot Started', {
       network: CONFIG.network,
       pollingInterval: CONFIG.pollingInterval,
     });
+
+    // Load persistent state
+    await graduationState.load();
+    
+    // Resume incomplete graduations from previous session
+    const incomplete = graduationState.getIncomplete();
+    if (incomplete.length > 0) {
+      logger.info('🔄 Resuming incomplete graduations from previous session', {
+        count: incomplete.length,
+      });
+      
+      for (const grad of incomplete) {
+        logger.info('Resuming graduation', {
+          curveId: grad.curveId,
+          coinType: grad.coinType,
+          steps: grad.steps,
+        });
+        
+        // Resume from where we left off
+        await this.resumeGraduation(grad);
+      }
+    }
+    
+    // Clean up old state
+    await graduationState.cleanup();
 
     // Main loop
     while (true) {
@@ -258,6 +362,11 @@ class PoolCreationBot {
 
     logger.info('Processing graduation', { curveId, coinType, isRetry: !!retryData });
 
+    // Start tracking this graduation if not already tracked
+    if (!graduationState.has(curveId)) {
+      graduationState.startGraduation(curveId, coinType, event);
+    }
+
     // Check curve state before processing
     const curveState = await this.getCurveState(curveId, coinType);
     
@@ -325,8 +434,10 @@ class PoolCreationBot {
         // Step 0: Distribute payouts first (only if not already paid)
         if (!freshState.reward_paid) {
           await this.distributePayouts(curveId, coinType);
+          graduationState.markPayoutsComplete(curveId);
         } else {
           logger.info('Payouts already distributed, skipping');
+          graduationState.markPayoutsComplete(curveId);
         }
         
         // Step 1: Prepare liquidity
@@ -349,7 +460,10 @@ class PoolCreationBot {
           suiAmount = prepared.suiAmount;
           tokenAmount = prepared.tokenAmount;
           
-          // Store these in case we need to retry (convert BigInt to string for JSON safety)
+          // Store in persistent state for crash recovery
+          graduationState.markLiquidityComplete(curveId, prepared);
+          
+          // Also store in memory for immediate retry (convert BigInt to string for JSON safety)
           if (failedGraduations.has(curveId)) {
             const existing = failedGraduations.get(curveId);
             failedGraduations.set(curveId, {
@@ -363,9 +477,11 @@ class PoolCreationBot {
 
         // Step 2: Create Cetus pool (1% fee tier) - uses SUI from curve for gas
         const poolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount, suiCoinId);
+        graduationState.markPoolComplete(curveId, poolAddress);
 
         // Step 3: Burn LP tokens (permanent lock, but can still claim fees!)
         await this.burnLPTokens(poolAddress, coinType, suiCoinId);
+        graduationState.markBurnComplete(curveId);
 
         logger.info('✅ Pool creation complete!', {
           curveId,
