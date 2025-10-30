@@ -1,0 +1,13 @@
+{
+  "name": "tmp-cetus-run",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mysten/sui": "1.43.2",
+    "@cetusprotocol/cetus-sui-clmm-sdk": "5.4.0"
+  },
+  "devDependencies": {
+    "tsx": "4.20.6",
+    "typescript": "5.6.3"
+  }
+}
