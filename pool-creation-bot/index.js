@@ -229,18 +229,10 @@ class PoolCreationBot {
     // Detect which package version this graduation came from
     const isV1Graduation = event.packageId === CONFIG.v1PlatformPackage;
     
-    // V1 graduations require AdminCap which bot doesn't have - skip them
-    if (isV1Graduation) {
-      logger.warn('⚠️  V1 graduation detected - requires manual processing with AdminCap', {
-        txDigest: txDigest.slice(0, 16) + '...',
-        note: 'V1 prepare_liquidity_for_bot requires AdminCap. Please process manually.'
-      });
-      return; // Skip V1 graduations
-    }
-    
     logger.info(`Detected ${eventType} event`, { 
       txDigest: txDigest.slice(0, 16) + '...',
-      packageVersion: 'V2'
+      eventPackage: isV1Graduation ? 'V1' : 'V2',
+      note: isV1Graduation ? 'Will process using V2 functions (upgrade compatible)' : 'Native V2'
     });
     
     // Get the transaction to find curve_id and coin_type
@@ -297,7 +289,8 @@ class PoolCreationBot {
           tokenAmount = retryData.tokenAmount;
         } else {
           // First attempt - extract from curve
-          const prepared = await this.prepareLiquidity(curveId, coinType, isV1Graduation);
+          // Always use V2 functions even for V1 graduations (upgrade compatible)
+          const prepared = await this.prepareLiquidity(curveId, coinType);
           suiCoinId = prepared.suiCoinId;
           suiAmount = prepared.suiAmount;
           tokenAmount = prepared.tokenAmount;
@@ -414,19 +407,16 @@ class PoolCreationBot {
     });
   }
 
-  async prepareLiquidity(curveId, coinType, isV1 = false) {
-    logger.info('📦 Preparing liquidity', { curveId, packageVersion: isV1 ? 'V1' : 'V2' });
+  async prepareLiquidity(curveId, coinType) {
+    logger.info('📦 Preparing liquidity', { curveId });
 
     const tx = new Transaction();
 
-    // V1 uses prepare_liquidity_for_bot, V2 uses prepare_pool_liquidity
-    const functionName = isV1 ? 'prepare_liquidity_for_bot' : 'prepare_pool_liquidity';
-    const packageId = isV1 ? CONFIG.v1PlatformPackage : CONFIG.platformPackage;
-    
-    logger.info(`Calling ${functionName} on package ${packageId.slice(0, 10)}...`);
+    // Always use V2 function (works for both V1 and V2 graduations after upgrade)
+    logger.info(`Calling prepare_pool_liquidity on V2 package...`);
 
     const [suiCoin, tokenCoin] = tx.moveCall({
-      target: `${packageId}::bonding_curve::${functionName}`,
+      target: `${CONFIG.platformPackage}::bonding_curve::prepare_pool_liquidity`,
       typeArguments: [coinType],
       arguments: [
         tx.object(CONFIG.platformState),
