@@ -21,7 +21,8 @@ const CETUS_CONFIG = {
   packageId: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
 };
 
-const PAYMENT_COIN_TYPE = '0xcc2461fa74e9c03f7cdc5bf875b31667678101eb953a68429f15239315986461::suilfg_memefi::SUILFG_MEMEFI';
+// CRITICAL: Cetus only allows SUI or CETUS as quote token!
+const PAYMENT_COIN_TYPE = '0x2::sui::SUI';
 
 class CetusPoolTester {
   constructor() {

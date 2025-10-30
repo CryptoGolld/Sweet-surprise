@@ -675,7 +675,8 @@ class PoolCreationBot {
     await this.sleep(2000);
 
     // Query bot wallet for the coins that were just transferred
-    const paymentCoinType = '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81::suilfg_memefi::SUILFG_MEMEFI';
+    // CRITICAL: Use SUI for Cetus pools (Cetus only allows SUI or CETUS as quote token)
+    const paymentCoinType = process.env.PAYMENT_COIN_TYPE || '0x2::sui::SUI';
     
     const [suiCoins, tokenCoins] = await Promise.all([
       this.client.getCoins({
