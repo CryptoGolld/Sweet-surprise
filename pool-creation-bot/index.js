@@ -716,7 +716,7 @@ class PoolCreationBot {
       coinA,
       coinB,
       price,
-      sqrtPrice,
+      sqrtPrice: sqrtPrice.toString(), // Convert BigInt to string for logging
       tickSpacing: CONFIG.tickSpacing,
     });
 
