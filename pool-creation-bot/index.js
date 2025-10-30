@@ -280,19 +280,30 @@ class PoolCreationBot {
       sui_reserve_sui: (BigInt(curveState.sui_reserve) / BigInt(1_000_000_000)).toString(),
     });
     
-    // Check if there's enough balance for LP (12,000 SUI = 12,000,000,000,000 MIST)
-    const requiredBalance = BigInt(12_000_000_000_000);
+    // Sanity check: ensure reserve has meaningful balance for LP
+    // After payouts, should have ~11,999.7 SUI (rounding from 13,333 - 10%)
+    const minSafeBalance = BigInt(10_000_000_000_000); // 10,000 SUI minimum
     const currentBalance = BigInt(curveState.sui_reserve);
     
-    if (currentBalance < requiredBalance) {
+    if (currentBalance < minSafeBalance) {
       logger.error('⚠️  Insufficient balance in curve reserve!', {
         curveId,
-        required: '12,000 SUI',
+        minRequired: '10,000 SUI',
         current: (currentBalance / BigInt(1_000_000_000)).toString() + ' SUI',
-        shortfall: ((requiredBalance - currentBalance) / BigInt(1_000_000_000)).toString() + ' SUI',
-        note: 'This curve cannot be processed. May need manual intervention or different LP amount.',
+        note: 'Reserve too low - may have been drained or never graduated properly.',
       });
       return; // Skip this graduation
+    }
+    
+    // Log if balance is slightly lower than ideal (but still processable)
+    const idealBalance = BigInt(11_999_000_000_000); // ~11,999 SUI
+    if (currentBalance < idealBalance) {
+      logger.warn('💡 Balance slightly lower than ideal', {
+        curveId,
+        expected: '~12,000 SUI',
+        actual: (currentBalance / BigInt(1_000_000_000)).toString() + ' SUI',
+        note: 'Contract will use actual balance - this is normal due to rounding.',
+      });
     }
 
     // Retry logic with exponential backoff

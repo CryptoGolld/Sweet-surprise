@@ -626,13 +626,15 @@ module suilfg_launch_memefi::bonding_curve {
         let bot_address = platform_config::get_lp_bot_address(cfg);
         assert!(sender(ctx) == bot_address, E_UNAUTHORIZED_BOT);
         
-        let sui_for_lp = 12_000_000_000_000;
+        // Use actual reserve balance (accounts for rounding in payouts)
+        // Should be ~12,000 SUI after 10% platform cut from 13,333 target
+        let sui_for_lp = balance::value(&curve.sui_reserve);
         let tokens_for_lp = 207_000_000;
         let team_allocation = 2_000_000;
         let burn_or_treasury_amount = 54_000_000;
         
         let treasury_address = platform_config::get_treasury_address(cfg);
-        let lp_sui = coin::from_balance(balance::split(&mut curve.sui_reserve, sui_for_lp), ctx);
+        let lp_sui = coin::from_balance(balance::withdraw_all(&mut curve.sui_reserve), ctx);
         let lp_tokens = coin::mint(&mut curve.treasury, tokens_for_lp * 1_000_000_000, ctx);
         let team_tokens = coin::mint(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
         transfer::public_transfer(team_tokens, treasury_address);
@@ -672,13 +674,15 @@ module suilfg_launch_memefi::bonding_curve {
         let bot_address = platform_config::get_lp_bot_address(cfg);
         assert!(sender(ctx) == bot_address, E_UNAUTHORIZED_BOT);
         
-        let sui_for_lp = 12_000_000_000_000;
+        // Use actual reserve balance (accounts for rounding in payouts)
+        // Should be ~12,000 SUI after 10% platform cut from 13,333 target
+        let sui_for_lp = balance::value(&curve.sui_reserve);
         let tokens_for_lp = 207_000_000;
         let team_allocation = 2_000_000;
         let burn_or_treasury_amount = 54_000_000;
         
         let treasury_address = platform_config::get_treasury_address(cfg);
-        let lp_sui = coin::from_balance(balance::split(&mut curve.sui_reserve, sui_for_lp), ctx);
+        let lp_sui = coin::from_balance(balance::withdraw_all(&mut curve.sui_reserve), ctx);
         let lp_tokens = coin::mint(&mut curve.treasury, tokens_for_lp * 1_000_000_000, ctx);
         let team_tokens = coin::mint(&mut curve.treasury, team_allocation * 1_000_000_000, ctx);
         transfer::public_transfer(team_tokens, treasury_address);
