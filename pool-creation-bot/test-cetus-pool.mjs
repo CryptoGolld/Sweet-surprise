@@ -32,22 +32,24 @@ class CetusPoolTester {
   }
 
   async init() {
-    // Initialize Cetus CLMM SDK (exactly like the bot does)
+    // Initialize Cetus CLMM SDK with proper configuration
     const sdkOptions = {
       fullRpcUrl: RPC_URL,
       simulationAccount: {
         address: this.address,
       },
+      clmm_pool: {
+        package_id: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
+        published_at: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
+        config: {
+          global_config_id: CETUS_CONFIG.globalConfig,
+          pools_id: CETUS_CONFIG.pools,
+        },
+      },
     };
 
     this.cetusSDK = new CetusClmmSDK(sdkOptions);
     console.log('✅ Cetus SDK initialized');
-    
-    // The SDK uses _pool (private) not Pool
-    console.log('   Checking available methods...');
-    console.log('   SDK._pool methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(this.cetusSDK._pool)));
-    console.log('   SDK.Pool?:', typeof this.cetusSDK.Pool);
-    console.log('   SDK._pool?:', typeof this.cetusSDK._pool);
 
     // Initialize Burn SDK
     this.burnSDK = new CetusBurnSDK({
@@ -62,17 +64,24 @@ class CetusPoolTester {
     
     // Check all coin types
     const allCoins = await this.client.getAllCoins({ owner: this.address });
-    const uniqueTypes = new Set(allCoins.data.map(c => c.coinType));
+    const coinBalances = new Map();
     
-    console.log(`  Total coin types: ${uniqueTypes.size}`);
-    for (const coinType of uniqueTypes) {
-      const coins = allCoins.data.filter(c => c.coinType === coinType);
-      const total = coins.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-      const shortType = coinType.split('::').pop() || coinType;
-      console.log(`  - ${shortType}: ${total / BigInt(1_000_000_000)} (${coins.length} coins)`);
+    for (const coin of allCoins.data) {
+      const current = coinBalances.get(coin.coinType) || BigInt(0);
+      coinBalances.set(coin.coinType, current + BigInt(coin.balance));
     }
     
-    return Array.from(uniqueTypes);
+    console.log(`  Total coin types: ${coinBalances.size}`);
+    for (const [coinType, balance] of coinBalances) {
+      const shortType = coinType.split('::').pop() || coinType;
+      const coinCount = allCoins.data.filter(c => c.coinType === coinType).length;
+      console.log(`  - ${shortType}: ${balance / BigInt(1_000_000_000)} (${coinCount} coins)`);
+    }
+    
+    // Return only coin types with non-zero balance
+    return Array.from(coinBalances.entries())
+      .filter(([_, balance]) => balance > BigInt(0))
+      .map(([coinType, _]) => coinType);
   }
 
   sortCoinTypes(coinA, coinB) {
@@ -84,23 +93,24 @@ class CetusPoolTester {
     return BigInt(Math.floor(sqrtPrice));
   }
 
-  async createPool(tokenCoinType, amountFaucet, amountToken) {
+  async createPool2(tokenA, tokenB, amountA, amountB) {
     console.log('\n🏊 Creating Cetus Pool...');
-    console.log(`  Token: ${tokenCoinType.split('::').pop()}`);
-    console.log(`  Faucet amount: ${amountFaucet / BigInt(1_000_000_000)} tokens`);
-    console.log(`  Token amount: ${amountToken / BigInt(1_000_000_000)} tokens`);
+    console.log(`  Token A: ${tokenA.split('::').pop()}`);
+    console.log(`  Token B: ${tokenB.split('::').pop()}`);
+    console.log(`  Amount A: ${amountA / BigInt(1_000_000_000)} tokens`);
+    console.log(`  Amount B: ${amountB / BigInt(1_000_000_000)} tokens`);
     
     // Determine coin order (lexicographic)
-    const [coinA, coinB] = this.sortCoinTypes(PAYMENT_COIN_TYPE, tokenCoinType);
-    const isPaymentCoinA = coinA === PAYMENT_COIN_TYPE;
+    const [coinA, coinB] = this.sortCoinTypes(tokenA, tokenB);
+    const isTokenACoinA = coinA === tokenA;
     
     console.log(`  Coin A: ${coinA.split('::').pop()}`);
     console.log(`  Coin B: ${coinB.split('::').pop()}`);
     
     // Calculate sqrt price
-    const price = isPaymentCoinA 
-      ? Number(amountToken) / Number(amountFaucet)
-      : Number(amountFaucet) / Number(amountToken);
+    const price = isTokenACoinA 
+      ? Number(amountB) / Number(amountA)
+      : Number(amountA) / Number(amountB);
     
     const sqrtPrice = this.priceToSqrtPrice(price);
     
@@ -155,7 +165,7 @@ class CetusPoolTester {
     }
   }
 
-  async addLiquidity(poolAddress, tokenCoinType, amountFaucet, amountToken) {
+  async addLiquidity2(poolAddress, tokenA, tokenB, amountA, amountB) {
     console.log('\n💧 Adding Liquidity...');
     
     // Wait for pool to be indexed
@@ -282,27 +292,40 @@ class CetusPoolTester {
       
       const coinTypes = await this.checkWallet();
       
-      // Find a token to pair with faucet (not faucet itself)
-      const tokenTypes = coinTypes.filter(t => t !== PAYMENT_COIN_TYPE);
+      // Find tokens with substantial balance (> 1000 tokens to ensure we have enough)
+      const minBalance = BigInt(1000) * BigInt(1_000_000_000);
+      const allCoins = await this.client.getAllCoins({ owner: this.address });
+      const coinBalances = new Map();
       
-      if (tokenTypes.length === 0) {
-        console.log('\n❌ No other tokens found in wallet besides faucet token');
-        console.log('   Need at least 2 different token types to create a pool');
+      for (const coin of allCoins.data) {
+        const current = coinBalances.get(coin.coinType) || BigInt(0);
+        coinBalances.set(coin.coinType, current + BigInt(coin.balance));
+      }
+      
+      const substantialTokens = Array.from(coinBalances.entries())
+        .filter(([_, balance]) => balance > minBalance)
+        .map(([coinType, _]) => coinType);
+      
+      if (substantialTokens.length < 2) {
+        console.log('\n❌ Need at least 2 tokens with balance > 1000 to create pool');
         return;
       }
       
-      const tokenCoinType = tokenTypes[0];
-      console.log(`\n✅ Will create pool: Faucet / ${tokenCoinType.split('::').pop()}`);
+      // Use first two tokens with substantial balance
+      const tokenA = substantialTokens[0];
+      const tokenB = substantialTokens[1];
+      
+      console.log(`\n✅ Will create pool: ${tokenA.split('::').pop()} / ${tokenB.split('::').pop()}`);
       
       // Use small amounts for testing
-      const amountFaucet = BigInt(1000) * BigInt(1_000_000_000); // 1000 tokens
-      const amountToken = BigInt(100) * BigInt(1_000_000_000);   // 100 tokens
+      const amountA = BigInt(100) * BigInt(1_000_000_000); // 100 tokens
+      const amountB = BigInt(100) * BigInt(1_000_000_000);   // 100 tokens
       
-      // Step 1: Create pool
-      const poolAddress = await this.createPool(tokenCoinType, amountFaucet, amountToken);
+      // Step 1: Create pool between tokenA and tokenB
+      const poolAddress = await this.createPool2(tokenA, tokenB, amountA, amountB);
       
       // Step 2: Add liquidity
-      const positionId = await this.addLiquidity(poolAddress, tokenCoinType, amountFaucet, amountToken);
+      const positionId = await this.addLiquidity2(poolAddress, tokenA, tokenB, amountA, amountB);
       
       // Step 3: Burn LP
       await this.burnLP(poolAddress);

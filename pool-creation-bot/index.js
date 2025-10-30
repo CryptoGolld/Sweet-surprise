@@ -88,7 +88,7 @@ class PoolCreationBot {
         simulationAccount: {
           address: this.botAddress,
         },
-        cetus_config: {
+        clmm_pool: {
           package_id: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
           published_at: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
           config: {
