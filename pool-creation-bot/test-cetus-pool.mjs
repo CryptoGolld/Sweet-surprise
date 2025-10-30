@@ -98,34 +98,24 @@ class CetusPoolTester {
     return BigInt(Math.floor(sqrtPrice));
   }
 
-  async getCoinMetadata(coinType) {
+  async findCoinMetadata(coinType) {
     try {
-      // Query for CoinMetadata object for this coin type
-      const metadataFilter = {
-        MatchAll: [
-          { StructType: `0x2::coin::CoinMetadata<${coinType}>` },
-        ],
-      };
+      // Query for CoinMetadata<T> object - it's usually owned by package publisher
+      const packageId = coinType.split('::')[0];
       
-      const result = await this.client.getOwnedObjects({
-        owner: '0x0000000000000000000000000000000000000000000000000000000000000000', // System address
-        filter: metadataFilter,
+      // Try to find it in dynamic fields or as a shared object
+      const objects = await this.client.getOwnedObjects({
+        owner: packageId,
+        filter: { StructType: `0x2::coin::CoinMetadata<${coinType}>` },
         options: { showContent: false },
       });
       
-      if (result.data.length > 0) {
-        return result.data[0].data.objectId;
+      if (objects.data.length > 0) {
+        return objects.data[0].data.objectId;
       }
       
-      // Try querying all objects with this type (metadata might be elsewhere)
-      const allObjects = await this.client.queryEvents({
-        query: { MoveEventType: `0x2::coin::CoinMetadata<${coinType}>` },
-        limit: 1,
-      });
-      
-      return null; // No metadata found
+      return null;
     } catch (error) {
-      console.log(`  Warning: Could not find metadata for ${coinType.split('::').pop()}`);
       return null;
     }
   }
@@ -155,32 +145,68 @@ class CetusPoolTester {
     console.log(`  Sqrt Price: ${sqrtPrice.toString()}`);
     
     try {
-      // Use factory::create_pool directly (SDK v5 requires pool_creator_v2 which doesn't exist on testnet)
+      // Test pool_creator::create_pool_v2 - might be permissionless!
       const { Transaction } = await import('@mysten/sui/transactions');
       const tx = new Transaction();
       
-      console.log('  Calling factory::create_pool directly...');
+      console.log('  Testing pool_creator::create_pool_v2 (permissionless?)...');
+      
+      // Get coin objects for liquidity
+      const suiCoins = await this.client.getCoins({ owner: this.address, coinType: coinA });
+      const tokenCoins = await this.client.getCoins({ owner: this.address, coinType: coinB });
+      
+      if (suiCoins.data.length === 0 || tokenCoins.data.length === 0) {
+        throw new Error('No coins found for pool creation');
+      }
+      
+      // Calculate full range
+      const tickSpacing = 200;
+      const lowerTick = tickSpacing * Math.floor(-443636 / tickSpacing);
+      const upperTick = tickSpacing * Math.floor(443636 / tickSpacing);
+      
+      // Convert signed ticks to u32 (two's complement for negative values)
+      const lowerTickU32 = lowerTick < 0 ? 4294967296 + lowerTick : lowerTick;
+      const upperTickU32 = upperTick < 0 ? 4294967296 + upperTick : upperTick;
+      
+      console.log(`  Full range: ${lowerTick} to ${upperTick} (u32: ${lowerTickU32}, ${upperTickU32})`);
+      
+      // Split coins for the pool amounts
+      const coinASplit = tx.splitCoins(tx.object(suiCoins.data[0].coinObjectId), [tx.pure.u64(amountA.toString())]);
+      const coinBSplit = tx.splitCoins(tx.object(tokenCoins.data[0].coinObjectId), [tx.pure.u64(amountB.toString())]);
+      
+      // Get metadata - for testnet tokens, try to find them
+      const metadataA = await this.findCoinMetadata(coinA);
+      const metadataB = await this.findCoinMetadata(coinB);
+      
+      console.log(`  Metadata A: ${metadataA ? metadataA.slice(0, 20) + '...' : 'Will skip (not critical)'}`);
+      console.log(`  Metadata B: ${metadataB ? metadataB.slice(0, 20) + '...' : 'Will skip (not critical)'}`);
       
       tx.moveCall({
-        target: `${CETUS_CONFIG.packageId}::factory::create_pool`,
+        target: `${CETUS_CONFIG.packageId}::pool_creator::create_pool_v2`,
         typeArguments: [coinA, coinB],
         arguments: [
-          tx.object(CETUS_CONFIG.pools), // Pools (mutable)
-          tx.object(CETUS_CONFIG.globalConfig), // GlobalConfig  
-          tx.pure.u32(200), // tick_spacing
-          tx.pure.u128(sqrtPrice.toString()), // initialize_sqrt_price
-          tx.pure.string(''), // uri
-          tx.object('0x6'), // Clock
+          tx.object(CETUS_CONFIG.globalConfig), // 0: GlobalConfig
+          tx.object(CETUS_CONFIG.pools), // 1: Pools (mutable)
+          tx.pure.u32(tickSpacing), // 2: tick_spacing
+          tx.pure.u128(sqrtPrice.toString()), // 3: initialize_sqrt_price
+          tx.pure.string(''), // 4: uri
+          tx.pure.u32(lowerTickU32), // 5: tick_lower (two's complement)
+          tx.pure.u32(upperTickU32), // 6: tick_upper  
+          coinASplit[0], // 7: Coin<A>
+          coinBSplit[0], // 8: Coin<B>
+          tx.object(metadataA || CETUS_CONFIG.globalConfig), // 9: CoinMetadata<A> (placeholder for test)
+          tx.object(metadataB || CETUS_CONFIG.globalConfig), // 10: CoinMetadata<B> (placeholder for test)
+          tx.pure.bool(true), // 11: fix_amount_a
+          tx.object('0x6'), // 12: Clock
+          // 13: TxContext (auto-injected)
         ],
       });
       
       tx.setGasBudget(100000000);
       
-      const createPoolPayload = tx;
-      
       const result = await this.client.signAndExecuteTransaction({
         signer: this.keypair,
-        transaction: createPoolPayload,
+        transaction: tx,
         options: {
           showEffects: true,
           showEvents: true,
