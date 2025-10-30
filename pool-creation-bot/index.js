@@ -132,30 +132,41 @@ class PoolCreationBot {
 
   async checkForGraduations() {
     try {
-      // Query BOTH types of graduation events:
-      // 1. "Graduated" - Auto-graduation when buy() hits 737M supply
-      // 2. "GraduationReady" - Manual graduation via try_graduate() 
-      // We need both because users might call try_graduate() manually
+      // Query graduation events from BOTH V1 and V2 packages
+      // V1 package: 0xa49978... (graduations happened here before upgrade)
+      // V2 package: 0x84ac8c... (current upgraded version)
+      const V1_PACKAGE = '0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348';
       
-      const [graduatedEvents, graduationReadyEvents] = await Promise.all([
+      const [v1GraduatedEvents, v1ReadyEvents, v2GraduatedEvents, v2ReadyEvents] = await Promise.all([
         this.client.queryEvents({
-          query: {
-            MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated`,
-          },
+          query: { MoveEventType: `${V1_PACKAGE}::bonding_curve::Graduated` },
           limit: 25,
           order: 'descending',
         }),
         this.client.queryEvents({
-          query: {
-            MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady`,
-          },
+          query: { MoveEventType: `${V1_PACKAGE}::bonding_curve::GraduationReady` },
+          limit: 25,
+          order: 'descending',
+        }),
+        this.client.queryEvents({
+          query: { MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated` },
+          limit: 25,
+          order: 'descending',
+        }),
+        this.client.queryEvents({
+          query: { MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady` },
           limit: 25,
           order: 'descending',
         })
       ]);
 
-      // Combine both event types
-      const allEvents = [...graduatedEvents.data, ...graduationReadyEvents.data];
+      // Combine all event types from both packages
+      const allEvents = [
+        ...v1GraduatedEvents.data, 
+        ...v1ReadyEvents.data, 
+        ...v2GraduatedEvents.data, 
+        ...v2ReadyEvents.data
+      ];
       
       if (allEvents.length > 0) {
         // Sort by timestamp descending (newest first)
