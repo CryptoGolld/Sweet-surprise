@@ -20,25 +20,22 @@ const SUILFG_METADATA = '0x336cd28e6c1aefecf565fe52011cb5c9959b88b7f809df3085e20
 
 const SUI_TYPE = '0x2::sui::SUI';
 const SQRT_PRICE_1_TO_1 = '18446744073709551616';
+const FIX_TYPE = '0x0f390325a0c7702d67867f1ab28b5777b6a936e759d51f4601c9988d02128be6::fix_memefi::FIX_MEMEFI';
+const FIX_CURVE = '0xfb78d6b706a3e5cff8423422dcd530cd0fcceecfa2fd5b86a3e598e3362e1611';
 
 async function getOwnedCoinObject(client: SuiClient, owner: string, typeArg: string) {
-  const objs = await client.getOwnedObjects({ owner, options: { showType: true, showContent: true } });
-  for (const o of objs.data) {
-    const t = o.data?.type || '';
-    if (t.includes(`Coin<${typeArg}>`)) return o.data.objectId;
-  }
-  return null;
+  const coins = await client.getCoins({ owner, coinType: typeArg });
+  return coins.data[0]?.coinObjectId || null;
 }
 
 async function splitSui(client: SuiClient, kp: Ed25519Keypair, amount: bigint) {
   // Find a SUI coin
-  const coins = await client.getCoins({ owner: kp.getPublicKey().toSuiAddress(), coinType: SUI_TYPE });
-  if (!coins.data.length) throw new Error('No SUI coins');
-  const coinId = coins.data[0].coinObjectId;
   const tx = new Transaction();
-  const [split] = tx.splitCoins(tx.object(coinId), [tx.pure.u64(amount.toString())]);
+  const owner = kp.getPublicKey().toSuiAddress();
+  tx.setSender(owner);
+  const [split] = tx.splitCoins(tx.gas, [tx.pure.u64(amount.toString())]);
   // keep both coins, return split object id via transfer to self to materialize
-  tx.transferObjects([split], kp.getPublicKey().toSuiAddress());
+  tx.transferObjects([split], owner);
   tx.setGasBudget(20_000_000);
   const res = await client.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showObjectChanges: true } });
   const created = (res.objectChanges || []).find((c: any) => c.type === 'created' && (c.objectType || '').includes('Coin<0x2::sui::SUI>'));
@@ -84,6 +81,7 @@ async function createPoolSuiVsSuilfg() {
   const metaB = typeB === SUILFG_TYPE ? SUILFG_METADATA : '0x0000000000000000000000000000000000000000000000000000000000000000';
 
   const tx = new Transaction();
+  tx.setSender(owner);
   tx.setGasBudget(500_000_000);
 
   // Full range ticks used in example for spacing 200
@@ -117,7 +115,57 @@ async function createPoolSuiVsSuilfg() {
 }
 
 async function main() {
-  await createPoolSuiVsSuilfg();
+  const client = new SuiClient({ url: RPC });
+  const keypair = Ed25519Keypair.deriveKeypair(SEED);
+  const owner = keypair.getPublicKey().toSuiAddress();
+  console.log('Owner:', owner);
+
+  // 1) Try SUI vs any token we own: prefer FIX_MEMEFI if present
+  const fixCoinObj = await getOwnedCoinObject(client, owner, FIX_TYPE);
+  if (fixCoinObj) {
+    // fetch FIX metadata from curve object
+    const curve = await client.getObject({ id: FIX_CURVE, options: { showContent: true } });
+    const fixMeta = (curve as any).data?.content?.fields?.token_metadata;
+    if (!fixMeta) throw new Error('Cannot resolve FIX metadata');
+
+    const suiCoin = await splitSui(client, keypair, 100_000_000n);
+
+    const [typeA, typeB] = SUI_TYPE < FIX_TYPE ? [SUI_TYPE, FIX_TYPE] : [FIX_TYPE, SUI_TYPE];
+    const coinA = typeA === SUI_TYPE ? suiCoin : fixCoinObj;
+    const coinB = typeB === SUI_TYPE ? suiCoin : fixCoinObj;
+    const metaA = typeA === FIX_TYPE ? fixMeta : '0x0000000000000000000000000000000000000000000000000000000000000000';
+    const metaB = typeB === FIX_TYPE ? fixMeta : '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+    const tx = new Transaction();
+    tx.setSender(owner);
+    tx.setGasBudget(300_000_000);
+    const tickLower = 4295048; const tickUpper = 4295848; const tickSpacing = 200;
+    tx.moveCall({
+      target: `${CETUS_PKG}::pool_creator::create_pool_v2`,
+      typeArguments: [typeA, typeB],
+      arguments: [
+        tx.object(CETUS_CONFIG),
+        tx.object(CETUS_POOLS),
+        tx.pure.u32(tickSpacing),
+        tx.pure.u128(SQRT_PRICE_1_TO_1),
+        tx.pure.string('Direct move pool'),
+        tx.pure.u32(tickLower),
+        tx.pure.u32(tickUpper),
+        tx.object(coinA),
+        tx.object(coinB),
+        tx.object(metaA),
+        tx.object(metaB),
+        tx.pure.bool(false),
+        tx.object(CLOCK),
+      ],
+    });
+    const res = await client.signAndExecuteTransaction({ signer: keypair, transaction: tx, options: { showEffects: true, showObjectChanges: true, showEvents: true } });
+    console.log('SUI-FIX TX:', res.digest, 'status:', res.effects?.status?.status);
+    if (res.effects?.status?.status !== 'success') console.log('Error:', res.effects?.status?.error);
+  } else {
+    // fallback to SUILFG attempt (may fail if no SUILFG coins)
+    await createPoolSuiVsSuilfg();
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
