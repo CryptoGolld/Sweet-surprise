@@ -276,7 +276,24 @@ class PoolCreationBot {
       graduated: curveState.graduated,
       lp_seeded: curveState.lp_seeded,
       reward_paid: curveState.reward_paid,
+      sui_reserve_mist: curveState.sui_reserve,
+      sui_reserve_sui: (BigInt(curveState.sui_reserve) / BigInt(1_000_000_000)).toString(),
     });
+    
+    // Check if there's enough balance for LP (12,000 SUI = 12,000,000,000,000 MIST)
+    const requiredBalance = BigInt(12_000_000_000_000);
+    const currentBalance = BigInt(curveState.sui_reserve);
+    
+    if (currentBalance < requiredBalance) {
+      logger.error('⚠️  Insufficient balance in curve reserve!', {
+        curveId,
+        required: '12,000 SUI',
+        current: (currentBalance / BigInt(1_000_000_000)).toString() + ' SUI',
+        shortfall: ((requiredBalance - currentBalance) / BigInt(1_000_000_000)).toString() + ' SUI',
+        note: 'This curve cannot be processed. May need manual intervention or different LP amount.',
+      });
+      return; // Skip this graduation
+    }
 
     // Retry logic with exponential backoff
     const maxRetries = CONFIG.maxRetries || 3;
@@ -409,17 +426,25 @@ class PoolCreationBot {
 
       if (curve.data?.content?.dataType === 'moveObject') {
         const fields = curve.data.content.fields;
+        
+        // Extract reserve balance for debugging
+        let reserveBalance = '0';
+        if (fields.sui_reserve && typeof fields.sui_reserve === 'object') {
+          reserveBalance = fields.sui_reserve.value || fields.sui_reserve || '0';
+        }
+        
         return {
           graduated: fields.graduated || false,
           lp_seeded: fields.lp_seeded || false,
           reward_paid: fields.reward_paid || false,
+          sui_reserve: reserveBalance,
         };
       }
 
-      return { graduated: false, lp_seeded: false, reward_paid: false };
+      return { graduated: false, lp_seeded: false, reward_paid: false, sui_reserve: '0' };
     } catch (error) {
       logger.error('Failed to get curve state', { curveId, error: error.message });
-      return { graduated: false, lp_seeded: false, reward_paid: false };
+      return { graduated: false, lp_seeded: false, reward_paid: false, sui_reserve: '0' };
     }
   }
 
