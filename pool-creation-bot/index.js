@@ -186,29 +186,23 @@ class PoolCreationBot {
           logger.info(`📊 Found ${newEvents.length} new graduation(s) to process`);
         }
 
-        // Process graduations in batches to avoid overwhelming the system
-        const batchSize = CONFIG.maxConcurrentPools;
+        // Process graduations ONE AT A TIME to avoid race conditions
+        logger.info(`Processing ${newEvents.length} graduation(s) sequentially...`);
         
-        for (let i = 0; i < newEvents.length; i += batchSize) {
-          const batch = newEvents.slice(i, i + batchSize);
+        for (let i = 0; i < newEvents.length; i++) {
+          const event = newEvents[i];
+          logger.info(`Processing graduation ${i + 1}/${newEvents.length}`);
           
-          logger.info(`Processing batch ${Math.floor(i / batchSize) + 1}: ${batch.length} graduations`);
-          
-          // Process batch in parallel
-          const promises = batch.map(event => 
-            this.handleGraduation(event).catch(error => {
-              logger.error('Graduation handling failed', {
-                txDigest: event.id.txDigest,
-                error: error.message,
-              });
-              // Continue with other graduations even if one fails
-            })
-          );
-
-          // Wait for batch to complete before next batch
-          await Promise.all(promises);
-          
-          logger.info(`Batch complete. Processed ${Math.min(i + batchSize, newEvents.length)}/${newEvents.length} graduations`);
+          try {
+            await this.handleGraduation(event);
+            logger.info(`✅ Graduation ${i + 1}/${newEvents.length} complete`);
+          } catch (error) {
+            logger.error(`❌ Graduation ${i + 1}/${newEvents.length} failed`, {
+              txDigest: event.id.txDigest,
+              error: error.message,
+            });
+            // Continue with next graduation
+          }
         }
 
         // Mark all as processed
@@ -412,10 +406,10 @@ class PoolCreationBot {
 
     const tx = new Transaction();
 
-    // Always use V2 function (works for both V1 and V2 graduations after upgrade)
+    // prepare_pool_liquidity transfers coins directly to bot address (no return values)
     logger.info(`Calling prepare_pool_liquidity on V2 package...`);
 
-    const [suiCoin, tokenCoin] = tx.moveCall({
+    tx.moveCall({
       target: `${CONFIG.platformPackage}::bonding_curve::prepare_pool_liquidity`,
       typeArguments: [coinType],
       arguments: [
@@ -424,36 +418,49 @@ class PoolCreationBot {
       ],
     });
 
-    // Split 0.5 SUI for bot's gas reserve
-    // Note: splitCoins returns only the split-off coin(s), the original keeps the remainder
-    const botGasReserve = tx.splitCoins(suiCoin, [
-      tx.pure.u64(500_000_000), // 0.5 SUI in MIST
-    ])[0];
-
-    // Transfer gas reserve to bot (builds up over time)
-    tx.transferObjects([botGasReserve], this.botAddress);
-    
-    // Transfer pool coins to bot address (for pool creation)
-    // suiCoin now contains the remainder (~11,999.5 SUI)
-    tx.transferObjects([suiCoin, tokenCoin], this.botAddress);
-
     tx.setGasBudget(CONFIG.gasBudget);
 
     const result = await this.executeTransaction(tx);
 
-    // Get the SUI coin object ID that was transferred to bot for pool
-    const suiCoinId = this.extractTransferredSuiCoin(result);
+    logger.info('✅ prepare_pool_liquidity executed', {
+      txDigest: result.digest,
+      note: 'Coins transferred to bot wallet, querying...',
+    });
 
-    // Extract amounts from transaction effects
-    const suiAmount = await this.getSuiBalanceFromResult(result);
-    const tokenAmount = await this.getTokenBalanceFromResult(result, coinType);
+    // Wait a moment for the transaction to be indexed
+    await this.sleep(2000);
+
+    // Query bot wallet for the coins that were just transferred
+    const paymentCoinType = '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81::suilfg_memefi::SUILFG_MEMEFI';
+    
+    const [suiCoins, tokenCoins] = await Promise.all([
+      this.client.getCoins({
+        owner: this.botAddress,
+        coinType: paymentCoinType,
+      }),
+      this.client.getCoins({
+        owner: this.botAddress,
+        coinType: coinType,
+      })
+    ]);
+
+    // Get the largest coins (should be the ones just transferred)
+    const suiCoin = suiCoins.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
+    const tokenCoin = tokenCoins.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
+
+    if (!suiCoin || !tokenCoin) {
+      throw new Error('Coins not found in bot wallet after prepare_pool_liquidity');
+    }
+
+    const suiAmount = BigInt(suiCoin.balance);
+    const tokenAmount = BigInt(tokenCoin.balance);
+    const suiCoinId = suiCoin.coinObjectId;
 
     logger.info('✅ Liquidity prepared', {
       suiAmount: suiAmount.toString(),
       tokenAmount: tokenAmount.toString(),
       suiCoinId,
-      botGasReserve: '0.5 SUI kept for future operations',
-      poolAmount: '~11,999.5 SUI for pool',
+      note: 'Retrieved from bot wallet',
     });
 
     return { suiAmount, tokenAmount, suiCoinId };
