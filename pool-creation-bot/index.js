@@ -88,6 +88,14 @@ class PoolCreationBot {
         simulationAccount: {
           address: this.botAddress,
         },
+        cetus_config: {
+          package_id: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
+          published_at: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
+          config: {
+            global_config_id: CONFIG.cetusGlobalConfig,
+            pools_id: CONFIG.cetusPools,
+          },
+        },
       };
 
       this.cetusSDK = new CetusClmmSDK(sdkOptions);
