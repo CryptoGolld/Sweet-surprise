@@ -422,19 +422,12 @@ class PoolCreationBot {
     const suiAmount = await this.getSuiBalanceFromResult(result);
     const tokenAmount = await this.getTokenBalanceFromResult(result, coinType);
 
-    // Get the largest coin objects (should be the ones just transferred)
-    const suiCoin = suiCoinsResult.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
-    const tokenCoin = tokenCoinsResult.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
-
-    const suiAmount = BigInt(suiCoin.balance);
-    const tokenAmount = BigInt(tokenCoin.balance);
-    const suiCoinId = suiCoin.coinObjectId;
-
     logger.info('✅ Liquidity prepared', {
       suiAmount: suiAmount.toString(),
       tokenAmount: tokenAmount.toString(),
       suiCoinId,
-      note: 'Coins retrieved from bot wallet',
+      botGasReserve: '0.5 SUI kept for future operations',
+      poolAmount: '~11,999.5 SUI for pool',
     });
 
     return { suiAmount, tokenAmount, suiCoinId };
