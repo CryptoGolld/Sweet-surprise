@@ -721,8 +721,8 @@ class PoolCreationBot {
     });
 
     try {
-      // Create pool using Cetus SDK
-      const createPoolPayload = await this.cetusSDK.Pool.createPoolTransactionPayload({
+      // Create pool using Cetus SDK (note: SDK has typo "creat" not "create")
+      const createPoolPayload = await this.cetusSDK.Pool.creatPoolTransactionPayload({
         coinTypeA: coinA,
         coinTypeB: coinB,
         tickSpacing: CONFIG.tickSpacing, // 200 = 1% fee tier
