@@ -89,12 +89,16 @@ class PoolCreationBot {
           address: this.botAddress,
         },
         clmm_pool: {
-          package_id: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
-          published_at: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
+          package_id: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
+          published_at: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
           config: {
             global_config_id: CONFIG.cetusGlobalConfig,
             pools_id: CONFIG.cetusPools,
           },
+        },
+        integrate: {
+          package_id: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
+          published_at: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
         },
       };
 
@@ -733,8 +737,8 @@ class PoolCreationBot {
       const createPoolPayload = await this.cetusSDK.Pool.creatPoolTransactionPayload({
         coinTypeA: coinA,
         coinTypeB: coinB,
-        tickSpacing: CONFIG.tickSpacing, // 200 = 1% fee tier
-        initializeSqrtPrice: sqrtPrice.toString(),
+        tick_spacing: CONFIG.tickSpacing, // 200 = 1% fee tier - this one IS snake_case
+        initialize_sqrt_price: sqrtPrice.toString(), // snake_case
         uri: '',
       });
 

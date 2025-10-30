@@ -14,10 +14,11 @@ const SEED_PHRASE = 'royal stairs eye dizzy response educate fire edge smooth cr
 const RPC_URL = 'https://fullnode.testnet.sui.io:443';
 const NETWORK = 'testnet';
 
-// Cetus config for testnet
+// Cetus config for testnet (from querying global config object)
 const CETUS_CONFIG = {
-  globalConfig: '0x0868b71c0cba55bf0faf6c40df8c179c67a4d0ba0e79965b68b3d72d7dfbf666',
-  pools: '0x26579d8d8a0d46fa5bb5f0e4a31f84c9b174a88e0f5e0f86f98684c9aa2e61d0',
+  globalConfig: '0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e',
+  pools: '0x50eb61dd5928cec5ea04711a2e9b72e5237e79e9fbcd2ce3d5469dc8708e0ee2',
+  packageId: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
 };
 
 const PAYMENT_COIN_TYPE = '0xcc2461fa74e9c03f7cdc5bf875b31667678101eb953a68429f15239315986461::suilfg_memefi::SUILFG_MEMEFI';
@@ -32,23 +33,26 @@ class CetusPoolTester {
   }
 
   async init() {
-    // Initialize Cetus CLMM SDK with proper configuration
-    const sdkOptions = {
+    // Initialize Cetus CLMM SDK with complete configuration
+    this.cetusSDK = new CetusClmmSDK({
       fullRpcUrl: RPC_URL,
+      network: NETWORK,
       simulationAccount: {
         address: this.address,
       },
       clmm_pool: {
-        package_id: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
-        published_at: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
+        package_id: CETUS_CONFIG.packageId,
+        published_at: CETUS_CONFIG.packageId,
         config: {
           global_config_id: CETUS_CONFIG.globalConfig,
           pools_id: CETUS_CONFIG.pools,
         },
       },
-    };
-
-    this.cetusSDK = new CetusClmmSDK(sdkOptions);
+      integrate: {
+        package_id: CETUS_CONFIG.packageId,
+        published_at: CETUS_CONFIG.packageId,
+      },
+    });
     console.log('✅ Cetus SDK initialized');
 
     // Initialize Burn SDK
@@ -118,14 +122,26 @@ class CetusPoolTester {
     console.log(`  Sqrt Price: ${sqrtPrice.toString()}`);
     
     try {
-      // Create pool (note: SDK has typo "creat" not "create")
-      const createPoolPayload = await this.cetusSDK.Pool.creatPoolTransactionPayload({
-        coinTypeA: coinA,
-        coinTypeB: coinB,
-        tickSpacing: 200, // 1% fee tier
-        initializeSqrtPrice: sqrtPrice.toString(),
-        uri: '',
+      // Try using factory::create_pool_v2 directly since pool_script doesn't exist
+      console.log('  Using factory::create_pool_v2 directly...');
+      
+      const { Transaction } = await import('@mysten/sui/transactions');
+      const tx = new Transaction();
+      
+      tx.moveCall({
+        target: `${CETUS_CONFIG.packageId}::factory::create_pool`,
+        typeArguments: [coinA, coinB],
+        arguments: [
+          tx.object(CETUS_CONFIG.pools), // Pools (mutable)
+          tx.object(CETUS_CONFIG.globalConfig), // GlobalConfig
+          tx.pure.u32(200), // tick_spacing
+          tx.pure.u128(sqrtPrice.toString()), // initialize_sqrt_price
+          tx.pure.string(''), // uri
+          tx.object('0x6'), // Clock
+        ],
       });
+      
+      const createPoolPayload = tx;
       
       const result = await this.client.signAndExecuteTransaction({
         signer: this.keypair,
