@@ -21,10 +21,12 @@ import { CetusClmmSDK } from '@cetusprotocol/cetus-sui-clmm-sdk';
 import { CetusBurnSDK } from '@cetusprotocol/cetus-burn-sdk';
 import dotenv from 'dotenv';
 import { createLogger } from './logger.js';
+import { GraduationState } from './graduation-state.js';
 
 dotenv.config();
 
 const logger = createLogger();
+const graduationState = new GraduationState();
 
 // Configuration
 const CONFIG = {
@@ -32,6 +34,7 @@ const CONFIG = {
   rpcUrl: process.env.RPC_URL || 'https://fullnode.testnet.sui.io:443',
   platformPackage: process.env.PLATFORM_PACKAGE,
   platformState: process.env.PLATFORM_STATE,
+  v1PlatformPackage: process.env.V1_PLATFORM_PACKAGE, // For processing old graduations
   cetusGlobalConfig: process.env.CETUS_GLOBAL_CONFIG,
   cetusPools: process.env.CETUS_POOLS,
   tickSpacing: parseInt(process.env.TICK_SPACING || '200'), // 1% fee tier
@@ -85,9 +88,22 @@ class PoolCreationBot {
         simulationAccount: {
           address: this.botAddress,
         },
+        clmm_pool: {
+          package_id: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
+          published_at: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
+          config: {
+            global_config_id: CONFIG.cetusGlobalConfig,
+            pools_id: CONFIG.cetusPools,
+          },
+        },
+        integrate: {
+          package_id: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
+          published_at: '0x0c7ae833c220aa73a3643a0d508afa4ac5d50d97312ea4584e35f9eb21b9df12',
+        },
       };
 
       this.cetusSDK = new CetusClmmSDK(sdkOptions);
+      this.cetusSDK.senderAddress = this.botAddress; // Required in SDK v5+
       logger.info('Cetus SDK initialized');
       logger.info('Pool configuration: 1% fee tier (tick spacing 200)');
     } catch (error) {
@@ -112,11 +128,113 @@ class PoolCreationBot {
   }
 
 
+  /**
+   * Resume a partially completed graduation after bot restart
+   * This uses stored coin IDs to avoid extracting from contract again
+   */
+  async resumeGraduation(grad) {
+    const { curveId, coinType, steps, coins, poolAddress } = grad;
+    
+    try {
+      // Check if curve was already completed by someone/something else
+      const curveState = await this.getCurveState(curveId, coinType);
+      if (curveState.lp_seeded && !coins) {
+        logger.warn('⚠️  Curve was seeded but we have no coins - may have been done externally', {
+          curveId,
+        });
+        graduationState.markFailed(curveId, 'Seeded externally without our tracking');
+        return;
+      }
+      
+      // If liquidity was prepared, we have coin IDs to work with
+      if (steps.liquidity && coins) {
+        const suiCoinId = coins.suiCoinId;
+        const suiAmount = BigInt(coins.suiAmount);
+        const tokenAmount = BigInt(coins.tokenAmount);
+        
+        logger.info('🔄 Resuming with tracked coins', {
+          curveId,
+          suiCoinId,
+          suiAmount: suiAmount.toString(),
+          tokenAmount: tokenAmount.toString(),
+        });
+        
+        // Resume from pool creation if not done
+        let currentPoolAddress = poolAddress;
+        if (!steps.pool) {
+          logger.info('📦 Creating pool (resumed)...', { curveId });
+          currentPoolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount, suiCoinId);
+          graduationState.markPoolComplete(curveId, currentPoolAddress);
+        } else {
+          logger.info('✅ Pool already created', { poolAddress: currentPoolAddress });
+        }
+        
+        // Resume from burn if not done
+        if (!steps.burn) {
+          logger.info('🔥 Burning LP (resumed)...', { curveId });
+          await this.burnLPTokens(currentPoolAddress, coinType, suiCoinId);
+          graduationState.markBurnComplete(curveId);
+        } else {
+          logger.info('✅ LP already burned');
+        }
+        
+        logger.info('✅ Resumed graduation complete!', { curveId, poolAddress: currentPoolAddress });
+        
+        // Report to indexer
+        await this.reportPoolToIndexer(coinType, currentPoolAddress);
+        
+        // Clean up
+        graduationState.removeCompleted(curveId);
+      } else {
+        // No coins tracked - can't resume, need to start fresh
+        logger.warn('⚠️  No coins tracked for this graduation - will restart from scratch', {
+          curveId,
+        });
+        
+        // Mark as failed so it doesn't retry endlessly
+        graduationState.markFailed(curveId, 'No coins tracked, cannot resume');
+      }
+    } catch (error) {
+      logger.error('Failed to resume graduation', {
+        curveId,
+        error: error.message,
+        stack: error.stack,
+      });
+      
+      graduationState.markFailed(curveId, error.message);
+    }
+  }
+
   async start() {
     logger.info('🤖 Pool Creation Bot Started', {
       network: CONFIG.network,
       pollingInterval: CONFIG.pollingInterval,
     });
+
+    // Load persistent state
+    await graduationState.load();
+    
+    // Resume incomplete graduations from previous session
+    const incomplete = graduationState.getIncomplete();
+    if (incomplete.length > 0) {
+      logger.info('🔄 Resuming incomplete graduations from previous session', {
+        count: incomplete.length,
+      });
+      
+      for (const grad of incomplete) {
+        logger.info('Resuming graduation', {
+          curveId: grad.curveId,
+          coinType: grad.coinType,
+          steps: grad.steps,
+        });
+        
+        // Resume from where we left off
+        await this.resumeGraduation(grad);
+      }
+    }
+    
+    // Clean up old state
+    await graduationState.cleanup();
 
     // Main loop
     while (true) {
@@ -132,21 +250,52 @@ class PoolCreationBot {
 
   async checkForGraduations() {
     try {
-      // Query graduation events (GraduationReady is emitted when token reaches threshold)
-      const events = await this.client.queryEvents({
-        query: {
-          MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady`,
-        },
-        limit: 50,
-        order: 'descending',
-        ...(lastCheckedCursor ? { cursor: lastCheckedCursor } : {}),
-      });
+      // Query graduation events from BOTH V1 and V2 packages
+      // V1 package: graduations that happened before upgrade
+      // V2 package: current upgraded version
+      const queries = [];
+      
+      // Add V1 queries if V1 package is configured
+      if (CONFIG.v1PlatformPackage) {
+        queries.push(
+          this.client.queryEvents({
+            query: { MoveEventType: `${CONFIG.v1PlatformPackage}::bonding_curve::Graduated` },
+            limit: 25,
+            order: 'descending',
+          }),
+          this.client.queryEvents({
+            query: { MoveEventType: `${CONFIG.v1PlatformPackage}::bonding_curve::GraduationReady` },
+            limit: 25,
+            order: 'descending',
+          })
+        );
+      }
+      
+      // Add V2 queries
+      queries.push(
+        this.client.queryEvents({
+          query: { MoveEventType: `${CONFIG.platformPackage}::bonding_curve::Graduated` },
+          limit: 25,
+          order: 'descending',
+        }),
+        this.client.queryEvents({
+          query: { MoveEventType: `${CONFIG.platformPackage}::bonding_curve::GraduationReady` },
+          limit: 25,
+          order: 'descending',
+        })
+      );
+      
+      const results = await Promise.all(queries);
 
-      if (events.data.length > 0) {
-        lastCheckedCursor = events.nextCursor;
+      // Combine all event types from all packages
+      const allEvents = results.flatMap(result => result.data);
+      
+      if (allEvents.length > 0) {
+        // Sort by timestamp descending (newest first)
+        allEvents.sort((a, b) => parseInt(b.timestampMs) - parseInt(a.timestampMs));
         
         // Filter only new events
-        const newEvents = events.data.filter(event => 
+        const newEvents = allEvents.filter(event => 
           !processedGraduations.has(event.id.txDigest)
         ).reverse();
 
@@ -154,29 +303,23 @@ class PoolCreationBot {
           logger.info(`📊 Found ${newEvents.length} new graduation(s) to process`);
         }
 
-        // Process graduations in batches to avoid overwhelming the system
-        const batchSize = CONFIG.maxConcurrentPools;
+        // Process graduations ONE AT A TIME to avoid race conditions
+        logger.info(`Processing ${newEvents.length} graduation(s) sequentially...`);
         
-        for (let i = 0; i < newEvents.length; i += batchSize) {
-          const batch = newEvents.slice(i, i + batchSize);
+        for (let i = 0; i < newEvents.length; i++) {
+          const event = newEvents[i];
+          logger.info(`Processing graduation ${i + 1}/${newEvents.length}`);
           
-          logger.info(`Processing batch ${Math.floor(i / batchSize) + 1}: ${batch.length} graduations`);
-          
-          // Process batch in parallel
-          const promises = batch.map(event => 
-            this.handleGraduation(event).catch(error => {
-              logger.error('Graduation handling failed', {
-                txDigest: event.id.txDigest,
-                error: error.message,
-              });
-              // Continue with other graduations even if one fails
-            })
-          );
-
-          // Wait for batch to complete before next batch
-          await Promise.all(promises);
-          
-          logger.info(`Batch complete. Processed ${Math.min(i + batchSize, newEvents.length)}/${newEvents.length} graduations`);
+          try {
+            await this.handleGraduation(event);
+            logger.info(`✅ Graduation ${i + 1}/${newEvents.length} complete`);
+          } catch (error) {
+            logger.error(`❌ Graduation ${i + 1}/${newEvents.length} failed`, {
+              txDigest: event.id.txDigest,
+              error: error.message,
+            });
+            // Continue with next graduation
+          }
         }
 
         // Mark all as processed
@@ -190,31 +333,100 @@ class PoolCreationBot {
   }
 
   async handleGraduation(event, retryData = null) {
-    // GraduationReady event doesn't have curve_id, need to get it from transaction
+    // Can be either "Graduated" (auto) or "GraduationReady" (manual) event
     const txDigest = event.id.txDigest;
+    const eventType = event.type.includes('Graduated') ? 'Graduated' : 'GraduationReady';
+    
+    // Detect which package version this graduation came from
+    const isV1Graduation = event.packageId === CONFIG.v1PlatformPackage;
+    
+    logger.info(`Detected ${eventType} event`, { 
+      txDigest: txDigest.slice(0, 16) + '...',
+      eventPackage: isV1Graduation ? 'V1' : 'V2',
+      note: isV1Graduation ? 'Will process using V2 functions (upgrade compatible)' : 'Native V2'
+    });
     
     // Get the transaction to find curve_id and coin_type
     const tx = await this.client.getTransactionBlock({
       digest: txDigest,
-      options: { showInput: true, showObjectChanges: true },
+      options: { showInput: true, showObjectChanges: true, showEvents: true },
     });
     
-    // Extract curve_id from transaction input objects
-    const curveId = tx.transaction?.data?.transaction?.inputs?.find(input => 
-      input.type === 'object'
-    )?.valueType?.includes('BondingCurve') ? 
-      tx.objectChanges?.find(change => change.objectType?.includes('BondingCurve'))?.objectId : null;
+    // Extract curve_id from transaction - it's the BondingCurve object that was mutated
+    const curveObject = tx.objectChanges?.find(change => 
+      change.type === 'mutated' && 
+      change.objectType?.includes('BondingCurve')
+    );
     
-    // Extract coin type from event or object changes
-    const coinType = event.parsedJson?.coin_type || 
-      tx.objectChanges?.find(change => change.objectType?.includes('BondingCurve'))?.objectType?.match(/<(.+)>/)?.[1];
+    const curveId = curveObject?.objectId;
+    
+    // Extract coin type from the BondingCurve object type parameter
+    const coinType = curveObject?.objectType?.match(/BondingCurve<(.+)>/)?.[1];
 
     if (!curveId || !coinType) {
-      logger.error('Could not extract curve_id or coin_type', { event, tx });
+      logger.error('Could not extract curve_id or coin_type from graduation event', { 
+        eventType,
+        event, 
+        curveObject,
+        objectChanges: tx.objectChanges 
+      });
       return;
     }
 
     logger.info('Processing graduation', { curveId, coinType, isRetry: !!retryData });
+
+    // Start tracking this graduation if not already tracked
+    if (!graduationState.has(curveId)) {
+      graduationState.startGraduation(curveId, coinType, event);
+    }
+
+    // Check curve state before processing
+    const curveState = await this.getCurveState(curveId, coinType);
+    
+    if (curveState.lp_seeded) {
+      logger.warn('⚠️  LP already seeded for this curve - skipping', { curveId });
+      return;
+    }
+    
+    if (!curveState.graduated) {
+      logger.warn('⚠️  Curve not yet graduated - skipping', { curveId });
+      return;
+    }
+
+    logger.info('Curve state', {
+      curveId,
+      graduated: curveState.graduated,
+      lp_seeded: curveState.lp_seeded,
+      reward_paid: curveState.reward_paid,
+      sui_reserve_mist: curveState.sui_reserve,
+      sui_reserve_sui: (BigInt(curveState.sui_reserve) / BigInt(1_000_000_000)).toString(),
+    });
+    
+    // Sanity check: ensure reserve has meaningful balance for LP
+    // After payouts, should have ~11,999.7 SUI (rounding from 13,333 - 10%)
+    const minSafeBalance = BigInt(10_000_000_000_000); // 10,000 SUI minimum
+    const currentBalance = BigInt(curveState.sui_reserve);
+    
+    if (currentBalance < minSafeBalance) {
+      logger.error('⚠️  Insufficient balance in curve reserve!', {
+        curveId,
+        minRequired: '10,000 SUI',
+        current: (currentBalance / BigInt(1_000_000_000)).toString() + ' SUI',
+        note: 'Reserve too low - may have been drained or never graduated properly.',
+      });
+      return; // Skip this graduation
+    }
+    
+    // Log if balance is slightly lower than ideal (but still processable)
+    const idealBalance = BigInt(11_999_000_000_000); // ~11,999 SUI
+    if (currentBalance < idealBalance) {
+      logger.warn('💡 Balance slightly lower than ideal', {
+        curveId,
+        expected: '~12,000 SUI',
+        actual: (currentBalance / BigInt(1_000_000_000)).toString() + ' SUI',
+        note: 'Contract will use actual balance - this is normal due to rounding.',
+      });
+    }
 
     // Retry logic with exponential backoff
     const maxRetries = CONFIG.maxRetries || 3;
@@ -225,8 +437,21 @@ class PoolCreationBot {
       try {
         logger.info(`Attempt ${attempt}/${maxRetries}`, { curveId });
 
-        // Step 0: Distribute payouts first (required before prepare_pool_liquidity)
-        await this.distributePayouts(curveId, coinType);
+        // Check if LP was already seeded (in case previous attempt succeeded but we didn't realize)
+        const freshState = await this.getCurveState(curveId, coinType);
+        if (freshState.lp_seeded) {
+          logger.info('✅ LP already seeded (previous attempt succeeded)', { curveId });
+          return; // Success! No need to retry
+        }
+
+        // Step 0: Distribute payouts first (only if not already paid)
+        if (!freshState.reward_paid) {
+          await this.distributePayouts(curveId, coinType);
+          graduationState.markPayoutsComplete(curveId);
+        } else {
+          logger.info('Payouts already distributed, skipping');
+          graduationState.markPayoutsComplete(curveId);
+        }
         
         // Step 1: Prepare liquidity
         // If this is a retry and we already have the coins, reuse them
@@ -237,32 +462,39 @@ class PoolCreationBot {
             note: 'Not extracting from curve again'
           });
           suiCoinId = retryData.suiCoinId;
-          suiAmount = retryData.suiAmount;
-          tokenAmount = retryData.tokenAmount;
+          // Convert back to BigInt from stored string
+          suiAmount = BigInt(retryData.suiAmount);
+          tokenAmount = BigInt(retryData.tokenAmount);
         } else {
           // First attempt - extract from curve
+          // Always use V2 functions even for V1 graduations (upgrade compatible)
           const prepared = await this.prepareLiquidity(curveId, coinType);
           suiCoinId = prepared.suiCoinId;
           suiAmount = prepared.suiAmount;
           tokenAmount = prepared.tokenAmount;
           
-          // Store these in case we need to retry
+          // Store in persistent state for crash recovery
+          graduationState.markLiquidityComplete(curveId, prepared);
+          
+          // Also store in memory for immediate retry (convert BigInt to string for JSON safety)
           if (failedGraduations.has(curveId)) {
             const existing = failedGraduations.get(curveId);
             failedGraduations.set(curveId, {
               ...existing,
               suiCoinId,
-              suiAmount,
-              tokenAmount,
+              suiAmount: suiAmount.toString(),
+              tokenAmount: tokenAmount.toString(),
             });
           }
         }
 
         // Step 2: Create Cetus pool (1% fee tier) - uses SUI from curve for gas
         const poolAddress = await this.createCetusPool(coinType, suiAmount, tokenAmount, suiCoinId);
+        graduationState.markPoolComplete(curveId, poolAddress);
 
         // Step 3: Burn LP tokens (permanent lock, but can still claim fees!)
         await this.burnLPTokens(poolAddress, coinType, suiCoinId);
+        graduationState.markBurnComplete(curveId);
 
         logger.info('✅ Pool creation complete!', {
           curveId,
@@ -333,6 +565,61 @@ class PoolCreationBot {
     });
   }
 
+  async getCurveState(curveId, coinType) {
+    try {
+      const curve = await this.client.getObject({
+        id: curveId,
+        options: { showContent: true },
+      });
+
+      if (curve.data?.content?.dataType === 'moveObject') {
+        const fields = curve.data.content.fields;
+        
+        // Extract reserve balance - Balance<T> structure
+        let reserveBalance = '0';
+        
+        // Log raw structure for debugging
+        logger.debug('Raw sui_reserve structure:', {
+          curveId,
+          sui_reserve: JSON.stringify(fields.sui_reserve),
+          sui_reserve_type: typeof fields.sui_reserve,
+        });
+        
+        // Balance<T> on Sui is typically a string number directly
+        if (fields.sui_reserve) {
+          if (typeof fields.sui_reserve === 'string') {
+            reserveBalance = fields.sui_reserve;
+          } else if (typeof fields.sui_reserve === 'number') {
+            reserveBalance = fields.sui_reserve.toString();
+          } else if (typeof fields.sui_reserve === 'object') {
+            // Could be nested as {fields: {value: "..."}} or just the value
+            reserveBalance = fields.sui_reserve.value || 
+                           fields.sui_reserve.fields?.value || 
+                           fields.sui_reserve.toString();
+          }
+        }
+        
+        logger.debug('Extracted balance:', {
+          curveId,
+          reserveBalance,
+          reserveBalanceType: typeof reserveBalance,
+        });
+        
+        return {
+          graduated: fields.graduated || false,
+          lp_seeded: fields.lp_seeded || false,
+          reward_paid: fields.reward_paid || false,
+          sui_reserve: reserveBalance,
+        };
+      }
+
+      return { graduated: false, lp_seeded: false, reward_paid: false, sui_reserve: '0' };
+    } catch (error) {
+      logger.error('Failed to get curve state', { curveId, error: error.message });
+      return { graduated: false, lp_seeded: false, reward_paid: false, sui_reserve: '0' };
+    }
+  }
+
   async distributePayouts(curveId, coinType) {
     logger.info('💰 Distributing payouts', { curveId });
 
@@ -363,8 +650,10 @@ class PoolCreationBot {
 
     const tx = new Transaction();
 
-    // Call prepare_pool_liquidity (no AdminCap needed!)
-    const [suiCoin, tokenCoin] = tx.moveCall({
+    // prepare_pool_liquidity transfers coins directly to bot address (no return values)
+    logger.info(`Calling prepare_pool_liquidity on V2 package...`);
+
+    tx.moveCall({
       target: `${CONFIG.platformPackage}::bonding_curve::prepare_pool_liquidity`,
       typeArguments: [coinType],
       arguments: [
@@ -373,34 +662,50 @@ class PoolCreationBot {
       ],
     });
 
-    // Split 0.5 SUI for bot's gas reserve
-    const [botGasReserve, poolSui] = tx.splitCoins(suiCoin, [
-      tx.pure.u64(500_000_000), // 0.5 SUI in MIST
-    ]);
-
-    // Transfer gas reserve to bot (builds up over time)
-    tx.transferObjects([botGasReserve], tx.pure.address(this.botAddress));
-    
-    // Transfer pool coins to bot address (for pool creation)
-    tx.transferObjects([poolSui, tokenCoin], tx.pure.address(this.botAddress));
-
     tx.setGasBudget(CONFIG.gasBudget);
 
     const result = await this.executeTransaction(tx);
 
-    // Get the SUI coin object ID that was transferred to bot for pool
-    const suiCoinId = this.extractTransferredSuiCoin(result);
+    logger.info('✅ prepare_pool_liquidity executed', {
+      txDigest: result.digest,
+      note: 'Coins transferred to bot wallet, querying...',
+    });
 
-    // Extract amounts from transaction effects
-    const suiAmount = await this.getSuiBalanceFromResult(result);
-    const tokenAmount = await this.getTokenBalanceFromResult(result, coinType);
+    // Wait a moment for the transaction to be indexed
+    await this.sleep(2000);
+
+    // Query bot wallet for the coins that were just transferred
+    // CRITICAL: Use SUI for Cetus pools (Cetus only allows SUI or CETUS as quote token)
+    const paymentCoinType = process.env.PAYMENT_COIN_TYPE || '0x2::sui::SUI';
+    
+    const [suiCoins, tokenCoins] = await Promise.all([
+      this.client.getCoins({
+        owner: this.botAddress,
+        coinType: paymentCoinType,
+      }),
+      this.client.getCoins({
+        owner: this.botAddress,
+        coinType: coinType,
+      })
+    ]);
+
+    // Get the largest coins (should be the ones just transferred)
+    const suiCoin = suiCoins.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
+    const tokenCoin = tokenCoins.data.sort((a, b) => parseInt(b.balance) - parseInt(a.balance))[0];
+
+    if (!suiCoin || !tokenCoin) {
+      throw new Error('Coins not found in bot wallet after prepare_pool_liquidity');
+    }
+
+    const suiAmount = BigInt(suiCoin.balance);
+    const tokenAmount = BigInt(tokenCoin.balance);
+    const suiCoinId = suiCoin.coinObjectId;
 
     logger.info('✅ Liquidity prepared', {
       suiAmount: suiAmount.toString(),
       tokenAmount: tokenAmount.toString(),
       suiCoinId,
-      botGasReserve: '0.5 SUI kept for future operations',
-      poolAmount: '~11,999.5 SUI for pool',
+      note: 'Retrieved from bot wallet',
     });
 
     return { suiAmount, tokenAmount, suiCoinId };
@@ -425,17 +730,17 @@ class PoolCreationBot {
       coinA,
       coinB,
       price,
-      sqrtPrice,
+      sqrtPrice: sqrtPrice.toString(), // Convert BigInt to string for logging
       tickSpacing: CONFIG.tickSpacing,
     });
 
     try {
-      // Create pool using Cetus SDK
-      const createPoolPayload = await this.cetusSDK.Pool.createPoolTransactionPayload({
+      // Create pool using Cetus SDK (note: SDK has typo "creat" not "create")
+      const createPoolPayload = await this.cetusSDK.Pool.creatPoolTransactionPayload({
         coinTypeA: coinA,
         coinTypeB: coinB,
-        tickSpacing: CONFIG.tickSpacing, // 200 = 1% fee tier
-        initializeSqrtPrice: sqrtPrice.toString(),
+        tick_spacing: CONFIG.tickSpacing, // 200 = 1% fee tier - this one IS snake_case
+        initialize_sqrt_price: sqrtPrice.toString(), // snake_case
         uri: '',
       });
 

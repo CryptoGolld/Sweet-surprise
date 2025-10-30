@@ -55,7 +55,7 @@ Before running the bot:
 
 ### On Each Graduation:
 
-1. **Detects** - Listens for `GraduationEvent` on blockchain
+1. **Detects** - Listens for `Graduated` event on blockchain (auto-emitted when tokens hit 737M supply)
 2. **Extracts** - Calls `prepare_liquidity_for_bot()` to get:
    - ~12,000 SUILFG tokens
    - 263M new tokens (207M for pool + 54M to burn + 2M team)

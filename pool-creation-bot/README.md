@@ -91,12 +91,14 @@ pm2 logs pool-creation-bot --lines 100
 ## How It Works
 
 ### 1. Graduation Detection
-Bot queries blockchain every 10 seconds for `GraduationEvent`:
+Bot queries blockchain every 10 seconds for `Graduated` events:
 ```javascript
 query: {
-  MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::GraduationEvent`
+  MoveEventType: `${PLATFORM_PACKAGE}::bonding_curve::Graduated`
 }
 ```
+
+Note: Tokens auto-graduate when they hit 737M supply during a buy transaction. The `Graduated` event is emitted automatically by the `buy()` function.
 
 ### 2. Liquidity Preparation
 Calls `prepare_liquidity_for_bot()` to extract:

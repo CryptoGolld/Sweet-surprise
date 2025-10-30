@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@mysten/sui": "^1.18.0",
-    "@cetusprotocol/cetus-sui-clmm-sdk": "^4.1.0",
+    "@cetusprotocol/cetus-sui-clmm-sdk": "^5.4.0",
     "@cetusprotocol/cetus-burn-sdk": "^0.1.7",
     "dotenv": "^16.4.5",
     "winston": "^3.11.0"
