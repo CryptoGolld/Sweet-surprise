@@ -103,6 +103,7 @@ class PoolCreationBot {
       };
 
       this.cetusSDK = new CetusClmmSDK(sdkOptions);
+      this.cetusSDK.senderAddress = this.botAddress; // Required in SDK v5+
       logger.info('Cetus SDK initialized');
       logger.info('Pool configuration: 1% fee tier (tick spacing 200)');
     } catch (error) {

@@ -53,6 +53,7 @@ class CetusPoolTester {
         published_at: CETUS_CONFIG.packageId,
       },
     });
+    this.cetusSDK.senderAddress = this.address; // Required in SDK v5+
     console.log('✅ Cetus SDK initialized');
 
     // Initialize Burn SDK
@@ -97,6 +98,38 @@ class CetusPoolTester {
     return BigInt(Math.floor(sqrtPrice));
   }
 
+  async getCoinMetadata(coinType) {
+    try {
+      // Query for CoinMetadata object for this coin type
+      const metadataFilter = {
+        MatchAll: [
+          { StructType: `0x2::coin::CoinMetadata<${coinType}>` },
+        ],
+      };
+      
+      const result = await this.client.getOwnedObjects({
+        owner: '0x0000000000000000000000000000000000000000000000000000000000000000', // System address
+        filter: metadataFilter,
+        options: { showContent: false },
+      });
+      
+      if (result.data.length > 0) {
+        return result.data[0].data.objectId;
+      }
+      
+      // Try querying all objects with this type (metadata might be elsewhere)
+      const allObjects = await this.client.queryEvents({
+        query: { MoveEventType: `0x2::coin::CoinMetadata<${coinType}>` },
+        limit: 1,
+      });
+      
+      return null; // No metadata found
+    } catch (error) {
+      console.log(`  Warning: Could not find metadata for ${coinType.split('::').pop()}`);
+      return null;
+    }
+  }
+
   async createPool2(tokenA, tokenB, amountA, amountB) {
     console.log('\n🏊 Creating Cetus Pool...');
     console.log(`  Token A: ${tokenA.split('::').pop()}`);
@@ -122,24 +155,26 @@ class CetusPoolTester {
     console.log(`  Sqrt Price: ${sqrtPrice.toString()}`);
     
     try {
-      // Try using factory::create_pool_v2 directly since pool_script doesn't exist
-      console.log('  Using factory::create_pool_v2 directly...');
-      
+      // Use factory::create_pool directly (SDK v5 requires pool_creator_v2 which doesn't exist on testnet)
       const { Transaction } = await import('@mysten/sui/transactions');
       const tx = new Transaction();
+      
+      console.log('  Calling factory::create_pool directly...');
       
       tx.moveCall({
         target: `${CETUS_CONFIG.packageId}::factory::create_pool`,
         typeArguments: [coinA, coinB],
         arguments: [
           tx.object(CETUS_CONFIG.pools), // Pools (mutable)
-          tx.object(CETUS_CONFIG.globalConfig), // GlobalConfig
+          tx.object(CETUS_CONFIG.globalConfig), // GlobalConfig  
           tx.pure.u32(200), // tick_spacing
           tx.pure.u128(sqrtPrice.toString()), // initialize_sqrt_price
           tx.pure.string(''), // uri
           tx.object('0x6'), // Clock
         ],
       });
+      
+      tx.setGasBudget(100000000);
       
       const createPoolPayload = tx;
       
