@@ -229,9 +229,18 @@ class PoolCreationBot {
     // Detect which package version this graduation came from
     const isV1Graduation = event.packageId === CONFIG.v1PlatformPackage;
     
+    // V1 graduations require AdminCap which bot doesn't have - skip them
+    if (isV1Graduation) {
+      logger.warn('⚠️  V1 graduation detected - requires manual processing with AdminCap', {
+        txDigest: txDigest.slice(0, 16) + '...',
+        note: 'V1 prepare_liquidity_for_bot requires AdminCap. Please process manually.'
+      });
+      return; // Skip V1 graduations
+    }
+    
     logger.info(`Detected ${eventType} event`, { 
       txDigest: txDigest.slice(0, 16) + '...',
-      packageVersion: isV1Graduation ? 'V1' : 'V2'
+      packageVersion: 'V2'
     });
     
     // Get the transaction to find curve_id and coin_type
