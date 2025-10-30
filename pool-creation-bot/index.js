@@ -399,15 +399,17 @@ class PoolCreationBot {
     });
 
     // Split 0.5 SUI for bot's gas reserve
-    const [botGasReserve, poolSui] = tx.splitCoins(suiCoin, [
+    // Note: splitCoins returns only the split-off coin(s), the original keeps the remainder
+    const botGasReserve = tx.splitCoins(suiCoin, [
       tx.pure.u64(500_000_000), // 0.5 SUI in MIST
-    ]);
+    ])[0];
 
     // Transfer gas reserve to bot (builds up over time)
     tx.transferObjects([botGasReserve], this.botAddress);
     
     // Transfer pool coins to bot address (for pool creation)
-    tx.transferObjects([poolSui, tokenCoin], this.botAddress);
+    // suiCoin now contains the remainder (~11,999.5 SUI)
+    tx.transferObjects([suiCoin, tokenCoin], this.botAddress);
 
     tx.setGasBudget(CONFIG.gasBudget);
 
