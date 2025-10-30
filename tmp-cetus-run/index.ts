@@ -35,10 +35,10 @@ async function tryCreatePool(sdk, client, signer, coinTypeA, coinTypeB, tickSpac
     const tx = await sdk.Pool.createPoolTransactionPayload({
       coinTypeA,
       coinTypeB,
-      tick_spacing: tickSpacing,
-      initialize_sqrt_price: SQRT_PRICE_1_TO_1,
+      tickSpacing: tickSpacing,
+      initializeSqrtPrice: SQRT_PRICE_1_TO_1,
       uri: '',
-    });
+    } as any);
     const res = await client.signAndExecuteTransaction({
       signer,
       transaction: tx,
