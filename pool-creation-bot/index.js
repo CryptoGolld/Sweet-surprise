@@ -427,11 +427,35 @@ class PoolCreationBot {
       if (curve.data?.content?.dataType === 'moveObject') {
         const fields = curve.data.content.fields;
         
-        // Extract reserve balance for debugging
+        // Extract reserve balance - Balance<T> structure
         let reserveBalance = '0';
-        if (fields.sui_reserve && typeof fields.sui_reserve === 'object') {
-          reserveBalance = fields.sui_reserve.value || fields.sui_reserve || '0';
+        
+        // Log raw structure for debugging
+        logger.debug('Raw sui_reserve structure:', {
+          curveId,
+          sui_reserve: JSON.stringify(fields.sui_reserve),
+          sui_reserve_type: typeof fields.sui_reserve,
+        });
+        
+        // Balance<T> on Sui is typically a string number directly
+        if (fields.sui_reserve) {
+          if (typeof fields.sui_reserve === 'string') {
+            reserveBalance = fields.sui_reserve;
+          } else if (typeof fields.sui_reserve === 'number') {
+            reserveBalance = fields.sui_reserve.toString();
+          } else if (typeof fields.sui_reserve === 'object') {
+            // Could be nested as {fields: {value: "..."}} or just the value
+            reserveBalance = fields.sui_reserve.value || 
+                           fields.sui_reserve.fields?.value || 
+                           fields.sui_reserve.toString();
+          }
         }
+        
+        logger.debug('Extracted balance:', {
+          curveId,
+          reserveBalance,
+          reserveBalanceType: typeof reserveBalance,
+        });
         
         return {
           graduated: fields.graduated || false,
