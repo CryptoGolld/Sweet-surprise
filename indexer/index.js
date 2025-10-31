@@ -126,11 +126,13 @@ async function indexEvents() {
       let latestTimestamp = lastTimestamp;
       
       for (const eventType of eventTypes) {
-        let hasMore = true;
+        // OPTIMIZATION: Limit pagination to prevent re-scanning old events
+        // Since we poll every 500ms, we only need to check recent events
+        let pageCount = 0;
+        const MAX_PAGES = 10; // Max 500 events (10 pages × 50 events) per poll
         let cursor = null;
         
-        // Keep paginating until we hit events we've already seen
-        while (hasMore) {
+        while (pageCount < MAX_PAGES) {
           const queryParams = {
             query: { MoveEventType: eventType },
             limit: 50,
@@ -144,8 +146,7 @@ async function indexEvents() {
           const events = await client.queryEvents(queryParams);
           
           if (events.data.length === 0) {
-            hasMore = false;
-            break;
+            break; // No more events
           }
           
           let foundOldEvent = false;
@@ -164,9 +165,6 @@ async function indexEvents() {
               latestTimestamp = eventTimestamp;
             }
             
-            // No need to check duplicates - database has ON CONFLICT DO NOTHING
-            // This speeds up indexing significantly!
-            
             totalNewEvents++;
             
             // Process the event
@@ -184,10 +182,15 @@ async function indexEvents() {
           
           // Stop if we found old events or no more pages
           if (foundOldEvent || !events.hasNextPage) {
-            hasMore = false;
-          } else {
-            cursor = events.nextCursor;
+            break;
           }
+          
+          cursor = events.nextCursor;
+          pageCount++;
+        }
+        
+        if (pageCount >= MAX_PAGES) {
+          console.log(`   ⚠️  Hit max pagination limit for ${eventType.split('::').pop()}, will catch up on next poll`);
         }
       }
       
