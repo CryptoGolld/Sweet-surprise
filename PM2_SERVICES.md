@@ -14,6 +14,7 @@ This file documents all production services that must run 24/7.
 | **memecoin-api** | API Server | Serves token data to frontend | `/var/www/Sweet-surprise/indexer/api-server.js` |
 | **compilation-service** | Web Service | Compiles Move contracts for new tokens | `/var/www/Sweet-surprise/compilation-service/index.js` |
 | **pool-creation-bot** | Bot | Creates Cetus pools for graduated tokens | `/var/www/Sweet-surprise/pool-creation-bot/index.js` |
+| **candle-generator** | Bot | Generates OHLCV chart data from trades | `/var/www/Sweet-surprise/indexer/candle-generator.js` |
 
 ---
 
