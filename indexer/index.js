@@ -12,6 +12,21 @@ const SUI_RPC_URL = process.env.SUI_RPC_URL;
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 const client = new SuiClient({ url: SUI_RPC_URL });
 
+// Payment coin (defaults to SUILFG_MEMEFI testnet faucet coin)
+const DEFAULT_PAYMENT_COIN_TYPE = '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81::suilfg_memefi::SUILFG_MEMEFI';
+const PAYMENT_COIN_TYPE = process.env.PAYMENT_COIN_TYPE || DEFAULT_PAYMENT_COIN_TYPE;
+const SUI_COIN_TYPE = '0x2::sui::SUI';
+const PAYMENT_DECIMALS = parseInt(process.env.PAYMENT_DECIMALS || '9', 10);
+const DECIMAL_DIVISOR = Math.pow(10, PAYMENT_DECIMALS);
+
+function absBigInt(value) {
+  return value >= 0n ? value : -value;
+}
+
+function toDecimal(amountBigInt) {
+  return Number(amountBigInt) / DECIMAL_DIVISOR;
+}
+
 console.log('🚀 Starting Memecoin Indexer (v0.0.8 only)...');
 console.log('📦 Package:', PLATFORM_PACKAGE);
 console.log('🌐 RPC:', SUI_RPC_URL);
@@ -330,47 +345,74 @@ async function processBuyEvent(event) {
     
     // Extract data from Bought event
     const buyer = fields.buyer;
-    const suiIn = fields.amount_sui;
+    const suiIn = BigInt(fields.amount_sui);
     const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts
     const txDetails = await client.getTransactionBlock({
       digest: event.id.txDigest,
-      options: { showObjectChanges: true },
+      options: { showObjectChanges: true, showBalanceChanges: true },
     });
-    
-    // Find minted tokens (newly created coins of the memecoin type)
-    const mintedCoins = txDetails.objectChanges?.filter(
-      obj => obj.type === 'created' && obj.objectType?.includes('::coin::Coin<') && !obj.objectType?.includes('SUILFG_MEMEFI')
-    );
-    
-    if (!mintedCoins || mintedCoins.length === 0) {
-      console.warn('No minted tokens found in buy tx:', event.id.txDigest);
-      return;
+    const balanceChanges = txDetails.balanceChanges || [];
+
+    const balanceMap = new Map();
+    for (const change of balanceChanges) {
+      if (!change.coinType || !change.amount) continue;
+      const coinType = change.coinType;
+      if (coinType === PAYMENT_COIN_TYPE || coinType === SUI_COIN_TYPE) continue;
+      const amount = BigInt(change.amount);
+      if (amount === 0n) continue;
+      const current = balanceMap.get(coinType) || 0n;
+      balanceMap.set(coinType, current + amount);
     }
-    
-    // Extract coin type from minted coin
-    const coinTypeMatch = mintedCoins[0].objectType.match(/<(.+)>/);
-    const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
-    
-    // Get curve ID from transaction
+
     const curveUsed = txDetails.objectChanges?.find(
       obj => obj.type === 'mutated' && obj.objectType?.includes('bonding_curve::BondingCurve')
     );
-    const curveId = curveUsed?.objectId || '';
-    
-    // Estimate tokens (we don't have exact amount in event, use cost/price estimation)
-    // This is approximate - for exact amounts, we'd need to parse BalanceChange
-    const pricePerToken = 0.00001; // Rough estimate, will be refined by actual trades
-    const tokensOut = BigInt(suiIn) / BigInt(10000); // Rough estimate
-    
+
+    if (!curveUsed) {
+      console.warn('No curve object found in buy tx:', event.id.txDigest);
+      return;
+    }
+
+    const curveId = curveUsed.objectId;
+    let coinType = '';
+    const match = curveUsed.objectType?.match(/<(.+)>/);
+    if (match) {
+      coinType = match[1];
+    }
+
+    if (!coinType) {
+      // Fallback – choose the coin type with the largest positive delta
+      for (const [candidateType, amount] of balanceMap.entries()) {
+        if (amount > 0n) {
+          coinType = candidateType;
+          break;
+        }
+      }
+    }
+
+    if (!coinType) {
+      console.warn('Unable to determine coin type for buy tx:', event.id.txDigest);
+      return;
+    }
+
+    const tokenDelta = balanceMap.get(coinType) || 0n;
+    if (tokenDelta <= 0n) {
+      console.warn('No positive token delta found for buy tx:', event.id.txDigest, coinType);
+      return;
+    }
+
+    const tokensOut = tokenDelta;
+    const pricePerToken = toDecimal(tokensOut) > 0 ? toDecimal(suiIn) / toDecimal(tokensOut) : 0;
+
     // Insert trade
     await db.query(
       `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (tx_digest) DO NOTHING`,
-      [event.id.txDigest, coinType, curveId, buyer, 'buy', suiIn, tokensOut.toString(), pricePerToken, timestamp]
+      [event.id.txDigest, coinType, curveId, buyer, 'buy', suiIn.toString(), tokensOut.toString(), pricePerToken, timestamp]
     );
     
     // Update user PnL
@@ -383,7 +425,7 @@ async function processBuyEvent(event) {
          total_tokens_bought = user_pnl.total_tokens_bought + $4,
          buy_count = user_pnl.buy_count + 1,
          last_trade_at = $5`,
-      [buyer, coinType, suiIn, tokensOut.toString(), timestamp]
+      [buyer, coinType, suiIn.toString(), tokensOut.toString(), timestamp]
     );
     
     // Update token holders (increase balance)
@@ -411,7 +453,10 @@ async function processBuyEvent(event) {
     // Update token price and market data
     await updateTokenPriceAndMarketCap(coinType);
     
-    console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${suiIn} SUI`);
+    const ticker = coinType.split('::').pop() || 'TOKEN';
+    console.log(
+      `💰 Buy: ${buyer.slice(0, 10)}... spent ${toDecimal(suiIn).toFixed(4)} SUILFG for ${toDecimal(tokensOut).toFixed(4)} ${ticker}`
+    );
     
   } catch (error) {
     console.error('Failed to process buy event:', error.message);
@@ -425,14 +470,14 @@ async function processSellEvent(event) {
     
     // Extract data from Sold event
     const seller = fields.seller;
-    const suiOut = fields.amount_sui;
+    const suiOut = BigInt(fields.amount_sui);
     const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts
     const txDetails = await client.getTransactionBlock({
       digest: event.id.txDigest,
-      options: { showObjectChanges: true },
+      options: { showObjectChanges: true, showBalanceChanges: true },
     });
     
     // Find curve from mutated objects
@@ -449,17 +494,34 @@ async function processSellEvent(event) {
     const coinTypeMatch = curveUsed.objectType.match(/<(.+)>/);
     const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
     const curveId = curveUsed.objectId;
-    
-    // Estimate tokens sold (approximate)
-    const pricePerToken = 0.00001; // Rough estimate
-    const tokensIn = BigInt(suiOut) / BigInt(10000); // Rough estimate
+
+    const balanceChanges = txDetails.balanceChanges || [];
+    const balanceMap = new Map();
+    for (const change of balanceChanges) {
+      if (!change.coinType || !change.amount) continue;
+      const changeCoinType = change.coinType;
+      if (changeCoinType === PAYMENT_COIN_TYPE || changeCoinType === SUI_COIN_TYPE) continue;
+      const amount = BigInt(change.amount);
+      if (amount === 0n) continue;
+      const current = balanceMap.get(changeCoinType) || 0n;
+      balanceMap.set(changeCoinType, current + amount);
+    }
+
+    const tokenDelta = balanceMap.get(coinType) || 0n;
+    if (tokenDelta === 0n) {
+      console.warn('No token delta found for sell tx:', event.id.txDigest, coinType);
+      return;
+    }
+
+    const tokensIn = absBigInt(tokenDelta);
+    const pricePerToken = toDecimal(tokensIn) > 0 ? toDecimal(suiOut) / toDecimal(tokensIn) : 0;
     
     // Insert trade
     await db.query(
       `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (tx_digest) DO NOTHING`,
-      [event.id.txDigest, coinType, curveId, seller, 'sell', suiOut, tokensIn.toString(), pricePerToken, timestamp]
+      [event.id.txDigest, coinType, curveId, seller, 'sell', suiOut.toString(), tokensIn.toString(), pricePerToken, timestamp]
     );
     
     // Update user PnL
@@ -473,7 +535,7 @@ async function processSellEvent(event) {
          sell_count = user_pnl.sell_count + 1,
          realized_pnl = (user_pnl.total_sui_received + $3) - user_pnl.total_sui_spent,
          last_trade_at = $5`,
-      [seller, coinType, suiOut, tokensIn.toString(), timestamp]
+      [seller, coinType, suiOut.toString(), tokensIn.toString(), timestamp]
     );
     
     // Update token holders (decrease balance)
@@ -508,7 +570,10 @@ async function processSellEvent(event) {
     // Update token price and market data
     await updateTokenPriceAndMarketCap(coinType);
     
-    console.log(`💸 Sell: ${seller.slice(0, 10)}... received ${suiOut} SUI`);
+    const ticker = coinType.split('::').pop() || 'TOKEN';
+    console.log(
+      `💸 Sell: ${seller.slice(0, 10)}... received ${toDecimal(suiOut).toFixed(4)} SUILFG for ${toDecimal(tokensIn).toFixed(4)} ${ticker}`
+    );
     
   } catch (error) {
     console.error('Failed to process sell event:', error.message);
