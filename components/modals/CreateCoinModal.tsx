@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { ImageUpload } from '@/components/ImageUpload';
+import { COIN_TYPES } from '@/lib/constants';
 
 interface CreateCoinModalProps {
   isOpen: boolean;
