@@ -266,7 +266,12 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         // COMBINED: Create curve + buy in one transaction (faster!)
         setStatus('Creating curve and buying tokens...');
         
-        const buyAmountMist = Math.floor(parseFloat(formData.initialBuyAmount!) * 1_000_000_000).toString();
+        // Convert to smallest unit safely (avoid overflow)
+        const buyAmountFloat = parseFloat(formData.initialBuyAmount!);
+        if (buyAmountFloat <= 0 || buyAmountFloat > 1000000) {
+          throw new Error('Buy amount must be between 0 and 1,000,000 SUILFG');
+        }
+        const buyAmountMist = (BigInt(Math.floor(buyAmountFloat * 1e9))).toString();
         const minTokensOut = '1'; // Accept any amount (user buying at launch price)
         
         // Get user's payment coins

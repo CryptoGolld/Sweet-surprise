@@ -220,9 +220,15 @@ async function indexEvents() {
       
     } catch (error) {
       console.error('❌ Indexing error:', error.message);
+      console.error('Stack:', error.stack);
+      // Wait 5 seconds before retrying
       await new Promise(resolve => setTimeout(resolve, 5000));
+      // Continue the loop - don't let errors break it
     }
   }
+  // This should never be reached, but just in case
+  console.error('⚠️ Indexing loop exited unexpectedly! Restarting...');
+  setTimeout(() => indexEvents(), 5000);
 }
 
 // Process a Created event

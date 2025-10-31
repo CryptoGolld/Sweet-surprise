@@ -25,17 +25,20 @@ export function useUserCoins(coinType?: string) {
       return coins.data;
     },
     enabled: !!account?.address,
+    refetchInterval: 3000, // Refetch every 3 seconds to keep balances fresh
+    staleTime: 1000, // Consider data stale after 1 second
   });
 }
 
 export function useCoinBalance(coinType?: string) {
-  const { data: coins } = useUserCoins(coinType);
+  const { data: coins, refetch } = useUserCoins(coinType);
   
   if (!coins || coins.length === 0) {
     return {
       balance: '0',
       coins: [],
       totalBalance: 0n,
+      refetch,
     };
   }
   
@@ -48,5 +51,6 @@ export function useCoinBalance(coinType?: string) {
     balance: totalBalance.toString(),
     coins,
     totalBalance,
+    refetch,
   };
 }

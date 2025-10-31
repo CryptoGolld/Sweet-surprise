@@ -51,8 +51,8 @@ export default function TokenPage() {
   }, [token]);
   
   // Get user balances
-  const { balance: paymentBalance, coins: paymentCoins } = useCoinBalance();
-  const { balance: memeBalance, coins: memeCoins } = useCoinBalance(token?.coinType);
+  const { balance: paymentBalance, coins: paymentCoins, refetch: refetchPayment } = useCoinBalance();
+  const { balance: memeBalance, coins: memeCoins, refetch: refetchMeme } = useCoinBalance(token?.coinType);
   
   // Calculate trade preview
   const tradePreview = useMemo(() => {
@@ -159,8 +159,10 @@ export default function TokenPage() {
                 },
               });
               setAmount('');
-              // Refetch data immediately instead of reloading
+              // Refetch all data immediately instead of reloading
               refetch();
+              refetchPayment();
+              refetchMeme();
             },
             onError: (error) => {
               toast.error('Sale failed: ' + error.message?.slice(0, 100));
