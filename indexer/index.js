@@ -626,13 +626,25 @@ async function generateCandles() {
       if (tradesResult.rows.length === 0) continue;
 
       const trades = tradesResult.rows;
-      const startTime = new Date(created_at || trades[0].timestamp);
-      const endTime = new Date();
       
+      // Only generate candles for the last 24 hours (not from creation!)
+      // This makes candle generation 100x faster
+      const now = new Date();
+      const startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+      const endTime = now;
+      
+      // Get price at start of period (or first trade price)
       let currentPrice = parseFloat(trades[0].price_per_token);
+      if (trades.length > 0) {
+        const recentTrades = trades.filter(t => new Date(t.timestamp) > startTime);
+        if (recentTrades.length > 0) {
+          currentPrice = parseFloat(recentTrades[0].price_per_token);
+        }
+      }
+      
       let tradeIndex = 0;
 
-      // Generate candles for every minute from creation to now
+      // Generate candles for every minute in last 24 hours
       const candles = [];
       for (let time = new Date(startTime); time <= endTime; time = new Date(time.getTime() + 60000)) {
         const candleStart = new Date(time);

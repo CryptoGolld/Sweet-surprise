@@ -12,7 +12,7 @@ import { formatAmount, parseAmount, getExplorerLink } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
 import { calculateTokensOut, calculateSuiOut } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
-import { PriceChart } from '@/components/charts/PriceChart';
+import { TradingViewChart } from '@/components/charts/TradingViewChart';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 
 export default function TokenPage() {
@@ -359,7 +359,7 @@ export default function TokenPage() {
 
         {/* Charts Section - Full Width, No Boxes */}
         <div className="space-y-6 mb-6">
-          <PriceChart coinType={token.coinType} />
+          <TradingViewChart coinType={token.coinType} />
           <TradeHistory coinType={token.coinType} />
         </div>
 
