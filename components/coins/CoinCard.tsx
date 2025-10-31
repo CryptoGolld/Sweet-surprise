@@ -24,20 +24,11 @@ export function CoinCard({ curve }: CoinCardProps) {
 
   const age = Math.floor((Date.now() - curve.createdAt) / (1000 * 60)); // minutes
 
-  // Calculate Market Cap using bonding curve formula
-  // NOTE: curve.curveSupply is already in WHOLE TOKENS from the contract
-  const tokensSoldInWholeUnits = Number(curve.curveSupply);
-  
-  // Use bonding curve math to calculate real market cap
-  let marketCapSui: number;
-  if (tokensSoldInWholeUnits > 0) {
-    marketCapSui = calculateMarketCap(tokensSoldInWholeUnits);
-  } else {
-    // At launch, show initial virtual market cap (1000 SUI)
-    marketCapSui = getInitialMarketCap();
-  }
-  
-  const marketCapUsd = marketCapSui * suiPrice;
+  // Use FDV (Fully Diluted Valuation) from indexer
+  // FDV = current_price × total_supply (1B tokens)
+  // This gives consistent valuation across all tokens
+  const fdvSui = curve.fullyDilutedValuation || 0;
+  const marketCapUsd = fdvSui * suiPrice;
 
   const formatAge = (mins: number) => {
     if (mins < 60) return `${mins}m`;
@@ -57,21 +48,21 @@ export function CoinCard({ curve }: CoinCardProps) {
         {(
           <div className="p-3 flex items-center gap-3">
             {/* Token Image - Smaller */}
-            <div className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg flex items-center justify-center overflow-hidden p-1">
+            <div className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg overflow-hidden">
               {curve.imageUrl ? (
                 <img
                   src={curve.imageUrl}
                   alt={curve.ticker}
-                  className="max-w-full max-h-full object-contain rounded-sm"
+                  className="w-full h-full object-cover"
                   onError={(e) => {
                     e.currentTarget.src = '';
                     e.currentTarget.style.display = 'none';
                     const parent = e.currentTarget.parentElement!;
-                    parent.innerHTML = '<div class="text-xl">🚀</div>';
+                    parent.innerHTML = '<div class="flex items-center justify-center w-full h-full text-xl">🚀</div>';
                   }}
                 />
               ) : (
-                <span className="text-xl">🚀</span>
+                <div className="flex items-center justify-center w-full h-full text-xl">🚀</div>
               )}
             </div>
 

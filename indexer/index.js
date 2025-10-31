@@ -202,18 +202,19 @@ async function indexEvents() {
       if (totalNewEvents > 0) {
         console.log(`✨ Processed ${totalNewEvents} new events`);
         // Generate candles less frequently to speed up indexing
-        // Only generate if we haven't generated in the last 10 seconds
+        // Only generate if we haven't generated in the last 5 seconds
         const now = Date.now();
-        if (!global.lastCandleGeneration || (now - global.lastCandleGeneration) > 10000) {
+        if (!global.lastCandleGeneration || (now - global.lastCandleGeneration) > 5000) {
           await generateCandles();
           global.lastCandleGeneration = now;
         }
       } else {
-        console.log('📭 No new events');
+        // Reduce console spam when no events
+        // console.log('📭 No new events');
       }
       
-      // Wait before next poll (configurable via POLLING_INTERVAL_MS env var, default 1 second for instant memecoin updates!)
-      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '1000');
+      // Wait before next poll (500ms for near-instant memecoin updates!)
+      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '500');
       await new Promise(resolve => setTimeout(resolve, pollingInterval));
       
     } catch (error) {
