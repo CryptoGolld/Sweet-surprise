@@ -39,15 +39,17 @@ export default function TokenPage() {
   
   const token = tokensResponse?.tokens?.find((t: any) => t.id === tokenId);
   
-  // Redirect to Cetus if token graduated
+  // Handle graduated tokens
   useEffect(() => {
     if (token?.graduated && token?.cetusPoolAddress) {
+      // Has pool - redirect to Cetus
       const cetusUrl = `https://app.cetus.zone/swap/?from=0x2::sui::SUI&to=${encodeURIComponent(token.coinType)}&poolAddress=${token.cetusPoolAddress}`;
       toast.info('Token graduated! Redirecting to Cetus...', { duration: 2000 });
       setTimeout(() => {
         window.location.href = cetusUrl;
       }, 2000);
     }
+    // If graduated but no pool yet, show pending state (handled in render below)
   }, [token]);
   
   // Get user balances
@@ -217,7 +219,7 @@ export default function TokenPage() {
     );
   }
 
-  // Show "Redirecting to Cetus" screen if graduated
+  // Show "Redirecting to Cetus" screen if graduated WITH pool
   if (token.graduated && token.cetusPoolAddress) {
     return (
       <div className="min-h-screen pb-20 md:pb-0 bg-sui-dark">
@@ -229,6 +231,41 @@ export default function TokenPage() {
             <p className="text-gray-300 mb-6">This token has graduated to Cetus DEX.</p>
             <p className="text-gray-400 mb-8">Redirecting you to trade on Cetus...</p>
             <div className="animate-spin inline-block w-8 h-8 border-4 border-meme-purple border-t-transparent rounded-full"></div>
+          </div>
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // Show "Pool Creation Pending" screen if graduated WITHOUT pool
+  if (token.graduated && !token.cetusPoolAddress) {
+    return (
+      <div className="min-h-screen pb-20 md:pb-0 bg-sui-dark">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <div className="text-center py-20">
+            <div className="text-6xl mb-4">🎓</div>
+            <h3 className="text-2xl font-bold mb-4">Token Graduated!</h3>
+            <p className="text-gray-300 mb-4">
+              This token completed its bonding curve and raised enough to graduate!
+            </p>
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6 max-w-md mx-auto mb-6">
+              <div className="text-yellow-400 font-semibold mb-2">⏳ Pool Creation in Progress</div>
+              <p className="text-sm text-gray-300">
+                Our team is creating a Cetus DEX pool for this token. 
+                This usually takes 5-10 minutes.
+              </p>
+            </div>
+            <p className="text-sm text-gray-400 mb-8">
+              Trading will resume on Cetus DEX once the pool is ready.
+              <br />
+              This page will automatically update when ready.
+            </p>
+            <div className="flex items-center justify-center gap-2 text-meme-purple">
+              <div className="animate-spin inline-block w-6 h-6 border-4 border-meme-purple border-t-transparent rounded-full"></div>
+              <span className="text-sm">Checking for pool...</span>
+            </div>
           </div>
         </main>
         <BottomNav />
