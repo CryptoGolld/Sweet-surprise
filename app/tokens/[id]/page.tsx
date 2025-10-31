@@ -160,9 +160,11 @@ export default function TokenPage() {
               });
               setAmount('');
               // Refetch all data immediately instead of reloading
-              refetch();
-              refetchPayment();
-              refetchMeme();
+              setTimeout(() => {
+                refetch();
+                refetchPayment();
+                refetchMeme();
+              }, 1000); // Small delay to let transaction settle
             },
             onError: (error) => {
               toast.error('Sale failed: ' + error.message?.slice(0, 100));
