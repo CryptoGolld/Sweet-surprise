@@ -782,16 +782,17 @@ async function generateCandles() {
   }
 }
 
-// Calculate bonding curve spot price at given supply (like pump.fun)
+// Calculate bonding curve spot price at given supply (EXACT contract formula!)
 function calculateSpotPrice(supplyInWholeTokens) {
   const M_NUM = 1n;
-  const M_DEN = 10_000_000_000_000n; // 10^13
+  const M_DEN = 10593721631205n; // EXACT value from contract (line 48)
   const BASE_PRICE_MIST = 1_000n; // 0.000001 SUI
   const MIST_PER_SUI = 1_000_000_000n; // 1e9
   
   const supply = BigInt(Math.floor(supplyInWholeTokens));
   
-  // price_mist = base_price + (m_num * supply^2) / m_den
+  // p(s) = base_price_mist + (m_num * s^2) / m_den
+  // This EXACT formula is from bonding_curve.move line 946-952
   const supplySquared = supply * supply;
   const priceIncrease = (M_NUM * supplySquared) / M_DEN;
   const totalPriceMist = BASE_PRICE_MIST + priceIncrease;
