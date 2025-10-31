@@ -223,18 +223,8 @@ async function indexEvents() {
       
       if (totalNewEvents > 0) {
         console.log(`✨ Processed ${totalNewEvents} new events`);
-        // Generate candles less frequently to speed up indexing
-        // Only generate if we haven't generated in the last 10 seconds
-        const now = Date.now();
-        if (!global.lastCandleGeneration || (now - global.lastCandleGeneration) > 10000) {
-          // Run candle generation with timeout to prevent hanging
-          try {
-            await withTimeout(generateCandles(), 30000, 'generateCandles');
-            global.lastCandleGeneration = now;
-          } catch (error) {
-            console.error('⚠️  Candle generation timed out, will retry later');
-          }
-        }
+        // NOTE: Candle generation moved to separate bot (candle-generator.js)
+        // This keeps the indexer fast and responsive
       } else {
         // Reduce console spam when no events
         // console.log('📭 No new events');
