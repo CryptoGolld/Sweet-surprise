@@ -33,8 +33,8 @@ export default function TokenPage() {
       if (!response.ok) throw new Error('Failed to fetch tokens');
       return response.json();
     },
-    refetchInterval: 2000, // Refetch every 2 seconds for real-time updates
-    staleTime: 1000, // Consider data stale after 1 second
+    refetchInterval: 1500, // Refetch every 1.5 seconds for real-time updates
+    staleTime: 500, // Consider data stale after 0.5 second
   });
   
   const token = tokensResponse?.tokens?.find((t: any) => t.id === tokenId);
