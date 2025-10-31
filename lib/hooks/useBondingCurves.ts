@@ -19,6 +19,20 @@ export interface BondingCurve {
   graduated: boolean;
   createdAt: number;
   coinType: string;
+  // Market data from indexer
+  currentPrice?: number;
+  marketCap?: number;
+  fullyDilutedValuation?: number;
+  volume24h?: string;
+  priceChange24h?: number;
+  allTimeHigh?: number;
+  allTimeLow?: number;
+  lastTradeAt?: number | null;
+  // Social links
+  twitter?: string | null;
+  telegram?: string | null;
+  website?: string | null;
+  cetusPoolAddress?: string | null;
 }
 
 export function useBondingCurves() {
