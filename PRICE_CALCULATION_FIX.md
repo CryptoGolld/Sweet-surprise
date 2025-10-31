@@ -102,15 +102,19 @@ Run `node test-price-calculations.js` to verify:
 ```
 Supply                   TVL (SUI)      Spot Price          Market Cap (SUI)
 =================================================================================
-Launch (0 tokens sold)   0.00           0.0000010000        1000.00
-1M tokens sold           1.00           0.0000010000        1000.00
-10M tokens sold          10.03          0.0000010090        1009.00
-50M tokens sold          53.93          0.0000012350        1235.00
-100M tokens sold         131.47         0.0000019430        1943.00
-368.5M tokens (50%)      1943.00        0.0000138180        13818.00
-500M tokens sold         4433.15        0.0000245980        24598.00
-737M (Graduation)        13333.00       0.0000522720        52272.00
+Launch (0 tokens sold)   0.00           0.0000010000        1,000 SUI
+1M tokens sold           1.00           0.0000010000        1,000 SUI
+10M tokens sold          10.03          0.0000010090        1,009 SUI
+50M tokens sold          53.93          0.0000012350        1,235 SUI
+100M tokens sold         131.47         0.0000019430        1,943 SUI
+368.5M tokens (50%)      1,943.00       0.0000138180        13,818 SUI
+500M tokens sold         4,433.15       0.0000245980        24,598 SUI
+737M (Graduation)        13,333.00      0.0000522720        52,272 SUI
 ```
+
+**Market Caps are in SUI!** To get USD value, multiply by SUI price:
+- 1,000 SUI × $3.50 = $3,500 USD
+- 52,272 SUI × $3.50 = $182,952 USD
 
 ✅ **All invariants verified:**
 - Initial market cap = exactly 1,000 SUI
@@ -194,9 +198,9 @@ const spotPrice = calculateSpotPrice(currentSupply);
    ```
 
 3. **Verify on frontend** - Market caps should now show realistic values:
-   - At 1M tokens: ~$1,000 market cap
-   - At 100M tokens: ~$1,943 market cap
-   - At 737M tokens (graduation): ~$52,272 market cap
+   - At 1M tokens: ~1,000 SUI (~$3,000-$4,000 USD depending on SUI price)
+   - At 100M tokens: ~1,943 SUI (~$6,000-$8,000 USD)
+   - At 737M tokens (graduation): ~52,272 SUI (~$150,000-$200,000 USD)
 
 4. **Optional: Add milestone features** using the Newton-Raphson functions:
    ```typescript

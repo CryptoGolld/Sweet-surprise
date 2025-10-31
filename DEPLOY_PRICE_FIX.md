@@ -63,10 +63,12 @@ pm2 restart all
 Open your website and check:
 
 #### ✅ Market Caps Look Realistic
-- **New token (0 tokens sold):** ~$1,000 market cap
-- **1M tokens sold:** ~$1,000 market cap  
-- **100M tokens sold:** ~$1,943 market cap
-- **737M tokens (graduation):** ~$52,272 market cap
+- **New token (0 tokens sold):** ~1,000 SUI market cap
+- **1M tokens sold:** ~1,000 SUI market cap  
+- **100M tokens sold:** ~1,943 SUI market cap
+- **737M tokens (graduation):** ~52,272 SUI market cap
+
+Note: To get USD value, multiply by SUI price. Example: 1,000 SUI × $3 = $3,000 USD
 
 #### ✅ Progress Bars Work
 - Should show actual percentage (e.g., 10M tokens = 1.4% progress)
@@ -118,18 +120,24 @@ Verify `fullyDilutedValuation` field exists and has values.
 
 ## 📊 Expected Values After Fix
 
-Here's what you should see after the fix (assuming SUI = $1):
+Here's what you should see after the fix:
 
-| Tokens Sold | TVL (SUI) | Spot Price (SUI) | Market Cap (USD) | Progress |
+| Tokens Sold | TVL (SUI) | Spot Price (SUI) | Market Cap (SUI) | Progress |
 |-------------|-----------|------------------|------------------|----------|
-| 0           | 0         | 0.000001         | $1,000           | 0%       |
-| 1M          | 1         | 0.000001         | $1,000           | 0.14%    |
-| 10M         | 10        | 0.000001009      | $1,009           | 1.4%     |
-| 50M         | 54        | 0.000001235      | $1,235           | 6.8%     |
-| 100M        | 131       | 0.000001943      | $1,943           | 13.6%    |
-| 368.5M      | 1,943     | 0.000013818      | $13,818          | 50%      |
-| 500M        | 4,433     | 0.000024598      | $24,598          | 67.8%    |
-| 737M        | 13,333    | 0.000052272      | $52,272          | 100%     |
+| 0           | 0         | 0.000001         | 1,000            | 0%       |
+| 1M          | 1         | 0.000001         | 1,000            | 0.14%    |
+| 10M         | 10        | 0.000001009      | 1,009            | 1.4%     |
+| 50M         | 54        | 0.000001235      | 1,235            | 6.8%     |
+| 100M        | 131       | 0.000001943      | 1,943            | 13.6%    |
+| 368.5M      | 1,943     | 0.000013818      | 13,818           | 50%      |
+| 500M        | 4,433     | 0.000024598      | 24,598           | 67.8%    |
+| 737M        | 13,333    | 0.000052272      | 52,272           | 100%     |
+
+**Note:** Market caps are in SUI. To display in USD, multiply by current SUI price:
+```typescript
+const marketCapUsd = fullyDilutedValuation * suiPrice;
+// Example: 1,000 SUI × $3.50 = $3,500 USD
+```
 
 ## 🎉 Cool Features You Can Now Add
 
@@ -199,5 +207,7 @@ We implemented everything they suggested, and now your prices are correct! 🎉
 **Time to deploy:** ~5 minutes  
 **Risk level:** Low (only calculations changed, no blockchain interaction)  
 **Testing:** ✅ Verified with test script
+
+**Important Note:** All market caps are calculated in **SUI**, not USD. Your frontend already converts to USD correctly by multiplying `fullyDilutedValuation` (in SUI) by the current SUI price.
 
 Go ahead and deploy! 🚀
