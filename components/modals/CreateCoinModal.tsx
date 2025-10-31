@@ -5,15 +5,18 @@ import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-ki
 import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
+import { COIN_TYPES } from '@/lib/constants';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { ImageUpload } from '@/components/ImageUpload';
 
 interface CreateCoinModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: (curveId: string) => void;
 }
 
-export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
+export function CreateCoinModal({ isOpen, onClose, onOpenChange, onSuccess }: CreateCoinModalProps) {
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   
@@ -321,11 +324,16 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         }
         
         const curveId = (curveObj as any).objectId;
+        const coinType = `${publishedData.packageId}::${publishedData.moduleName}::${publishedData.structName}`;
         
         // Skip step 3 (already bought)
-        setCurveId(curveId);
+        setCurveData({
+          curveId,
+          curveDigest: result.digest,
+          coinType,
+        });
         onSuccess?.(curveId);
-        onOpenChange(false);
+        onOpenChange?.(false);
         
         toast.success('🎉 Token Launched!', {
           description: `You bought ${formData.initialBuyAmount} tokens at launch. Head start achieved!`,
@@ -516,6 +524,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     handleFinish();
   }
   
+  function closeModal() {
+    onOpenChange?.(false);
+    onClose();
+  }
+
   function handleFinish() {
     // Clear localStorage
     if (currentAccount) {
@@ -536,7 +549,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     setBuyAmount('');
     setCurrentStep(1);
     setStatus('');
-    onClose();
+    closeModal();
     
     // Reload to show new coin
     setTimeout(() => window.location.reload(), 2000);
@@ -571,7 +584,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
           website: '',
         });
       }
-      onClose();
+      closeModal();
     }
   }
 

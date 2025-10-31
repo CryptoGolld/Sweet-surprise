@@ -233,9 +233,13 @@ app.get('/api/trades/:coinType', async (req, res) => {
       trader: row.trader,
       type: row.trade_type,
       suiAmount: row.sui_amount,
+      sui_amount: row.sui_amount,
       tokenAmount: row.token_amount,
+      token_amount: row.token_amount,
       price: parseFloat(row.price_per_token),
-      timestamp: new Date(row.timestamp).getTime(),
+      price_per_token: parseFloat(row.price_per_token),
+      timestamp: row.timestamp ? new Date(row.timestamp).toISOString() : null,
+      timestamp_ms: row.timestamp ? new Date(row.timestamp).getTime() : null,
     }));
 
     res.json({ coinType, trades, count: trades.length });
