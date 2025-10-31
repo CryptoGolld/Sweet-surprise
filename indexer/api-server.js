@@ -229,13 +229,13 @@ app.get('/api/trades/:coinType', async (req, res) => {
     );
 
     const trades = result.rows.map(row => ({
-      txDigest: row.tx_digest,
+      tx_digest: row.tx_digest,
       trader: row.trader,
       type: row.trade_type,
-      suiAmount: row.sui_amount,
-      tokenAmount: row.token_amount,
-      price: parseFloat(row.price_per_token),
-      timestamp: new Date(row.timestamp).getTime(),
+      sui_amount: row.sui_amount,
+      token_amount: row.token_amount,
+      price_per_token: parseFloat(row.price_per_token),
+      timestamp: new Date(row.timestamp).toISOString(),
     }));
 
     res.json({ coinType, trades, count: trades.length });

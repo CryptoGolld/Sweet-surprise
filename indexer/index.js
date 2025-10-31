@@ -334,10 +334,14 @@ async function processBuyEvent(event) {
     const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
-    // Get transaction to find curve and token amounts
+    // Get transaction to find curve and token amounts with balance changes
     const txDetails = await client.getTransactionBlock({
       digest: event.id.txDigest,
-      options: { showObjectChanges: true },
+      options: { 
+        showObjectChanges: true,
+        showBalanceChanges: true,
+        showEffects: true,
+      },
     });
     
     // Find minted tokens (newly created coins of the memecoin type)
@@ -360,17 +364,36 @@ async function processBuyEvent(event) {
     );
     const curveId = curveUsed?.objectId || '';
     
-    // Estimate tokens (we don't have exact amount in event, use cost/price estimation)
-    // This is approximate - for exact amounts, we'd need to parse BalanceChange
-    const pricePerToken = 0.00001; // Rough estimate, will be refined by actual trades
-    const tokensOut = BigInt(suiIn) / BigInt(10000); // Rough estimate
+    // Extract ACTUAL token amount from balance changes
+    let tokensOut = '0';
+    if (txDetails.balanceChanges) {
+      const tokenBalanceChange = txDetails.balanceChanges.find(
+        bc => bc.coinType === coinType && bc.owner?.AddressOwner === buyer
+      );
+      if (tokenBalanceChange) {
+        // Balance change amount is a string that can be negative, we want absolute value
+        tokensOut = tokenBalanceChange.amount.replace('-', '');
+      }
+    }
+    
+    // If we couldn't find it in balance changes, try to estimate from object changes
+    if (tokensOut === '0' && mintedCoins.length > 0) {
+      console.warn(`⚠️  Could not find balance change for ${coinType}, using fallback estimation`);
+      // Fallback: rough estimation
+      tokensOut = (BigInt(suiIn) * BigInt(100000)).toString(); // Very rough estimate
+    }
+    
+    // Calculate ACTUAL price per token
+    const pricePerToken = BigInt(suiIn) > 0n && BigInt(tokensOut) > 0n
+      ? parseFloat(suiIn) / parseFloat(tokensOut)
+      : 0
     
     // Insert trade
     await db.query(
       `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (tx_digest) DO NOTHING`,
-      [event.id.txDigest, coinType, curveId, buyer, 'buy', suiIn, tokensOut.toString(), pricePerToken, timestamp]
+      [event.id.txDigest, coinType, curveId, buyer, 'buy', suiIn, tokensOut, pricePerToken, timestamp]
     );
     
     // Update user PnL
@@ -383,7 +406,7 @@ async function processBuyEvent(event) {
          total_tokens_bought = user_pnl.total_tokens_bought + $4,
          buy_count = user_pnl.buy_count + 1,
          last_trade_at = $5`,
-      [buyer, coinType, suiIn, tokensOut.toString(), timestamp]
+      [buyer, coinType, suiIn, tokensOut, timestamp]
     );
     
     // Update token holders (increase balance)
@@ -394,7 +417,7 @@ async function processBuyEvent(event) {
        DO UPDATE SET 
          balance = token_holders.balance + $3,
          last_updated_at = $4`,
-      [buyer, coinType, tokensOut.toString(), timestamp]
+      [buyer, coinType, tokensOut, timestamp]
     );
     
     // Track referral if present
@@ -411,7 +434,7 @@ async function processBuyEvent(event) {
     // Update token price and market data
     await updateTokenPriceAndMarketCap(coinType);
     
-    console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${suiIn} SUI`);
+    console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${(parseFloat(suiIn) / 1e9).toFixed(4)} SUILFG for ${(parseFloat(tokensOut) / 1e9).toFixed(2)} tokens @ ${pricePerToken.toFixed(10)}`);
     
   } catch (error) {
     console.error('Failed to process buy event:', error.message);
@@ -429,10 +452,14 @@ async function processSellEvent(event) {
     const referrer = fields.referrer;
     const timestamp = new Date(parseInt(event.timestampMs));
     
-    // Get transaction to find curve and token amounts
+    // Get transaction to find curve and token amounts with balance changes
     const txDetails = await client.getTransactionBlock({
       digest: event.id.txDigest,
-      options: { showObjectChanges: true },
+      options: { 
+        showObjectChanges: true,
+        showBalanceChanges: true,
+        showEffects: true,
+      },
     });
     
     // Find curve from mutated objects
@@ -450,16 +477,36 @@ async function processSellEvent(event) {
     const coinType = coinTypeMatch ? coinTypeMatch[1] : '';
     const curveId = curveUsed.objectId;
     
-    // Estimate tokens sold (approximate)
-    const pricePerToken = 0.00001; // Rough estimate
-    const tokensIn = BigInt(suiOut) / BigInt(10000); // Rough estimate
+    // Extract ACTUAL token amount from balance changes
+    let tokensIn = '0';
+    if (txDetails.balanceChanges) {
+      const tokenBalanceChange = txDetails.balanceChanges.find(
+        bc => bc.coinType === coinType && bc.owner?.AddressOwner === seller
+      );
+      if (tokenBalanceChange) {
+        // For sells, the balance change is negative (tokens leaving), we want absolute value
+        tokensIn = tokenBalanceChange.amount.replace('-', '');
+      }
+    }
+    
+    // If we couldn't find it in balance changes, estimate
+    if (tokensIn === '0') {
+      console.warn(`⚠️  Could not find balance change for ${coinType} sell, using fallback estimation`);
+      // Fallback: rough estimation
+      tokensIn = (BigInt(suiOut) * BigInt(100000)).toString(); // Very rough estimate
+    }
+    
+    // Calculate ACTUAL price per token
+    const pricePerToken = BigInt(tokensIn) > 0n && BigInt(suiOut) > 0n
+      ? parseFloat(suiOut) / parseFloat(tokensIn)
+      : 0
     
     // Insert trade
     await db.query(
       `INSERT INTO trades (tx_digest, coin_type, curve_id, trader, trade_type, sui_amount, token_amount, price_per_token, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (tx_digest) DO NOTHING`,
-      [event.id.txDigest, coinType, curveId, seller, 'sell', suiOut, tokensIn.toString(), pricePerToken, timestamp]
+      [event.id.txDigest, coinType, curveId, seller, 'sell', suiOut, tokensIn, pricePerToken, timestamp]
     );
     
     // Update user PnL
@@ -473,7 +520,7 @@ async function processSellEvent(event) {
          sell_count = user_pnl.sell_count + 1,
          realized_pnl = (user_pnl.total_sui_received + $3) - user_pnl.total_sui_spent,
          last_trade_at = $5`,
-      [seller, coinType, suiOut, tokensIn.toString(), timestamp]
+      [seller, coinType, suiOut, tokensIn, timestamp]
     );
     
     // Update token holders (decrease balance)
@@ -484,7 +531,7 @@ async function processSellEvent(event) {
        DO UPDATE SET 
          balance = token_holders.balance - $3::bigint,
          last_updated_at = $4`,
-      [seller, coinType, tokensIn.toString(), timestamp]
+      [seller, coinType, tokensIn, timestamp]
     );
     
     // If balance is now 0 or negative, remove from holders
@@ -508,7 +555,7 @@ async function processSellEvent(event) {
     // Update token price and market data
     await updateTokenPriceAndMarketCap(coinType);
     
-    console.log(`💸 Sell: ${seller.slice(0, 10)}... received ${suiOut} SUI`);
+    console.log(`💸 Sell: ${seller.slice(0, 10)}... sold ${(parseFloat(tokensIn) / 1e9).toFixed(2)} tokens for ${(parseFloat(suiOut) / 1e9).toFixed(4)} SUILFG @ ${pricePerToken.toFixed(10)}`);
     
   } catch (error) {
     console.error('Failed to process sell event:', error.message);
