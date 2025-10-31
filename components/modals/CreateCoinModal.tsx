@@ -586,6 +586,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
           twitter: '',
           telegram: '',
           website: '',
+          initialBuyAmount: '',
         });
       }
       onClose();
