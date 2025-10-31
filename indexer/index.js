@@ -783,16 +783,18 @@ async function generateCandles() {
 }
 
 // Calculate bonding curve spot price at given supply (EXACT contract formula!)
+// CRITICAL: supplyInWholeTokens must be in WHOLE TOKENS, not mist!
+// The contract stores token_supply in whole tokens (see bonding_curve.move line 215-217)
 function calculateSpotPrice(supplyInWholeTokens) {
   const M_NUM = 1n;
-  const M_DEN = 10593721631205n; // EXACT value from contract (line 48)
+  const M_DEN = 10593721631205n; // EXACT value from contract
   const BASE_PRICE_MIST = 1_000n; // 0.000001 SUI
   const MIST_PER_SUI = 1_000_000_000n; // 1e9
   
   const supply = BigInt(Math.floor(supplyInWholeTokens));
   
   // p(s) = base_price_mist + (m_num * s^2) / m_den
-  // This EXACT formula is from bonding_curve.move line 946-952
+  // This EXACT formula matches bonding_curve.move spot_price_u128()
   const supplySquared = supply * supply;
   const priceIncrease = (M_NUM * supplySquared) / M_DEN;
   const totalPriceMist = BASE_PRICE_MIST + priceIncrease;
@@ -814,8 +816,10 @@ async function updateTokenPriceAndMarketCap(coinType) {
       return; // Token not found
     }
     
-    const curveSupplyMist = BigInt(tokenResult.rows[0]?.curve_supply || '0');
-    const curveSupply = Number(curveSupplyMist) / 1e9; // Convert to whole tokens
+    // CRITICAL FIX: curve_supply is ALREADY in whole tokens (not mist!)
+    // The contract stores token_supply in whole tokens (see bonding_curve.move line 215-217)
+    // Example: if curve_supply = "1000000", that's 1M tokens (NOT 0.001 tokens)
+    const curveSupply = Number(tokenResult.rows[0]?.curve_supply || '0');
     
     // Calculate REAL current price from bonding curve (like pump.fun!)
     const currentPrice = calculateSpotPrice(curveSupply);

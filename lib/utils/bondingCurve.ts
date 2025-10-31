@@ -1,13 +1,16 @@
 /**
  * Bonding Curve Math Utilities
- * Simulates the quadratic bonding curve formula for price calculations
+ * EXACT implementation matching the Move contract
+ * 
+ * CRITICAL: The contract stores token_supply in WHOLE TOKENS (not mist)
+ * See bonding_curve.move line 215-217 for proof
  */
 
 import { BONDING_CURVE } from '../constants';
 
 // Platform defaults from contract (EXACT values from platform_config.move)
 const M_NUM = 1n;
-const M_DEN = 10593721631205n; // From contract line 48 - mathematically correct for 737M tokens @ 13,333 SUI
+const M_DEN = 10593721631205n; // From contract - mathematically correct for 737M tokens @ 13,333 SUI
 const BASE_PRICE_MIST = 1_000n; // 0.000001 SUI (1 micro-SUI)
 const MIST_PER_SUI = 1_000_000_000n; // 1e9
 
@@ -15,11 +18,15 @@ const MIST_PER_SUI = 1_000_000_000n; // 1e9
  * Calculate spot price at a given supply
  * Formula: price = base_price + (m * supply^2)
  * Where m = M_NUM / M_DEN
+ * 
+ * IMPORTANT: supplyInTokens MUST be in whole tokens
+ * If you're getting supply from blockchain, it's already in whole tokens!
  */
 export function calculateSpotPrice(supplyInTokens: number): number {
   const supply = BigInt(Math.floor(supplyInTokens));
   
-  // price_mist = base_price + (m_num * supply^2) / m_den
+  // p(s) = base_price_mist + (m_num * s^2) / m_den
+  // This EXACTLY matches bonding_curve.move spot_price_u128()
   const supplySquared = supply * supply;
   const priceIncrease = (M_NUM * supplySquared) / M_DEN;
   const totalPriceMist = BASE_PRICE_MIST + priceIncrease;
@@ -29,25 +36,29 @@ export function calculateSpotPrice(supplyInTokens: number): number {
 }
 
 /**
+ * Calculate TVL (total SUI raised) at a given supply
+ * This is the INTEGRAL of the price function
+ * Formula: TVL(s) = base_price * s + (m_num / (3 * m_den)) * s?
+ */
+function calculateTVL(supply: number): number {
+  const s = BigInt(Math.floor(supply));
+  const baseCost = BASE_PRICE_MIST * s;
+  const sCubed = s * s * s;
+  const cubicTerm = (M_NUM * sCubed) / (3n * M_DEN);
+  const totalMist = baseCost + cubicTerm;
+  return Number(totalMist) / Number(MIST_PER_SUI);
+}
+
+/**
  * Calculate cost to buy tokens (area under curve)
  * This is the integral of the price function
  */
 export function calculateBuyCost(currentSupply: number, tokensToBuy: number): number {
-  const s0 = BigInt(Math.floor(currentSupply));
-  const s1 = s0 + BigInt(Math.floor(tokensToBuy));
+  const s0 = Math.floor(currentSupply);
+  const s1 = s0 + Math.floor(tokensToBuy);
   
-  // Integral: cost = base_price * delta_supply + (m_num / (3 * m_den)) * (s1^3 - s0^3)
-  const deltaSupply = s1 - s0;
-  const baseCost = BASE_PRICE_MIST * deltaSupply;
-  
-  const s1Cubed = s1 * s1 * s1;
-  const s0Cubed = s0 * s0 * s0;
-  const cubicTerm = (M_NUM * (s1Cubed - s0Cubed)) / (3n * M_DEN);
-  
-  const totalCostMist = baseCost + cubicTerm;
-  
-  // Convert to SUI
-  return Number(totalCostMist) / Number(MIST_PER_SUI);
+  // Cost = TVL(s1) - TVL(s0)
+  return calculateTVL(s1) - calculateTVL(s0);
 }
 
 /**

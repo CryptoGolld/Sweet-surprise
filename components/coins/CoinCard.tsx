@@ -17,9 +17,11 @@ export function CoinCard({ curve }: CoinCardProps) {
   const [showTrading, setShowTrading] = useState(false);
   const { data: suiPrice = 1.0 } = useSuiPrice();
 
+  // CRITICAL: curve.curveSupply is ALREADY in whole tokens (not mist!)
+  // MAX_CURVE_SUPPLY is also in whole tokens (737M), so compare directly
   const progress = calculatePercentage(
     curve.curveSupply,
-    BONDING_CURVE.MAX_CURVE_SUPPLY * 1e9
+    BONDING_CURVE.MAX_CURVE_SUPPLY
   );
 
   const age = Math.floor((Date.now() - curve.createdAt) / (1000 * 60)); // minutes
