@@ -164,16 +164,8 @@ async function indexEvents() {
               latestTimestamp = eventTimestamp;
             }
             
-            // Check if already in database by tx_digest (extra safety)
-            const existsResult = await db.query(
-              'SELECT 1 FROM trades WHERE tx_digest = $1 LIMIT 1',
-              [event.id.txDigest]
-            );
-            
-            if (existsResult.rows.length > 0 && !eventType.includes('Created')) {
-              console.log(`⏭️  Skipping duplicate trade: ${event.id.txDigest.slice(0, 10)}...`);
-              continue; // Skip if already processed
-            }
+            // No need to check duplicates - database has ON CONFLICT DO NOTHING
+            // This speeds up indexing significantly!
             
             totalNewEvents++;
             
@@ -209,13 +201,19 @@ async function indexEvents() {
       
       if (totalNewEvents > 0) {
         console.log(`✨ Processed ${totalNewEvents} new events`);
-        await generateCandles();
+        // Generate candles less frequently to speed up indexing
+        // Only generate if we haven't generated in the last 10 seconds
+        const now = Date.now();
+        if (!global.lastCandleGeneration || (now - global.lastCandleGeneration) > 10000) {
+          await generateCandles();
+          global.lastCandleGeneration = now;
+        }
       } else {
         console.log('📭 No new events');
       }
       
-      // Wait before next poll (configurable via POLLING_INTERVAL_MS env var, default 2 seconds for memecoin speed)
-      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '2000');
+      // Wait before next poll (configurable via POLLING_INTERVAL_MS env var, default 1 second for instant memecoin updates!)
+      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '1000');
       await new Promise(resolve => setTimeout(resolve, pollingInterval));
       
     } catch (error) {
