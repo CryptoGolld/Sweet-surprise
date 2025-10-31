@@ -90,34 +90,24 @@ app.get('/api/chart/:coinType', async (req, res) => {
   try {
     const coinType = decodeURIComponent(req.params.coinType);
     const interval = req.query.interval || '1m';
-    const limit = parseInt(req.query.limit || '100');
+    const limit = parseInt(req.query.limit || '500');
 
-    const intervalMap = {
-      '1m': 'minute',
-      '5m': 'minute',
-      '15m': 'minute',
-      '1h': 'hour',
-      '4h': 'hour',
-      '1d': 'day',
-    };
-
-    const truncUnit = intervalMap[interval] || 'minute';
-
+    // Candles are already stored per minute, just return them directly
+    // For longer intervals, we'll aggregate client-side if needed
     const result = await db.query(
       `SELECT 
-        date_trunc($2, timestamp) as time,
-        (array_agg(open ORDER BY timestamp ASC))[1] as open,
-        MAX(high) as high,
-        MIN(low) as low,
-        (array_agg(close ORDER BY timestamp DESC))[1] as close,
-        SUM(CAST(volume AS NUMERIC)) as volume
+        timestamp as time,
+        open,
+        high,
+        low,
+        close,
+        volume
        FROM price_snapshots
        WHERE coin_type = $1
-         AND timestamp > NOW() - INTERVAL '7 days'
-       GROUP BY time
-       ORDER BY time DESC
-       LIMIT $3`,
-      [coinType, truncUnit, limit]
+         AND timestamp > NOW() - INTERVAL '24 hours'
+       ORDER BY timestamp DESC
+       LIMIT $2`,
+      [coinType, limit]
     );
 
     const candles = result.rows.map(row => ({
@@ -126,7 +116,7 @@ app.get('/api/chart/:coinType', async (req, res) => {
       high: parseFloat(row.high),
       low: parseFloat(row.low),
       close: parseFloat(row.close),
-      volume: row.volume,
+      volume: row.volume || '0',
     }));
 
     res.json({ coinType, interval, candles });
