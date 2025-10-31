@@ -57,12 +57,12 @@ export function CoinCard({ curve }: CoinCardProps) {
         {(
           <div className="p-3 flex items-center gap-3">
             {/* Token Image - Smaller */}
-            <div className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg flex items-center justify-center overflow-hidden">
+            <div className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-meme-pink/30 to-meme-purple/30 rounded-lg flex items-center justify-center overflow-hidden p-1">
               {curve.imageUrl ? (
                 <img
                   src={curve.imageUrl}
                   alt={curve.ticker}
-                  className="w-full h-full object-contain"
+                  className="max-w-full max-h-full object-contain rounded-sm"
                   onError={(e) => {
                     e.currentTarget.src = '';
                     e.currentTarget.style.display = 'none';

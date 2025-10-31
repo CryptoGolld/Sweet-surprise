@@ -259,12 +259,12 @@ export default function TokenPage() {
         <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-3xl p-6 md:p-8 mb-6">
           <div className="flex flex-col md:flex-row gap-6 items-start">
             {/* BIG Token Image */}
-            <div className="w-full md:w-48 h-48 md:h-48 rounded-2xl overflow-hidden bg-gradient-to-br from-meme-pink/20 to-sui-blue/20 flex items-center justify-center flex-shrink-0">
+            <div className="w-full md:w-48 h-48 md:h-48 rounded-2xl overflow-hidden bg-gradient-to-br from-meme-pink/20 to-sui-blue/20 flex items-center justify-center flex-shrink-0 p-2">
               {token.imageUrl ? (
                 <img 
                   src={token.imageUrl} 
                   alt={token.ticker} 
-                  className="w-full h-full object-contain"
+                  className="max-w-full max-h-full object-contain rounded-lg"
                 />
               ) : (
                 <span className="text-8xl">🚀</span>
