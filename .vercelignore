@@ -1,8 +1,12 @@
 # Backend indexer - runs separately on Ubuntu, not on Vercel
 indexer/
 
-# Test files
-test-sell-transaction.ts
+# Pool creation bot - runs separately on Ubuntu
+pool-creation-bot/
+
+# Test files and scripts
+test-*.ts
+set-lp-bot-address.ts
 contracts/scripts/
 contracts/test*.ts
 
