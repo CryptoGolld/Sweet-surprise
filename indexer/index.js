@@ -9,8 +9,22 @@ const { Pool } = pg;
 // Configuration - v0.0.8 package only
 const PLATFORM_PACKAGE = process.env.PLATFORM_PACKAGE || '0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348'; // v0.0.8
 const SUI_RPC_URL = process.env.SUI_RPC_URL;
-const db = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: 5000, // 5 second connection timeout
+  query_timeout: 10000, // 10 second query timeout
+});
 const client = new SuiClient({ url: SUI_RPC_URL });
+
+// Timeout wrapper to prevent hanging
+function withTimeout(promise, timeoutMs, operation = 'operation') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs}ms`)), timeoutMs)
+    )
+  ]);
+}
 
 console.log('🚀 Starting Memecoin Indexer (v0.0.8 only)...');
 console.log('📦 Package:', PLATFORM_PACKAGE);
@@ -143,7 +157,11 @@ async function indexEvents() {
             queryParams.cursor = cursor;
           }
           
-          const events = await client.queryEvents(queryParams);
+          const events = await withTimeout(
+            client.queryEvents(queryParams),
+            10000,
+            'queryEvents'
+          );
           
           if (events.data.length === 0) {
             break; // No more events
@@ -205,19 +223,24 @@ async function indexEvents() {
       if (totalNewEvents > 0) {
         console.log(`✨ Processed ${totalNewEvents} new events`);
         // Generate candles less frequently to speed up indexing
-        // Only generate if we haven't generated in the last 5 seconds
+        // Only generate if we haven't generated in the last 10 seconds
         const now = Date.now();
-        if (!global.lastCandleGeneration || (now - global.lastCandleGeneration) > 5000) {
-          await generateCandles();
-          global.lastCandleGeneration = now;
+        if (!global.lastCandleGeneration || (now - global.lastCandleGeneration) > 10000) {
+          // Run candle generation with timeout to prevent hanging
+          try {
+            await withTimeout(generateCandles(), 30000, 'generateCandles');
+            global.lastCandleGeneration = now;
+          } catch (error) {
+            console.error('⚠️  Candle generation timed out, will retry later');
+          }
         }
       } else {
         // Reduce console spam when no events
         // console.log('📭 No new events');
       }
       
-      // Wait before next poll (500ms for near-instant memecoin updates!)
-      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '500');
+      // Wait before next poll (2 seconds is more stable for production)
+      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '2000');
       await new Promise(resolve => setTimeout(resolve, pollingInterval));
       
     } catch (error) {
@@ -236,14 +259,18 @@ async function indexEvents() {
 // Process a Created event
 async function processCreatedEvent(event) {
   try {
-    // Get transaction details
-    const txDetails = await client.getTransactionBlock({
-      digest: event.id.txDigest,
-      options: {
-        showObjectChanges: true,
-        showEffects: true,
-      },
-    });
+    // Get transaction details with timeout
+    const txDetails = await withTimeout(
+      client.getTransactionBlock({
+        digest: event.id.txDigest,
+        options: {
+          showObjectChanges: true,
+          showEffects: true,
+        },
+      }),
+      10000,
+      'getTransactionBlock'
+    );
     
     // Find the BondingCurve object
     const curveObj = txDetails.objectChanges?.find(
@@ -257,11 +284,15 @@ async function processCreatedEvent(event) {
     
     const curveId = curveObj.objectId;
     
-    // Fetch curve details
-    const curveObject = await client.getObject({
-      id: curveId,
-      options: { showContent: true, showType: true },
-    });
+    // Fetch curve details with timeout
+    const curveObject = await withTimeout(
+      client.getObject({
+        id: curveId,
+        options: { showContent: true, showType: true },
+      }),
+      10000,
+      'getObject'
+    );
     
     if (curveObject.data?.content?.dataType !== 'moveObject') {
       console.warn('Invalid curve object:', curveId);
@@ -289,14 +320,18 @@ async function processCreatedEvent(event) {
     let imageUrl = '';
     
     try {
-      const metadata = await client.getCoinMetadata({ coinType });
+      const metadata = await withTimeout(
+        client.getCoinMetadata({ coinType }),
+        5000,
+        'getCoinMetadata'
+      );
       if (metadata) {
         name = metadata.name || ticker;
         description = metadata.description || '';
         imageUrl = metadata.iconUrl || '';
       }
     } catch (e) {
-      console.warn(`No metadata for ${ticker}`);
+      console.warn(`No metadata for ${ticker}:`, e.message);
     }
     
     // Insert into database with initial price of 0
@@ -343,14 +378,18 @@ async function processBuyEvent(event) {
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts with balance changes
-    const txDetails = await client.getTransactionBlock({
-      digest: event.id.txDigest,
-      options: { 
-        showObjectChanges: true,
-        showBalanceChanges: true,
-        showEffects: true,
-      },
-    });
+    const txDetails = await withTimeout(
+      client.getTransactionBlock({
+        digest: event.id.txDigest,
+        options: { 
+          showObjectChanges: true,
+          showBalanceChanges: true,
+          showEffects: true,
+        },
+      }),
+      10000,
+      'getTransactionBlock (buy)'
+    );
     
     // Find minted tokens (newly created coins of the memecoin type)
     const mintedCoins = txDetails.objectChanges?.filter(
@@ -461,14 +500,18 @@ async function processSellEvent(event) {
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts with balance changes
-    const txDetails = await client.getTransactionBlock({
-      digest: event.id.txDigest,
-      options: { 
-        showObjectChanges: true,
-        showBalanceChanges: true,
-        showEffects: true,
-      },
-    });
+    const txDetails = await withTimeout(
+      client.getTransactionBlock({
+        digest: event.id.txDigest,
+        options: { 
+          showObjectChanges: true,
+          showBalanceChanges: true,
+          showEffects: true,
+        },
+      }),
+      10000,
+      'getTransactionBlock (sell)'
+    );
     
     // Find curve from mutated objects
     const curveUsed = txDetails.objectChanges?.find(
