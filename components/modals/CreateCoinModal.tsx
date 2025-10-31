@@ -12,9 +12,11 @@ import { ImageUpload } from '@/components/ImageUpload';
 interface CreateCoinModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: (curveId: string) => void;
 }
 
-export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
+export function CreateCoinModal({ isOpen, onClose, onOpenChange, onSuccess }: CreateCoinModalProps) {
   const currentAccount = useCurrentAccount();
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   
@@ -522,6 +524,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     handleFinish();
   }
   
+  function closeModal() {
+    onOpenChange?.(false);
+    onClose();
+  }
+
   function handleFinish() {
     // Clear localStorage
     if (currentAccount) {
@@ -542,7 +549,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     setBuyAmount('');
     setCurrentStep(1);
     setStatus('');
-    onClose();
+    closeModal();
     
     // Reload to show new coin
     setTimeout(() => window.location.reload(), 2000);
@@ -577,7 +584,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
           website: '',
         });
       }
-      onClose();
+      closeModal();
     }
   }
 
