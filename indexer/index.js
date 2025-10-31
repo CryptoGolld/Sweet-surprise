@@ -32,12 +32,13 @@ console.log('🌐 RPC:', SUI_RPC_URL);
 
 // Index historical events (run once on first start)
 async function indexHistoricalEvents() {
-  const stateResult = await db.query('SELECT last_cursor FROM indexer_state WHERE id = 1');
-  const lastCursor = stateResult.rows[0]?.last_cursor;
+  const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
+  const lastTimestamp = stateResult.rows[0]?.last_timestamp;
   
-  // Only run if this is the first time (no cursor saved)
-  if (lastCursor) {
+  // Only run if this is the first time (no timestamp saved) OR timestamp is very old
+  if (lastTimestamp && parseInt(lastTimestamp) > 0) {
     console.log('⏭️  Skipping historical indexing (already synced)');
+    console.log(`   Last indexed: ${new Date(parseInt(lastTimestamp)).toISOString()}`);
     return;
   }
   
@@ -478,7 +479,29 @@ async function processBuyEvent(event) {
       );
     }
     
-    // Update token price and market data
+    // Fetch latest curve state from blockchain to get accurate supply
+    try {
+      const curveObject = await withTimeout(
+        client.getObject({
+          id: curveId,
+          options: { showContent: true },
+        }),
+        10000,
+        'getObject (refresh curve)'
+      );
+      
+      if (curveObject.data?.content?.dataType === 'moveObject') {
+        const fields = curveObject.data.content.fields;
+        await db.query(
+          `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
+          [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to refresh curve state:', error.message);
+    }
+    
+    // Update token price and market data (using fresh supply)
     await updateTokenPriceAndMarketCap(coinType);
     
     console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${(parseFloat(suiIn) / 1e9).toFixed(4)} SUILFG for ${(parseFloat(tokensOut) / 1e9).toFixed(2)} tokens @ ${pricePerToken.toFixed(10)}`);
@@ -603,7 +626,29 @@ async function processSellEvent(event) {
       );
     }
     
-    // Update token price and market data
+    // Fetch latest curve state from blockchain to get accurate supply
+    try {
+      const curveObject = await withTimeout(
+        client.getObject({
+          id: curveId,
+          options: { showContent: true },
+        }),
+        10000,
+        'getObject (refresh curve)'
+      );
+      
+      if (curveObject.data?.content?.dataType === 'moveObject') {
+        const fields = curveObject.data.content.fields;
+        await db.query(
+          `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
+          [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to refresh curve state:', error.message);
+    }
+    
+    // Update token price and market data (using fresh supply)
     await updateTokenPriceAndMarketCap(coinType);
     
     console.log(`💸 Sell: ${seller.slice(0, 10)}... sold ${(parseFloat(tokensIn) / 1e9).toFixed(2)} tokens for ${(parseFloat(suiOut) / 1e9).toFixed(4)} SUILFG @ ${pricePerToken.toFixed(10)}`);
@@ -747,12 +792,46 @@ async function generateCandles() {
   }
 }
 
-// Update token price and market cap based on latest trades
+// Calculate bonding curve spot price at given supply (like pump.fun)
+function calculateSpotPrice(supplyInWholeTokens) {
+  const M_NUM = 1n;
+  const M_DEN = 10_000_000_000_000n; // 10^13
+  const BASE_PRICE_MIST = 1_000n; // 0.000001 SUI
+  const MIST_PER_SUI = 1_000_000_000n; // 1e9
+  
+  const supply = BigInt(Math.floor(supplyInWholeTokens));
+  
+  // price_mist = base_price + (m_num * supply^2) / m_den
+  const supplySquared = supply * supply;
+  const priceIncrease = (M_NUM * supplySquared) / M_DEN;
+  const totalPriceMist = BASE_PRICE_MIST + priceIncrease;
+  
+  // Convert to SUI
+  return Number(totalPriceMist) / Number(MIST_PER_SUI);
+}
+
+// Update token price and market cap based on BONDING CURVE (not last trade!)
 async function updateTokenPriceAndMarketCap(coinType) {
   try {
-    // Get latest trade price
+    // Get curve data from tokens table
+    const tokenResult = await db.query(
+      `SELECT curve_supply, curve_balance FROM tokens WHERE coin_type = $1`,
+      [coinType]
+    );
+    
+    if (tokenResult.rows.length === 0) {
+      return; // Token not found
+    }
+    
+    const curveSupplyMist = BigInt(tokenResult.rows[0]?.curve_supply || '0');
+    const curveSupply = Number(curveSupplyMist) / 1e9; // Convert to whole tokens
+    
+    // Calculate REAL current price from bonding curve (like pump.fun!)
+    const currentPrice = calculateSpotPrice(curveSupply);
+    
+    // Get last trade timestamp
     const latestTradeResult = await db.query(
-      `SELECT price_per_token, timestamp 
+      `SELECT timestamp 
        FROM trades 
        WHERE coin_type = $1 
        ORDER BY timestamp DESC 
@@ -760,12 +839,9 @@ async function updateTokenPriceAndMarketCap(coinType) {
       [coinType]
     );
     
-    if (latestTradeResult.rows.length === 0) {
-      return; // No trades yet
-    }
-    
-    const currentPrice = parseFloat(latestTradeResult.rows[0].price_per_token);
-    const lastTradeAt = latestTradeResult.rows[0].timestamp;
+    const lastTradeAt = latestTradeResult.rows.length > 0 
+      ? latestTradeResult.rows[0].timestamp 
+      : null;
     
     // Get 24h ago price for price change calculation
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -796,27 +872,13 @@ async function updateTokenPriceAndMarketCap(coinType) {
     
     const volume24h = volume24hResult.rows[0]?.volume || '0';
     
-    // Get curve data from tokens table
-    const tokenResult = await db.query(
-      `SELECT curve_supply, curve_balance FROM tokens WHERE coin_type = $1`,
-      [coinType]
-    );
-    
-    if (tokenResult.rows.length === 0) {
-      return; // Token not found
-    }
-    
-    const curveSupply = parseFloat(tokenResult.rows[0]?.curve_supply || '0');
-    const curveBalance = parseFloat(tokenResult.rows[0]?.curve_balance || '0');
-    
-    // MARKET CAP = PRICE × TOTAL SUPPLY (1B)
-    // For bonding curve tokens, market cap equals FDV
-    // This gives consistent valuation across all tokens
+    // MARKET CAP = CURRENT BONDING CURVE PRICE × TOTAL SUPPLY (1B)
+    // This is the CORRECT way like pump.fun does it!
     const totalSupply = 1_000_000_000;
     const marketCap = currentPrice * totalSupply;
     
     // FDV (Fully Diluted Valuation):
-    // Same as market cap for bonding curve tokens
+    // Same as market cap for bonding curve tokens (all tokens exist)
     const fullyDilutedValuation = marketCap;
     
     // Get ATH and ATL
