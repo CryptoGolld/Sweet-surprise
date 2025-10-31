@@ -253,7 +253,7 @@ export default function TokenPage() {
                 <img 
                   src={token.imageUrl} 
                   alt={token.ticker} 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <span className="text-8xl">🚀</span>
