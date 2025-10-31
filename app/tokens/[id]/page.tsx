@@ -26,14 +26,15 @@ export default function TokenPage() {
   const [amount, setAmount] = useState('');
   
   // Fetch token data
-  const { data: tokensResponse, isLoading } = useQuery({
+  const { data: tokensResponse, isLoading, refetch } = useQuery({
     queryKey: ['indexer-tokens'],
     queryFn: async () => {
       const response = await fetch('/api/proxy/tokens?limit=1000');
       if (!response.ok) throw new Error('Failed to fetch tokens');
       return response.json();
     },
-    staleTime: 3000,
+    refetchInterval: 2000, // Refetch every 2 seconds for real-time updates
+    staleTime: 1000, // Consider data stale after 1 second
   });
   
   const token = tokensResponse?.tokens?.find((t: any) => t.id === tokenId);
@@ -112,7 +113,8 @@ export default function TokenPage() {
                 },
               });
               setAmount('');
-              setTimeout(() => window.location.reload(), 2000);
+              // Refetch data immediately instead of reloading
+              refetch();
             },
             onError: (error) => {
               toast.error('Purchase failed: ' + error.message?.slice(0, 100));
@@ -157,7 +159,8 @@ export default function TokenPage() {
                 },
               });
               setAmount('');
-              setTimeout(() => window.location.reload(), 2000);
+              // Refetch data immediately instead of reloading
+              refetch();
             },
             onError: (error) => {
               toast.error('Sale failed: ' + error.message?.slice(0, 100));

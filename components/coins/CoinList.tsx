@@ -55,8 +55,8 @@ export function CoinList() {
         throw new Error(`Failed to fetch from indexer: ${err.message}`);
       }
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
-    staleTime: 3000,
+    refetchInterval: 3000, // Refresh every 3 seconds for real-time memecoin updates
+    staleTime: 1000, // Fresh data for fast-moving markets
     retry: 3, // Retry 3 times
     retryDelay: 1000, // Wait 1s between retries
   });

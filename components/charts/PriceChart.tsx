@@ -28,8 +28,8 @@ export function PriceChart({ coinType }: PriceChartProps) {
       if (!response.ok) throw new Error('Failed to fetch chart data');
       return response.json();
     },
-    refetchInterval: 5000,
-    staleTime: 3000,
+    refetchInterval: 3000, // Update charts every 3 seconds
+    staleTime: 1000, // Fresh data for memecoin volatility
     retry: false,
   });
 

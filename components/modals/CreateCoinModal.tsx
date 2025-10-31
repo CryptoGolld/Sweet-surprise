@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
@@ -15,6 +16,7 @@ interface CreateCoinModalProps {
 
 export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   const currentAccount = useCurrentAccount();
+  const router = useRouter();
   const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   
   // UI State
@@ -538,8 +540,13 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
     setStatus('');
     onClose();
     
-    // Reload to show new coin
-    setTimeout(() => window.location.reload(), 2000);
+    // Navigate to the new token page instead of reloading
+    if (curveData?.curveId) {
+      router.push(`/tokens/${curveData.curveId}`);
+    } else {
+      // Fallback: go to tokens list
+      router.push('/tokens');
+    }
   }
 
   function handleClose() {

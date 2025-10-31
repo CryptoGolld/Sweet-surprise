@@ -147,8 +147,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               });
               setAmount('');
               
-              // Reload after delay
-              setTimeout(() => window.location.reload(), 2000);
+              // Close modal instead of reloading - parent will refetch automatically
+              setTimeout(() => onClose(), 1500);
             },
             onError: (error) => {
               const errorMsg = error.message || '';
@@ -250,7 +250,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               });
               setAmount('');
               
-              setTimeout(() => window.location.reload(), 2000);
+              // Close modal instead of reloading - parent will refetch automatically
+              setTimeout(() => onClose(), 1500);
             },
             onError: (error) => {
               toast.error('Sale failed', {
@@ -305,7 +306,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               {curve.imageUrl ? (
                 <img src={curve.imageUrl} alt={curve.ticker} className="w-full h-full object-cover" />
               ) : (
-                '🚀'
+                '??'
               )}
             </div>
             <div className="min-w-0 flex-1">
@@ -328,7 +329,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                 onClick={onClose}
                 className="text-gray-400 hover:text-white text-2xl transition-colors p-1"
               >
-                ×
+                ?
               </button>
             )}
           </div>
@@ -381,11 +382,11 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">SUI Collected</span>
-                  <span className="text-sui-blue font-bold">{formatAmount(curve.curveBalance, 9)} Ⓢ</span>
+                  <span className="text-sui-blue font-bold">{formatAmount(curve.curveBalance, 9)} ?</span>
                 </div>
                 {curve.graduated && (
                   <div className="bg-green-500/20 border border-green-500 rounded-lg p-3 text-center">
-                    <span className="text-green-400 font-bold">🎓 Graduated!</span>
+                    <span className="text-green-400 font-bold">?? Graduated!</span>
                   </div>
                 )}
               </div>
@@ -393,10 +394,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
             {/* Info */}
             <div className="text-xs text-gray-400 space-y-1 bg-white/5 rounded-lg p-3">
-              <p>• Fair launch bonding curve</p>
-              <p>• {BONDING_CURVE.MAX_CURVE_SUPPLY.toLocaleString()} tokens on curve</p>
-              <p>• Graduates at {BONDING_CURVE.TARGET_SUI.toLocaleString()} SUI</p>
-              <p>• Auto-creates Cetus LP</p>
+              <p>? Fair launch bonding curve</p>
+              <p>? {BONDING_CURVE.MAX_CURVE_SUPPLY.toLocaleString()} tokens on curve</p>
+              <p>? Graduates at {BONDING_CURVE.TARGET_SUI.toLocaleString()} SUI</p>
+              <p>? Auto-creates Cetus LP</p>
             </div>
           </div>
 
@@ -430,7 +431,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
             {curve.graduated && (
               <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-sm text-yellow-400">
-                ⚠️ This coin has graduated. Trading is now on Cetus DEX.
+                ?? This coin has graduated. Trading is now on Cetus DEX.
               </div>
             )}
 
@@ -499,7 +500,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
             {/* Trade Preview */}
             {tradePreview && (
               <div className="bg-gradient-to-br from-meme-purple/10 to-sui-blue/10 border border-meme-purple/30 rounded-lg p-4">
-                <div className="text-sm font-semibold text-meme-purple mb-3">💎 Trade Preview</div>
+                <div className="text-sm font-semibold text-meme-purple mb-3">?? Trade Preview</div>
                 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -542,7 +543,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                 
                 {Math.abs(tradePreview.priceImpact) > 5 && (
                   <div className="mt-3 p-2 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
-                    ⚠️ High price impact! Consider a smaller amount.
+                    ?? High price impact! Consider a smaller amount.
                   </div>
                 )}
               </div>
@@ -563,7 +564,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                 : curve.graduated
                 ? 'Graduated - Use Cetus'
                 : isPending
-                ? '⏳ Processing...'
+                ? '? Processing...'
                 : `${mode === 'buy' ? 'Buy' : 'Sell'} ${curve.ticker}`}
             </button>
 

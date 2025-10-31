@@ -214,8 +214,8 @@ async function indexEvents() {
         console.log('📭 No new events');
       }
       
-      // Wait before next poll (configurable via POLLING_INTERVAL_MS env var, default 5 seconds)
-      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '5000');
+      // Wait before next poll (configurable via POLLING_INTERVAL_MS env var, default 2 seconds for memecoin speed)
+      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '2000');
       await new Promise(resolve => setTimeout(resolve, pollingInterval));
       
     } catch (error) {

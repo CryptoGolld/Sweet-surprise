@@ -25,8 +25,8 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
       if (!response.ok) throw new Error('Failed to fetch trades');
       return response.json();
     },
-    refetchInterval: 5000,
-    staleTime: 3000,
+    refetchInterval: 2000, // Faster updates for memecoin trading
+    staleTime: 500, // Data becomes stale quickly
     retry: false,
   });
 
