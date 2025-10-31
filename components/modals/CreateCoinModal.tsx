@@ -322,9 +322,14 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         }
         
         const curveId = (curveObj as any).objectId;
+        const coinType = `${publishedData.packageId}::${publishedData.moduleName}::${publishedData.structName}`;
         
         // Skip step 3 (already bought)
-        setCurveId(curveId);
+        setCurveData({
+          curveId,
+          curveDigest: result.digest,
+          coinType,
+        });
         onSuccess?.(curveId);
         onOpenChange(false);
         
