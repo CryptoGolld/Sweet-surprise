@@ -333,7 +333,7 @@ export function CreateCoinModal({ isOpen, onClose, onOpenChange, onSuccess }: Cr
           coinType,
         });
         onSuccess?.(curveId);
-        onOpenChange(false);
+        onOpenChange?.(false);
         
         toast.success('🎉 Token Launched!', {
           description: `You bought ${formData.initialBuyAmount} tokens at launch. Head start achieved!`,
