@@ -5,9 +5,9 @@
 
 import { BONDING_CURVE } from '../constants';
 
-// Platform defaults from contract
+// Platform defaults from contract (EXACT values from platform_config.move)
 const M_NUM = 1n;
-const M_DEN = 10_000_000_000_000n; // 10^13
+const M_DEN = 10593721631205n; // From contract line 48 - mathematically correct for 737M tokens @ 13,333 SUI
 const BASE_PRICE_MIST = 1_000n; // 0.000001 SUI (1 micro-SUI)
 const MIST_PER_SUI = 1_000_000_000n; // 1e9
 

@@ -9,8 +9,22 @@ const { Pool } = pg;
 // Configuration - v0.0.8 package only
 const PLATFORM_PACKAGE = process.env.PLATFORM_PACKAGE || '0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348'; // v0.0.8
 const SUI_RPC_URL = process.env.SUI_RPC_URL;
-const db = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: 5000, // 5 second connection timeout
+  query_timeout: 10000, // 10 second query timeout
+});
 const client = new SuiClient({ url: SUI_RPC_URL });
+
+// Timeout wrapper to prevent hanging
+function withTimeout(promise, timeoutMs, operation = 'operation') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs}ms`)), timeoutMs)
+    )
+  ]);
+}
 
 console.log('🚀 Starting Memecoin Indexer (v0.0.8 only)...');
 console.log('📦 Package:', PLATFORM_PACKAGE);
@@ -18,12 +32,13 @@ console.log('🌐 RPC:', SUI_RPC_URL);
 
 // Index historical events (run once on first start)
 async function indexHistoricalEvents() {
-  const stateResult = await db.query('SELECT last_cursor FROM indexer_state WHERE id = 1');
-  const lastCursor = stateResult.rows[0]?.last_cursor;
+  const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
+  const lastTimestamp = stateResult.rows[0]?.last_timestamp;
   
-  // Only run if this is the first time (no cursor saved)
-  if (lastCursor) {
+  // Only run if this is the first time (no timestamp saved) OR timestamp is very old
+  if (lastTimestamp && parseInt(lastTimestamp) > 0) {
     console.log('⏭️  Skipping historical indexing (already synced)');
+    console.log(`   Last indexed: ${new Date(parseInt(lastTimestamp)).toISOString()}`);
     return;
   }
   
@@ -126,11 +141,13 @@ async function indexEvents() {
       let latestTimestamp = lastTimestamp;
       
       for (const eventType of eventTypes) {
-        let hasMore = true;
+        // OPTIMIZATION: Limit pagination to prevent re-scanning old events
+        // Since we poll every 500ms, we only need to check recent events
+        let pageCount = 0;
+        const MAX_PAGES = 10; // Max 500 events (10 pages × 50 events) per poll
         let cursor = null;
         
-        // Keep paginating until we hit events we've already seen
-        while (hasMore) {
+        while (pageCount < MAX_PAGES) {
           const queryParams = {
             query: { MoveEventType: eventType },
             limit: 50,
@@ -141,11 +158,14 @@ async function indexEvents() {
             queryParams.cursor = cursor;
           }
           
-          const events = await client.queryEvents(queryParams);
+          const events = await withTimeout(
+            client.queryEvents(queryParams),
+            10000,
+            'queryEvents'
+          );
           
           if (events.data.length === 0) {
-            hasMore = false;
-            break;
+            break; // No more events
           }
           
           let foundOldEvent = false;
@@ -164,9 +184,6 @@ async function indexEvents() {
               latestTimestamp = eventTimestamp;
             }
             
-            // No need to check duplicates - database has ON CONFLICT DO NOTHING
-            // This speeds up indexing significantly!
-            
             totalNewEvents++;
             
             // Process the event
@@ -184,10 +201,15 @@ async function indexEvents() {
           
           // Stop if we found old events or no more pages
           if (foundOldEvent || !events.hasNextPage) {
-            hasMore = false;
-          } else {
-            cursor = events.nextCursor;
+            break;
           }
+          
+          cursor = events.nextCursor;
+          pageCount++;
+        }
+        
+        if (pageCount >= MAX_PAGES) {
+          console.log(`   ⚠️  Hit max pagination limit for ${eventType.split('::').pop()}, will catch up on next poll`);
         }
       }
       
@@ -201,19 +223,15 @@ async function indexEvents() {
       
       if (totalNewEvents > 0) {
         console.log(`✨ Processed ${totalNewEvents} new events`);
-        // Generate candles less frequently to speed up indexing
-        // Only generate if we haven't generated in the last 10 seconds
-        const now = Date.now();
-        if (!global.lastCandleGeneration || (now - global.lastCandleGeneration) > 10000) {
-          await generateCandles();
-          global.lastCandleGeneration = now;
-        }
+        // NOTE: Candle generation moved to separate bot (candle-generator.js)
+        // This keeps the indexer fast and responsive
       } else {
-        console.log('📭 No new events');
+        // Reduce console spam when no events
+        // console.log('📭 No new events');
       }
       
-      // Wait before next poll (configurable via POLLING_INTERVAL_MS env var, default 1 second for instant memecoin updates!)
-      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '1000');
+      // Wait before next poll (2 seconds is more stable for production)
+      const pollingInterval = parseInt(process.env.POLLING_INTERVAL_MS || '2000');
       await new Promise(resolve => setTimeout(resolve, pollingInterval));
       
     } catch (error) {
@@ -232,14 +250,18 @@ async function indexEvents() {
 // Process a Created event
 async function processCreatedEvent(event) {
   try {
-    // Get transaction details
-    const txDetails = await client.getTransactionBlock({
-      digest: event.id.txDigest,
-      options: {
-        showObjectChanges: true,
-        showEffects: true,
-      },
-    });
+    // Get transaction details with timeout
+    const txDetails = await withTimeout(
+      client.getTransactionBlock({
+        digest: event.id.txDigest,
+        options: {
+          showObjectChanges: true,
+          showEffects: true,
+        },
+      }),
+      10000,
+      'getTransactionBlock'
+    );
     
     // Find the BondingCurve object
     const curveObj = txDetails.objectChanges?.find(
@@ -253,11 +275,15 @@ async function processCreatedEvent(event) {
     
     const curveId = curveObj.objectId;
     
-    // Fetch curve details
-    const curveObject = await client.getObject({
-      id: curveId,
-      options: { showContent: true, showType: true },
-    });
+    // Fetch curve details with timeout
+    const curveObject = await withTimeout(
+      client.getObject({
+        id: curveId,
+        options: { showContent: true, showType: true },
+      }),
+      10000,
+      'getObject'
+    );
     
     if (curveObject.data?.content?.dataType !== 'moveObject') {
       console.warn('Invalid curve object:', curveId);
@@ -285,14 +311,18 @@ async function processCreatedEvent(event) {
     let imageUrl = '';
     
     try {
-      const metadata = await client.getCoinMetadata({ coinType });
+      const metadata = await withTimeout(
+        client.getCoinMetadata({ coinType }),
+        5000,
+        'getCoinMetadata'
+      );
       if (metadata) {
         name = metadata.name || ticker;
         description = metadata.description || '';
         imageUrl = metadata.iconUrl || '';
       }
     } catch (e) {
-      console.warn(`No metadata for ${ticker}`);
+      console.warn(`No metadata for ${ticker}:`, e.message);
     }
     
     // Insert into database with initial price of 0
@@ -339,14 +369,18 @@ async function processBuyEvent(event) {
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts with balance changes
-    const txDetails = await client.getTransactionBlock({
-      digest: event.id.txDigest,
-      options: { 
-        showObjectChanges: true,
-        showBalanceChanges: true,
-        showEffects: true,
-      },
-    });
+    const txDetails = await withTimeout(
+      client.getTransactionBlock({
+        digest: event.id.txDigest,
+        options: { 
+          showObjectChanges: true,
+          showBalanceChanges: true,
+          showEffects: true,
+        },
+      }),
+      10000,
+      'getTransactionBlock (buy)'
+    );
     
     // Find minted tokens (newly created coins of the memecoin type)
     const mintedCoins = txDetails.objectChanges?.filter(
@@ -435,7 +469,29 @@ async function processBuyEvent(event) {
       );
     }
     
-    // Update token price and market data
+    // Fetch latest curve state from blockchain to get accurate supply
+    try {
+      const curveObject = await withTimeout(
+        client.getObject({
+          id: curveId,
+          options: { showContent: true },
+        }),
+        10000,
+        'getObject (refresh curve)'
+      );
+      
+      if (curveObject.data?.content?.dataType === 'moveObject') {
+        const fields = curveObject.data.content.fields;
+        await db.query(
+          `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
+          [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to refresh curve state:', error.message);
+    }
+    
+    // Update token price and market data (using fresh supply)
     await updateTokenPriceAndMarketCap(coinType);
     
     console.log(`💰 Buy: ${buyer.slice(0, 10)}... spent ${(parseFloat(suiIn) / 1e9).toFixed(4)} SUILFG for ${(parseFloat(tokensOut) / 1e9).toFixed(2)} tokens @ ${pricePerToken.toFixed(10)}`);
@@ -457,14 +513,18 @@ async function processSellEvent(event) {
     const timestamp = new Date(parseInt(event.timestampMs));
     
     // Get transaction to find curve and token amounts with balance changes
-    const txDetails = await client.getTransactionBlock({
-      digest: event.id.txDigest,
-      options: { 
-        showObjectChanges: true,
-        showBalanceChanges: true,
-        showEffects: true,
-      },
-    });
+    const txDetails = await withTimeout(
+      client.getTransactionBlock({
+        digest: event.id.txDigest,
+        options: { 
+          showObjectChanges: true,
+          showBalanceChanges: true,
+          showEffects: true,
+        },
+      }),
+      10000,
+      'getTransactionBlock (sell)'
+    );
     
     // Find curve from mutated objects
     const curveUsed = txDetails.objectChanges?.find(
@@ -556,7 +616,29 @@ async function processSellEvent(event) {
       );
     }
     
-    // Update token price and market data
+    // Fetch latest curve state from blockchain to get accurate supply
+    try {
+      const curveObject = await withTimeout(
+        client.getObject({
+          id: curveId,
+          options: { showContent: true },
+        }),
+        10000,
+        'getObject (refresh curve)'
+      );
+      
+      if (curveObject.data?.content?.dataType === 'moveObject') {
+        const fields = curveObject.data.content.fields;
+        await db.query(
+          `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
+          [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+        );
+      }
+    } catch (error) {
+      console.warn('Failed to refresh curve state:', error.message);
+    }
+    
+    // Update token price and market data (using fresh supply)
     await updateTokenPriceAndMarketCap(coinType);
     
     console.log(`💸 Sell: ${seller.slice(0, 10)}... sold ${(parseFloat(tokensIn) / 1e9).toFixed(2)} tokens for ${(parseFloat(suiOut) / 1e9).toFixed(4)} SUILFG @ ${pricePerToken.toFixed(10)}`);
@@ -700,12 +782,47 @@ async function generateCandles() {
   }
 }
 
-// Update token price and market cap based on latest trades
+// Calculate bonding curve spot price at given supply (EXACT contract formula!)
+function calculateSpotPrice(supplyInWholeTokens) {
+  const M_NUM = 1n;
+  const M_DEN = 10593721631205n; // EXACT value from contract (line 48)
+  const BASE_PRICE_MIST = 1_000n; // 0.000001 SUI
+  const MIST_PER_SUI = 1_000_000_000n; // 1e9
+  
+  const supply = BigInt(Math.floor(supplyInWholeTokens));
+  
+  // p(s) = base_price_mist + (m_num * s^2) / m_den
+  // This EXACT formula is from bonding_curve.move line 946-952
+  const supplySquared = supply * supply;
+  const priceIncrease = (M_NUM * supplySquared) / M_DEN;
+  const totalPriceMist = BASE_PRICE_MIST + priceIncrease;
+  
+  // Convert to SUI
+  return Number(totalPriceMist) / Number(MIST_PER_SUI);
+}
+
+// Update token price and market cap based on BONDING CURVE (not last trade!)
 async function updateTokenPriceAndMarketCap(coinType) {
   try {
-    // Get latest trade price
+    // Get curve data from tokens table
+    const tokenResult = await db.query(
+      `SELECT curve_supply, curve_balance FROM tokens WHERE coin_type = $1`,
+      [coinType]
+    );
+    
+    if (tokenResult.rows.length === 0) {
+      return; // Token not found
+    }
+    
+    const curveSupplyMist = BigInt(tokenResult.rows[0]?.curve_supply || '0');
+    const curveSupply = Number(curveSupplyMist) / 1e9; // Convert to whole tokens
+    
+    // Calculate REAL current price from bonding curve (like pump.fun!)
+    const currentPrice = calculateSpotPrice(curveSupply);
+    
+    // Get last trade timestamp
     const latestTradeResult = await db.query(
-      `SELECT price_per_token, timestamp 
+      `SELECT timestamp 
        FROM trades 
        WHERE coin_type = $1 
        ORDER BY timestamp DESC 
@@ -713,12 +830,9 @@ async function updateTokenPriceAndMarketCap(coinType) {
       [coinType]
     );
     
-    if (latestTradeResult.rows.length === 0) {
-      return; // No trades yet
-    }
-    
-    const currentPrice = parseFloat(latestTradeResult.rows[0].price_per_token);
-    const lastTradeAt = latestTradeResult.rows[0].timestamp;
+    const lastTradeAt = latestTradeResult.rows.length > 0 
+      ? latestTradeResult.rows[0].timestamp 
+      : null;
     
     // Get 24h ago price for price change calculation
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -749,27 +863,13 @@ async function updateTokenPriceAndMarketCap(coinType) {
     
     const volume24h = volume24hResult.rows[0]?.volume || '0';
     
-    // Get curve data from tokens table
-    const tokenResult = await db.query(
-      `SELECT curve_supply, curve_balance FROM tokens WHERE coin_type = $1`,
-      [coinType]
-    );
-    
-    if (tokenResult.rows.length === 0) {
-      return; // Token not found
-    }
-    
-    const curveSupply = parseFloat(tokenResult.rows[0]?.curve_supply || '0');
-    const curveBalance = parseFloat(tokenResult.rows[0]?.curve_balance || '0');
-    
-    // MARKET CAP = PRICE × TOTAL SUPPLY (1B)
-    // For bonding curve tokens, market cap equals FDV
-    // This gives consistent valuation across all tokens
+    // MARKET CAP = CURRENT BONDING CURVE PRICE × TOTAL SUPPLY (1B)
+    // This is the CORRECT way like pump.fun does it!
     const totalSupply = 1_000_000_000;
     const marketCap = currentPrice * totalSupply;
     
     // FDV (Fully Diluted Valuation):
-    // Same as market cap for bonding curve tokens
+    // Same as market cap for bonding curve tokens (all tokens exist)
     const fullyDilutedValuation = marketCap;
     
     // Get ATH and ATL

@@ -25,6 +25,7 @@ module.exports = {
       exec_mode: 'fork',
       watch: false,
       max_memory_restart: '500M',
+      env_file: '.env', // Load environment variables from .env file
       env: {
         NODE_ENV: 'production',
       },
@@ -48,6 +49,7 @@ module.exports = {
       exec_mode: 'fork',
       watch: false,
       max_memory_restart: '500M',
+      env_file: '.env', // Load environment variables from .env file
       env: {
         NODE_ENV: 'production',
       },
@@ -94,11 +96,36 @@ module.exports = {
       exec_mode: 'fork',
       watch: false,
       max_memory_restart: '500M',
+      env_file: '.env', // Load environment variables from .env file
       env: {
         NODE_ENV: 'production',
       },
       error_file: './logs/pool-bot-error.log',
       out_file: './logs/pool-bot-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+    },
+
+    // ============================================
+    // 5. CANDLE GENERATOR - Chart Data Generation
+    // ============================================
+    {
+      name: 'candle-generator',
+      script: 'candle-generator.js',
+      cwd: '/var/www/Sweet-surprise/indexer',
+      instances: 1,
+      exec_mode: 'fork',
+      watch: false,
+      max_memory_restart: '300M',
+      env_file: '.env', // Load environment variables from .env file
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: './logs/candle-error.log',
+      out_file: './logs/candle-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       autorestart: true,

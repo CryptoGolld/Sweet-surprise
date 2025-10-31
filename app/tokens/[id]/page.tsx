@@ -33,8 +33,8 @@ export default function TokenPage() {
       if (!response.ok) throw new Error('Failed to fetch tokens');
       return response.json();
     },
-    refetchInterval: 2000, // Refetch every 2 seconds for real-time updates
-    staleTime: 1000, // Consider data stale after 1 second
+    refetchInterval: 1500, // Refetch every 1.5 seconds for real-time updates
+    staleTime: 500, // Consider data stale after 0.5 second
   });
   
   const token = tokensResponse?.tokens?.find((t: any) => t.id === tokenId);
@@ -296,15 +296,17 @@ export default function TokenPage() {
         <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-3xl p-6 md:p-8 mb-6">
           <div className="flex flex-col md:flex-row gap-6 items-start">
             {/* BIG Token Image */}
-            <div className="w-full md:w-48 h-48 md:h-48 rounded-2xl overflow-hidden bg-gradient-to-br from-meme-pink/20 to-sui-blue/20 flex items-center justify-center flex-shrink-0 p-2">
+            <div className="w-full md:w-48 h-48 md:h-48 rounded-2xl overflow-hidden bg-gradient-to-br from-meme-pink/20 to-sui-blue/20 flex-shrink-0">
               {token.imageUrl ? (
                 <img 
                   src={token.imageUrl} 
                   alt={token.ticker} 
-                  className="max-w-full max-h-full object-contain rounded-lg"
+                  className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-8xl">🚀</span>
+                <div className="flex items-center justify-center w-full h-full">
+                  <span className="text-8xl">🚀</span>
+                </div>
               )}
             </div>
 
@@ -371,6 +373,30 @@ export default function TokenPage() {
                       🌐 Website
                     </a>
                   )}
+                </div>
+              )}
+
+              {/* Price & Stats */}
+              {token.currentPrice > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="bg-white/5 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">Current Price</div>
+                    <div className="font-bold text-sm">{token.currentPrice.toFixed(10)} SUILFG</div>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">24h Change</div>
+                    <div className={`font-bold text-sm ${token.priceChange24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {token.priceChange24h >= 0 ? '+' : ''}{token.priceChange24h.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">All-Time High</div>
+                    <div className="font-bold text-sm">{token.allTimeHigh?.toFixed(10) || 'N/A'}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">All-Time Low</div>
+                    <div className="font-bold text-sm">{token.allTimeLow?.toFixed(10) || 'N/A'}</div>
+                  </div>
                 </div>
               )}
 

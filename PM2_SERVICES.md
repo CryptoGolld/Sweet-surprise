@@ -14,6 +14,7 @@ This file documents all production services that must run 24/7.
 | **memecoin-api** | API Server | Serves token data to frontend | `/var/www/Sweet-surprise/indexer/api-server.js` |
 | **compilation-service** | Web Service | Compiles Move contracts for new tokens | `/var/www/Sweet-surprise/compilation-service/index.js` |
 | **pool-creation-bot** | Bot | Creates Cetus pools for graduated tokens | `/var/www/Sweet-surprise/pool-creation-bot/index.js` |
+| **candle-generator** | Bot | Generates OHLCV chart data from trades | `/var/www/Sweet-surprise/indexer/candle-generator.js` |
 
 ---
 
@@ -54,6 +55,17 @@ This file documents all production services that must run 24/7.
 - **Polls every**: 10 seconds
 - **Environment**: Requires `.env` with bot wallet seed phrase, Cetus config
 
+### 5. candle-generator
+- **What it does**: Generates OHLCV (Open/High/Low/Close/Volume) candlestick data for charts
+- **Why critical**: Without this, price charts won't display on token pages
+- **How it works**:
+  - Reads trade data from database
+  - Generates 1-minute candles for last 24 hours
+  - Fills gaps with flat candles (carry-forward last price)
+  - Stores in `price_snapshots` table
+- **Runs every**: 60 seconds
+- **Environment**: Requires `.env` with database credentials
+
 ---
 
 ## 🚀 Quick Commands
@@ -86,6 +98,7 @@ pm2 logs memecoin-indexer
 pm2 logs memecoin-api
 pm2 logs compilation-service
 pm2 logs pool-creation-bot
+pm2 logs candle-generator
 ```
 
 ### Stop All Services (Maintenance Mode)
@@ -208,6 +221,7 @@ pm2 logs memecoin-api --lines 50
 ├── indexer/
 │   ├── index.js                  ← memecoin-indexer
 │   ├── api-server.js             ← memecoin-api
+│   ├── candle-generator.js       ← candle-generator
 │   ├── .env                      ← Database credentials, RPC URL
 │   └── logs/                     ← Service logs
 ├── compilation-service/
@@ -258,7 +272,7 @@ If services are down and you can't fix them:
 All services healthy when:
 ```bash
 pm2 list
-# Shows all 4 services as "online" with green status
+# Shows all 5 services as "online" with green status
 ```
 
 Frontend working when:
@@ -269,6 +283,6 @@ Frontend working when:
 
 ---
 
-**Last Updated**: 2025-10-30
+**Last Updated**: 2025-10-31
 
 **DO NOT DELETE THIS FILE OR THE SERVICES IT REFERENCES!**

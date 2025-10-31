@@ -55,8 +55,9 @@ export function PriceChart({ coinType }: PriceChartProps) {
     return (
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
-        <div className="text-white/60">No trading data yet</div>
-        <div className="text-sm text-white/40 mt-2">Chart will appear after first trade</div>
+        <div className="text-xl font-semibold mb-2">No Trading History Yet</div>
+        <div className="text-white/60 mb-2">This token hasn't had any trades yet</div>
+        <div className="text-sm text-white/40">Be the first to trade and the chart will appear!</div>
       </div>
     );
   }
