@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { createChart, ColorType } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { useQuery } from '@tanstack/react-query';
 
 interface TradingViewChartProps {
@@ -10,8 +11,8 @@ interface TradingViewChartProps {
 
 export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const chartRef = useRef<any>(null);
+  const candleSeriesRef = useRef<any>(null);
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
