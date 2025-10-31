@@ -25,6 +25,7 @@ module.exports = {
       exec_mode: 'fork',
       watch: false,
       max_memory_restart: '500M',
+      env_file: '.env', // Load environment variables from .env file
       env: {
         NODE_ENV: 'production',
       },
@@ -48,6 +49,7 @@ module.exports = {
       exec_mode: 'fork',
       watch: false,
       max_memory_restart: '500M',
+      env_file: '.env', // Load environment variables from .env file
       env: {
         NODE_ENV: 'production',
       },
@@ -94,6 +96,7 @@ module.exports = {
       exec_mode: 'fork',
       watch: false,
       max_memory_restart: '500M',
+      env_file: '.env', // Load environment variables from .env file
       env: {
         NODE_ENV: 'production',
       },
