@@ -113,8 +113,12 @@ export default function TokenPage() {
                 },
               });
               setAmount('');
-              // Refetch data immediately instead of reloading
-              refetch();
+              // Refetch all data after small delay
+              setTimeout(() => {
+                refetch();
+                refetchPayment();
+                refetchMeme();
+              }, 1000);
             },
             onError: (error) => {
               toast.error('Purchase failed: ' + error.message?.slice(0, 100));
