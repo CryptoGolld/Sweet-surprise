@@ -5,6 +5,7 @@ import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-ki
 import { createCoinTransaction, createCurveTransaction } from '@/lib/sui/transactions';
 import { toast } from 'sonner';
 import { getExplorerLink } from '@/lib/sui/client';
+import { COIN_TYPES } from '@/lib/constants';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { ImageUpload } from '@/components/ImageUpload';
 
