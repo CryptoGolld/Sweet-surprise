@@ -325,15 +325,23 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         
         const curveId = (curveObj as any).objectId;
         
-        // Skip step 3 (already bought)
-        setCurveId(curveId);
-        onSuccess?.(curveId);
-        onOpenChange(false);
+        // Save curve data for navigation
+        setCurveData({
+          curveId,
+          curveDigest: result.digest,
+          coinType: `${publishedData.packageId}::${publishedData.moduleName}::${publishedData.structName}`,
+        });
         
         toast.success('🎉 Token Launched!', {
           description: `You bought ${formData.initialBuyAmount} tokens at launch. Head start achieved!`,
           duration: 5000,
         });
+        
+        // Navigate to token page
+        setTimeout(() => {
+          router.push(`/tokens/${curveId}`);
+          onClose();
+        }, 1500);
         
         return;
       }
