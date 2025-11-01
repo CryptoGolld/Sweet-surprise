@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { useQuery } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
@@ -22,7 +23,18 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=1m&limit=1000`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
-      return response.json();
+      const json = await response.json();
+      
+      // Store debug info
+      setDebugInfo({
+        candleCount: json.candles?.length || 0,
+        firstCandle: json.candles?.[0],
+        lastCandle: json.candles?.[json.candles?.length - 1],
+        sampleCandles: json.candles?.slice(0, 3),
+        fetchedAt: new Date().toISOString(),
+      });
+      
+      return json;
     },
     refetchInterval: 5000, // Update every 5 seconds
     staleTime: 2000,
@@ -116,7 +128,14 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
         <div className="text-white/60">Chart unavailable</div>
-        <div className="text-sm text-white/40 mt-2">Please try again later</div>
+        <div className="text-sm text-white/40 mt-2">Error: {error.message}</div>
+        {/* Debug info for mobile */}
+        <details className="mt-4 text-left bg-black/30 rounded p-3 text-xs">
+          <summary className="cursor-pointer text-yellow-400">🐛 Debug Info (tap to expand)</summary>
+          <pre className="mt-2 text-white/60 overflow-auto">
+            {JSON.stringify({ error: error.message, coinType }, null, 2)}
+          </pre>
+        </details>
       </div>
     );
   }
@@ -136,6 +155,18 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         <div className="text-xl font-semibold mb-2">No Trading History Yet</div>
         <div className="text-white/60 mb-2">This token hasn't had any trades yet</div>
         <div className="text-sm text-white/40">Be the first to trade and the chart will appear!</div>
+        {/* Debug info for mobile */}
+        <details className="mt-4 text-left bg-black/30 rounded p-3 text-xs">
+          <summary className="cursor-pointer text-yellow-400">🐛 Debug Info (tap to expand)</summary>
+          <pre className="mt-2 text-white/60 overflow-auto">
+            {JSON.stringify({ 
+              candleCount: data?.candles?.length || 0,
+              hasData: !!data,
+              coinType,
+              debugInfo 
+            }, null, 2)}
+          </pre>
+        </details>
       </div>
     );
   }
@@ -149,6 +180,14 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
           Powered by TradingView
         </div>
       </div>
+
+      {/* Debug Info (temporary - remove after fixing) */}
+      <details className="text-xs bg-black/30 rounded p-2">
+        <summary className="cursor-pointer text-yellow-400">🐛 Chart Debug (tap to see)</summary>
+        <pre className="mt-2 text-white/60 overflow-auto max-h-40">
+          {JSON.stringify(debugInfo, null, 2)}
+        </pre>
+      </details>
 
       {/* Chart */}
       <div 
