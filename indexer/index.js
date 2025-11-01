@@ -32,11 +32,12 @@ console.log('🌐 RPC:', SUI_RPC_URL);
 
 // Index historical events (run once on first start)
 async function indexHistoricalEvents() {
-  const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
+  const stateResult = await db.query('SELECT last_timestamp, historical_sync_complete FROM indexer_state WHERE id = 1');
   const lastTimestamp = stateResult.rows[0]?.last_timestamp;
+  const historicalSyncComplete = stateResult.rows[0]?.historical_sync_complete;
   
-  // Only run if this is the first time (no timestamp saved) OR timestamp is very old
-  if (lastTimestamp && parseInt(lastTimestamp) > 0) {
+  // Skip if historical sync is already marked complete
+  if (historicalSyncComplete) {
     console.log('⏭️  Skipping historical indexing (already synced)');
     console.log(`   Last indexed: ${new Date(parseInt(lastTimestamp)).toISOString()}`);
     return;
@@ -106,6 +107,11 @@ async function indexHistoricalEvents() {
   }
   
   console.log(`\n✅ Historical indexing complete! Indexed ${totalIndexed} total events`);
+  
+  // Mark historical sync as complete so we don't re-run it
+  await db.query(
+    'UPDATE indexer_state SET historical_sync_complete = TRUE WHERE id = 1'
+  );
   
   // Generate initial candles
   await generateCandles();
@@ -783,16 +789,18 @@ async function generateCandles() {
 }
 
 // Calculate bonding curve spot price at given supply (EXACT contract formula!)
+// CRITICAL: supplyInWholeTokens must be in WHOLE TOKENS, not mist!
+// The contract stores token_supply in whole tokens (see bonding_curve.move line 215-217)
 function calculateSpotPrice(supplyInWholeTokens) {
   const M_NUM = 1n;
-  const M_DEN = 10593721631205n; // EXACT value from contract (line 48)
+  const M_DEN = 10593721631205n; // EXACT value from contract
   const BASE_PRICE_MIST = 1_000n; // 0.000001 SUI
   const MIST_PER_SUI = 1_000_000_000n; // 1e9
   
   const supply = BigInt(Math.floor(supplyInWholeTokens));
   
   // p(s) = base_price_mist + (m_num * s^2) / m_den
-  // This EXACT formula is from bonding_curve.move line 946-952
+  // This EXACT formula matches bonding_curve.move spot_price_u128()
   const supplySquared = supply * supply;
   const priceIncrease = (M_NUM * supplySquared) / M_DEN;
   const totalPriceMist = BASE_PRICE_MIST + priceIncrease;
@@ -814,8 +822,10 @@ async function updateTokenPriceAndMarketCap(coinType) {
       return; // Token not found
     }
     
-    const curveSupplyMist = BigInt(tokenResult.rows[0]?.curve_supply || '0');
-    const curveSupply = Number(curveSupplyMist) / 1e9; // Convert to whole tokens
+    // CRITICAL FIX: curve_supply is ALREADY in whole tokens (not mist!)
+    // The contract stores token_supply in whole tokens (see bonding_curve.move line 215-217)
+    // Example: if curve_supply = "1000000", that's 1M tokens (NOT 0.001 tokens)
+    const curveSupply = Number(tokenResult.rows[0]?.curve_supply || '0');
     
     // Calculate REAL current price from bonding curve (like pump.fun!)
     const currentPrice = calculateSpotPrice(curveSupply);

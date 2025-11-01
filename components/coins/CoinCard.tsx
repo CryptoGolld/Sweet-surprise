@@ -6,7 +6,6 @@ import { TradingModal } from '../modals/TradingModal';
 import { calculatePercentage } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
-import { calculateMarketCap, getInitialMarketCap } from '@/lib/utils/bondingCurve';
 import Link from 'next/link';
 
 interface CoinCardProps {
@@ -17,16 +16,17 @@ export function CoinCard({ curve }: CoinCardProps) {
   const [showTrading, setShowTrading] = useState(false);
   const { data: suiPrice = 1.0 } = useSuiPrice();
 
+  // CRITICAL: curve.curveSupply is ALREADY in whole tokens (not mist!)
+  // MAX_CURVE_SUPPLY is also in whole tokens (737M), so compare directly
   const progress = calculatePercentage(
     curve.curveSupply,
-    BONDING_CURVE.MAX_CURVE_SUPPLY * 1e9
+    BONDING_CURVE.MAX_CURVE_SUPPLY
   );
 
   const age = Math.floor((Date.now() - curve.createdAt) / (1000 * 60)); // minutes
 
   // Use FDV (Fully Diluted Valuation) from indexer
-  // FDV = current_price × total_supply (1B tokens)
-  // This gives consistent valuation across all tokens
+  // After recalculation script runs, this will have correct values
   const fdvSui = curve.fullyDilutedValuation || 0;
   const marketCapUsd = fdvSui * suiPrice;
 

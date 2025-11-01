@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     console.log('📦 Compile request - ticker:', body.ticker, 'name:', body.name);
     
     // Forward to Ubuntu compilation service
-    const ubuntuUrl = process.env.COMPILE_SERVICE_URL || 'http://13.60.235.109:3001';
+    const ubuntuUrl = process.env.NEXT_PUBLIC_COMPILE_SERVICE_URL || 'http://51.20.74.15:3001';
     
     const response = await fetch(`${ubuntuUrl}/compile`, {
       method: 'POST',

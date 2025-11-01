@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { useQuery } from '@tanstack/react-query';
@@ -13,6 +13,27 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [consoleErrors, setConsoleErrors] = useState<string[]>([]);
+  
+  // Capture console errors
+  useEffect(() => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    
+    console.error = (...args: any[]) => {
+      const errorMsg = args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+      ).join(' ');
+      errors.push(errorMsg);
+      setConsoleErrors([...errors]);
+      originalError.apply(console, args);
+    };
+    
+    return () => {
+      console.error = originalError;
+    };
+  }, []);
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
@@ -22,7 +43,18 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=1m&limit=1000`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
-      return response.json();
+      const json = await response.json();
+      
+      // Store debug info
+      setDebugInfo({
+        candleCount: json.candles?.length || 0,
+        firstCandle: json.candles?.[0],
+        lastCandle: json.candles?.[json.candles?.length - 1],
+        sampleCandles: json.candles?.slice(0, 3),
+        fetchedAt: new Date().toISOString(),
+      });
+      
+      return json;
     },
     refetchInterval: 5000, // Update every 5 seconds
     staleTime: 2000,
@@ -97,17 +129,43 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   useEffect(() => {
     if (!candleSeriesRef.current || !data?.candles) return;
 
-    const candles = data.candles.map((candle: any) => ({
-      time: Math.floor(candle.time / 1000), // Convert to seconds
-      open: parseFloat(candle.open),
-      high: parseFloat(candle.high),
-      low: parseFloat(candle.low),
-      close: parseFloat(candle.close),
-    })).reverse(); // TradingView wants oldest first
+    // Filter out invalid candles and convert to TradingView format
+    const candles = data.candles
+      .map((candle: any) => ({
+        time: Math.floor(candle.time / 1000), // Convert to seconds
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+      }))
+      .filter((candle: any) => {
+        // Filter out invalid data
+        return !isNaN(candle.time) && 
+               !isNaN(candle.open) && 
+               candle.open > 0 &&
+               candle.time > 0;
+      })
+      .reverse(); // TradingView wants oldest first
 
     if (candles.length > 0) {
-      candleSeriesRef.current.setData(candles);
-      chartRef.current?.timeScale().fitContent();
+      console.log('📊 Setting chart data:', {
+        totalCandles: candles.length,
+        firstCandle: candles[0],
+        lastCandle: candles[candles.length - 1],
+        timeRange: {
+          first: new Date(candles[0].time * 1000).toISOString(),
+          last: new Date(candles[candles.length - 1].time * 1000).toISOString(),
+        }
+      });
+      
+      try {
+        candleSeriesRef.current.setData(candles);
+        chartRef.current?.timeScale().fitContent();
+        console.log('✅ Chart data set successfully');
+      } catch (err: any) {
+        console.error('❌ Error setting chart data:', err);
+        setDebugInfo((prev: any) => ({ ...prev, chartError: err?.message || String(err) }));
+      }
     }
   }, [data]);
 
@@ -116,7 +174,14 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
         <div className="text-white/60">Chart unavailable</div>
-        <div className="text-sm text-white/40 mt-2">Please try again later</div>
+        <div className="text-sm text-white/40 mt-2">Error: {error.message}</div>
+        {/* Debug info for mobile */}
+        <details className="mt-4 text-left bg-black/30 rounded p-3 text-xs">
+          <summary className="cursor-pointer text-yellow-400">🐛 Debug Info (tap to expand)</summary>
+          <pre className="mt-2 text-white/60 overflow-auto">
+            {JSON.stringify({ error: error.message, coinType }, null, 2)}
+          </pre>
+        </details>
       </div>
     );
   }
@@ -136,6 +201,18 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         <div className="text-xl font-semibold mb-2">No Trading History Yet</div>
         <div className="text-white/60 mb-2">This token hasn't had any trades yet</div>
         <div className="text-sm text-white/40">Be the first to trade and the chart will appear!</div>
+        {/* Debug info for mobile */}
+        <details className="mt-4 text-left bg-black/30 rounded p-3 text-xs">
+          <summary className="cursor-pointer text-yellow-400">🐛 Debug Info (tap to expand)</summary>
+          <pre className="mt-2 text-white/60 overflow-auto">
+            {JSON.stringify({ 
+              candleCount: data?.candles?.length || 0,
+              hasData: !!data,
+              coinType,
+              debugInfo 
+            }, null, 2)}
+          </pre>
+        </details>
       </div>
     );
   }
@@ -149,6 +226,32 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
           Powered by TradingView
         </div>
       </div>
+
+      {/* Debug Info (temporary - remove after fixing) */}
+      <details className="text-xs bg-black/30 rounded p-2">
+        <summary className="cursor-pointer text-yellow-400">
+          🐛 Chart Debug (tap to see) {consoleErrors.length > 0 && `⚠️ ${consoleErrors.length} errors`}
+        </summary>
+        <div className="mt-2 space-y-2">
+          {/* Console Errors */}
+          {consoleErrors.length > 0 && (
+            <div>
+              <div className="text-red-400 font-semibold mb-1">Console Errors:</div>
+              <pre className="text-red-300 overflow-auto max-h-32 bg-red-900/20 p-2 rounded">
+                {consoleErrors.map((err, i) => `${i + 1}. ${err}`).join('\n\n')}
+              </pre>
+            </div>
+          )}
+          
+          {/* Debug Data */}
+          <div>
+            <div className="text-blue-400 font-semibold mb-1">Chart Data:</div>
+            <pre className="text-white/60 overflow-auto max-h-40 bg-blue-900/20 p-2 rounded">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </div>
+        </div>
+      </details>
 
       {/* Chart */}
       <div 

@@ -1,0 +1,29 @@
+{
+  "network": "mainnet",
+  "version": "1.0.0",
+  "deployedAt": "2025-11-01T10:52:59Z",
+  "transactionDigest": "Hb2PJHxAXgyUAWYyMCFi9RnZSVio98SqGZoc9xPqdoSk",
+  "deployer": "0xf7e6746400e7789f08327780b9388ad2bd394fdd695de704796b09d9516a1a06",
+  "gasCost": "0.164302080 SUI",
+  
+  "addresses": {
+    "PLATFORM_PACKAGE": "0xac58548c2eeefb62215d1e8fd6c3a1796e8f78a3a74703bb8991c66f40c48a04",
+    "PLATFORM_STATE": "0xb2b9568567fb4f8983425581511e9931b0feb5e7ca485c9f0263e0593cfb7c00",
+    "REFERRAL_REGISTRY": "0xac8b25db1c44cbb28d8cdbdbdac3d0eddc15c5a59aabb8bb8ba5bda9c9754f51",
+    "TICKER_REGISTRY": "0xc61c5a6a1085a07a6737441e508bfebef90e3e987eb219cea06f6b2b1029a8eb",
+    "ADMIN_CAP": "0x70e125d5ce65ac943a9e7552d82e8d95e82e4942eda70b825041a09decc9ca37",
+    "UPGRADE_CAP": "0xf3d4ae6beda075f65fbb89d20201c99fcf996acfed0e959c66fef438aaf50b93"
+  },
+  
+  "notes": [
+    "Mainnet contracts use native SUI (not SUILFG_MEMEFI faucet token)",
+    "All bonding curve trades use real SUI",
+    "Based on testnet v0.0.7 with SUILFG_MEMEFI → SUI conversion",
+    "Payment token: 0x2::sui::SUI"
+  ],
+  
+  "explorer": {
+    "transaction": "https://suiscan.xyz/mainnet/tx/Hb2PJHxAXgyUAWYyMCFi9RnZSVio98SqGZoc9xPqdoSk",
+    "package": "https://suiscan.xyz/mainnet/object/0xac58548c2eeefb62215d1e8fd6c3a1796e8f78a3a74703bb8991c66f40c48a04"
+  }
+}

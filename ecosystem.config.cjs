@@ -110,27 +110,10 @@ module.exports = {
     },
 
     // ============================================
-    // 5. CANDLE GENERATOR - Chart Data Generation
+    // CANDLE GENERATOR - REMOVED (Nov 1, 2025)
     // ============================================
-    {
-      name: 'candle-generator',
-      script: 'candle-generator.js',
-      cwd: '/var/www/Sweet-surprise/indexer',
-      instances: 1,
-      exec_mode: 'fork',
-      watch: false,
-      max_memory_restart: '300M',
-      env_file: '.env', // Load environment variables from .env file
-      env: {
-        NODE_ENV: 'production',
-      },
-      error_file: './logs/candle-error.log',
-      out_file: './logs/candle-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true,
-      autorestart: true,
-      max_restarts: 10,
-      min_uptime: '10s',
-    },
+    // We now generate candles on-demand in the API from trades table.
+    // This saves 12 GB of storage and simplifies the system.
+    // Charts still work perfectly - TradingView receives candles from API.
   ],
 };
