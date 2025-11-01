@@ -14,6 +14,26 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
   const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [consoleErrors, setConsoleErrors] = useState<string[]>([]);
+  
+  // Capture console errors
+  useEffect(() => {
+    const originalError = console.error;
+    const errors: string[] = [];
+    
+    console.error = (...args: any[]) => {
+      const errorMsg = args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+      ).join(' ');
+      errors.push(errorMsg);
+      setConsoleErrors([...errors]);
+      originalError.apply(console, args);
+    };
+    
+    return () => {
+      console.error = originalError;
+    };
+  }, []);
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
@@ -209,10 +229,28 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
 
       {/* Debug Info (temporary - remove after fixing) */}
       <details className="text-xs bg-black/30 rounded p-2">
-        <summary className="cursor-pointer text-yellow-400">🐛 Chart Debug (tap to see)</summary>
-        <pre className="mt-2 text-white/60 overflow-auto max-h-40">
-          {JSON.stringify(debugInfo, null, 2)}
-        </pre>
+        <summary className="cursor-pointer text-yellow-400">
+          🐛 Chart Debug (tap to see) {consoleErrors.length > 0 && `⚠️ ${consoleErrors.length} errors`}
+        </summary>
+        <div className="mt-2 space-y-2">
+          {/* Console Errors */}
+          {consoleErrors.length > 0 && (
+            <div>
+              <div className="text-red-400 font-semibold mb-1">Console Errors:</div>
+              <pre className="text-red-300 overflow-auto max-h-32 bg-red-900/20 p-2 rounded">
+                {consoleErrors.map((err, i) => `${i + 1}. ${err}`).join('\n\n')}
+              </pre>
+            </div>
+          )}
+          
+          {/* Debug Data */}
+          <div>
+            <div className="text-blue-400 font-semibold mb-1">Chart Data:</div>
+            <pre className="text-white/60 overflow-auto max-h-40 bg-blue-900/20 p-2 rounded">
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </div>
+        </div>
       </details>
 
       {/* Chart */}
