@@ -189,8 +189,9 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       setStatus('Package created! Waiting for confirmation...');
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Fetch transaction details
-      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      // Fetch transaction details from correct network
+      const networkType = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'mainnet';
+      const client = new SuiClient({ url: getFullnodeUrl(networkType) });
       const txDetails = await client.getTransactionBlock({
         digest,
         options: {
