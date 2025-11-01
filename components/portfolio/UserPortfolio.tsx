@@ -377,14 +377,16 @@ export function UserPortfolio() {
       </div>
       
       {/* Quick Actions - More Compact on Mobile */}
-      <div className="mt-4 md:mt-6 grid grid-cols-2 gap-2 md:gap-3">
-        <Link
-          href="/faucet"
-          className="p-3 md:p-4 bg-white/5 border border-white/10 rounded-xl text-center hover:bg-white/10 transition-colors"
-        >
-          <div className="text-2xl md:text-3xl mb-1">💧</div>
-          <div className="text-xs md:text-sm font-semibold">Claim More</div>
-        </Link>
+      <div className={`mt-4 md:mt-6 grid ${NETWORK === 'testnet' ? 'grid-cols-2' : 'grid-cols-1'} gap-2 md:gap-3`}>
+        {NETWORK === 'testnet' && (
+          <Link
+            href="/faucet"
+            className="p-3 md:p-4 bg-white/5 border border-white/10 rounded-xl text-center hover:bg-white/10 transition-colors"
+          >
+            <div className="text-2xl md:text-3xl mb-1">💧</div>
+            <div className="text-xs md:text-sm font-semibold">Claim More</div>
+          </Link>
+        )}
         <Link
           href="/tokens"
           className="p-3 md:p-4 bg-white/5 border border-white/10 rounded-xl text-center hover:bg-white/10 transition-colors"
