@@ -9,7 +9,7 @@ let client: SuiClient | null = null;
 
 export function getSuiClient(): SuiClient {
   if (!client) {
-    client = new SuiClient({ url: RPC_ENDPOINTS.TESTNET });
+    client = new SuiClient({ url: RPC_ENDPOINTS.CURRENT });
   }
   return client;
 }

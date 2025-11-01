@@ -279,8 +279,9 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         const buyAmountMist = (BigInt(Math.floor(buyAmountFloat * 1e9))).toString();
         const minTokensOut = '1'; // Accept any amount (user buying at launch price)
         
-        // Get user's payment coins
-        const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+        // Get user's payment coins from correct network
+        const networkType = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'mainnet';
+        const client = new SuiClient({ url: getFullnodeUrl(networkType) });
         const coins = await client.getCoins({
           owner: currentAccount.address,
           coinType: COIN_TYPES.PAYMENT_TOKEN,
@@ -378,8 +379,9 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       // Wait for curve creation to be indexed
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // Get the curve ID from transaction
-      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      // Get the curve ID from transaction on correct network
+      const networkType = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'mainnet';
+      const client = new SuiClient({ url: getFullnodeUrl(networkType) });
       const curveDetails = await client.getTransactionBlock({
         digest: curveResult.digest,
         options: {
@@ -473,15 +475,17 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       // Wait a bit longer for indexing
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Get user's SUILFG_MEMEFI coins
-      const client = new SuiClient({ url: getFullnodeUrl('testnet') });
+      // Get user's payment coins from correct network
+      const networkType = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'mainnet';
+      const client = new SuiClient({ url: getFullnodeUrl(networkType) });
       const coins = await client.getCoins({
         owner: currentAccount!.address,
-        coinType: COIN_TYPES.SUILFG_MEMEFI,
+        coinType: COIN_TYPES.PAYMENT_TOKEN, // Uses SUI on mainnet, SUILFG_MEMEFI on testnet
       });
       
       if (!coins.data || coins.data.length === 0) {
-        throw new Error(`No SUILFG_MEMEFI tokens found. You have ${coins.data?.length || 0} coin objects. Please claim from faucet first.`);
+        const tokenName = networkType === 'mainnet' ? 'SUI' : 'SUILFG_MEMEFI';
+        throw new Error(`No ${tokenName} tokens found. You have ${coins.data?.length || 0} coin objects. ${networkType === 'testnet' ? 'Please claim from faucet first.' : 'Please fund your wallet with SUI.'}`);
       }
       
       // Use all coins
