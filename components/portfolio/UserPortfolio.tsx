@@ -340,13 +340,13 @@ export function UserPortfolio() {
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                       const parent = e.currentTarget.parentElement!;
-                      const emoji = isMainToken ? '💧' : '🪙';
-                      parent.innerHTML = `<div class="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl flex-shrink-0 ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}">${emoji}</div>`;
+                      const emoji = isPaymentToken ? '💧' : '🪙';
+                      parent.innerHTML = `<div class="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl flex-shrink-0 ${isPaymentToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple' : 'bg-white/10'}">${emoji}</div>`;
                     }}
                   />
                 ) : (
-                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl flex-shrink-0 ${isMainToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple shadow-lg shadow-meme-purple/50' : 'bg-gradient-to-br from-white/10 to-white/5 backdrop-blur'} transition-all group-hover:scale-110`}>
-                    {isMainToken ? '💧' : '🪙'}
+                  <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-xl md:text-2xl flex-shrink-0 ${isPaymentToken ? 'bg-gradient-to-br from-meme-pink to-meme-purple shadow-lg shadow-meme-purple/50' : 'bg-gradient-to-br from-white/10 to-white/5 backdrop-blur'} transition-all group-hover:scale-110`}>
+                    {isPaymentToken ? '💧' : '🪙'}
                   </div>
                 )}
                 
@@ -367,7 +367,7 @@ export function UserPortfolio() {
                   <div className="text-xs md:text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
-                ) : !isMainToken && !curveData.get(coin.type) ? (
+                ) : !isPaymentToken && !curveData.get(coin.type) ? (
                   <div className="text-xs text-gray-500 italic">
                     Loading...
                   </div>
