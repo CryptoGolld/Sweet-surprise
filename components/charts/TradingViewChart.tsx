@@ -109,13 +109,23 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   useEffect(() => {
     if (!candleSeriesRef.current || !data?.candles) return;
 
-    const candles = data.candles.map((candle: any) => ({
-      time: Math.floor(candle.time / 1000), // Convert to seconds
-      open: parseFloat(candle.open),
-      high: parseFloat(candle.high),
-      low: parseFloat(candle.low),
-      close: parseFloat(candle.close),
-    })).reverse(); // TradingView wants oldest first
+    // Filter out invalid candles and convert to TradingView format
+    const candles = data.candles
+      .map((candle: any) => ({
+        time: Math.floor(candle.time / 1000), // Convert to seconds
+        open: parseFloat(candle.open),
+        high: parseFloat(candle.high),
+        low: parseFloat(candle.low),
+        close: parseFloat(candle.close),
+      }))
+      .filter((candle: any) => {
+        // Filter out invalid data
+        return !isNaN(candle.time) && 
+               !isNaN(candle.open) && 
+               candle.open > 0 &&
+               candle.time > 0;
+      })
+      .reverse(); // TradingView wants oldest first
 
     if (candles.length > 0) {
       console.log('📊 Setting chart data:', {
@@ -132,9 +142,9 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         candleSeriesRef.current.setData(candles);
         chartRef.current?.timeScale().fitContent();
         console.log('✅ Chart data set successfully');
-      } catch (err) {
+      } catch (err: any) {
         console.error('❌ Error setting chart data:', err);
-        setDebugInfo(prev => ({ ...prev, chartError: err.message }));
+        setDebugInfo(prev => ({ ...prev, chartError: err?.message || String(err) }));
       }
     }
   }, [data]);
