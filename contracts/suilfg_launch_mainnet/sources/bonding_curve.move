@@ -4,6 +4,7 @@ module suilfg_launch_mainnet::bonding_curve {
     use sui::transfer;
     use sui::balance::{Self as balance, Balance};
     use sui::coin::{Self as coin, Coin, TreasuryCap};
+    use sui::sui::SUI;
     use sui::event;
     use sui::clock::{Self as clock, Clock};
     use std::vector;
@@ -100,7 +101,7 @@ module suilfg_launch_mainnet::bonding_curve {
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
-            sui_reserve: balance::zero<SUILFG_MEMEFI>(),
+            sui_reserve: balance::zero<SUI>(),
             token_supply: 0,  // Start at 0 (formula includes base_price to prevent division issues)
             platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
@@ -125,7 +126,7 @@ module suilfg_launch_mainnet::bonding_curve {
         BondingCurve<T> {
             id: object::new(ctx),
             status: TradingStatus::Open,
-            sui_reserve: balance::zero<SUILFG_MEMEFI>(),
+            sui_reserve: balance::zero<SUI>(),
             token_supply: 0,  // Start at 0 (formula includes base_price to prevent division issues)
             platform_fee_bps: platform_config::get_default_platform_fee_bps(cfg),
             creator_fee_bps: platform_config::get_default_creator_fee_bps(cfg),
@@ -570,7 +571,7 @@ module suilfg_launch_mainnet::bonding_curve {
     ) {
         if (curve.graduated) { return; } else {};
         if (!(curve.status == TradingStatus::Open)) { abort E_TRADING_FROZEN; } else {};
-        let reserve = balance::value<SUILFG_MEMEFI>(&curve.sui_reserve);
+        let reserve = balance::value<SUI>(&curve.sui_reserve);
         if (reserve < platform_config::get_default_graduation_target_mist(cfg)) { abort 9001; } else {};
         curve.status = TradingStatus::Frozen;
         curve.graduated = true;
@@ -584,7 +585,7 @@ module suilfg_launch_mainnet::bonding_curve {
         ctx: &mut TxContext
     ) {
         if (!curve.graduated || curve.reward_paid) { return; } else {};
-        let reserve = balance::value<SUILFG_MEMEFI>(&curve.sui_reserve);
+        let reserve = balance::value<SUI>(&curve.sui_reserve);
         let platform_cut = (reserve * platform_config::get_platform_cut_bps_on_graduation(cfg)) / 10_000;
         let creator_payout = platform_config::get_creator_graduation_payout_mist(cfg);
         
@@ -732,7 +733,7 @@ module suilfg_launch_mainnet::bonding_curve {
         ctx: &mut TxContext
     ) {
         if (!curve.graduated || curve.lp_seeded == true) { abort 9002; } else {};
-        let reserve = balance::value<SUILFG_MEMEFI>(&curve.sui_reserve);
+        let reserve = balance::value<SUI>(&curve.sui_reserve);
         let use_bps = if (bump_bps == 0) { platform_config::get_default_cetus_bump_bps(cfg) } else { bump_bps };
         
         // First, mint and transfer team allocation
