@@ -18,8 +18,8 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load .env from parent directory (project root)
-dotenv.config({ path: join(__dirname, '..', '.env') });
+// Load .env from indexer directory (same directory as this script)
+dotenv.config({ path: join(__dirname, '.env') });
 
 const { Pool } = pg;
 
