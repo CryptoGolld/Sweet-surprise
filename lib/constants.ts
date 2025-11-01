@@ -1,32 +1,29 @@
 /**
  * SuiLFG MemeFi Platform Constants
- * Testnet deployment addresses
+ * Uses environment variables to support both testnet and mainnet
  */
 
-export const NETWORK = 'testnet' as const;
+export const NETWORK = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'mainnet';
 
 export const CONTRACTS = {
-  // CURRENT Platform package (v0.0.8 - UPGRADED with LP bot security + special launch flag)
-  // Deployed: 2025-10-27 | TX: CZFLVEP58HSFiW1JY1fp8kV4duA7b9uR7nv25TR1H9f7
-  // Features: LP bot address security, special launch flag, prepare_liquidity_for_bot
-  PLATFORM_PACKAGE: '0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348',
-  PLATFORM_STATE: '0x3db44f01f62024e124dee24dd6185ce702e2babe24c3fb331507080d13f873f9',
-  REFERRAL_REGISTRY: '0x964b507850a0b51a736d28da9e8868ce82d99fe1faa580c9b4ac3a309e28c836',
-  TICKER_REGISTRY: '0xd8ba248944efc41c995a70679aabde9e05b509a7be7c10050f0a52a9029c0fcb',
-  ADMIN_CAP: '0x7687bb4d6149db3c87ec3b96bbe3d4b59dbd9ed7f0a6de6a447422559332ca11',  // Store for admin operations
-  UPGRADE_CAP: '0x7ef7bc39eea080ebddb61426c3b81d099690d3d2eab836e80e6e0a70b5cf6c5b',  // For future upgrades
+  PLATFORM_PACKAGE: process.env.NEXT_PUBLIC_PLATFORM_PACKAGE || '0xa49978cdb7a2a6eacc974c830da8459089bc446248daed05e0fe6ef31e2f4348',
+  PLATFORM_STATE: process.env.NEXT_PUBLIC_PLATFORM_STATE || '0x3db44f01f62024e124dee24dd6185ce702e2babe24c3fb331507080d13f873f9',
+  REFERRAL_REGISTRY: process.env.NEXT_PUBLIC_REFERRAL_REGISTRY || '0x964b507850a0b51a736d28da9e8868ce82d99fe1faa580c9b4ac3a309e28c836',
+  TICKER_REGISTRY: process.env.NEXT_PUBLIC_TICKER_REGISTRY || '0xd8ba248944efc41c995a70679aabde9e05b509a7be7c10050f0a52a9029c0fcb',
+  ADMIN_CAP: process.env.NEXT_PUBLIC_ADMIN_CAP || '0x7687bb4d6149db3c87ec3b96bbe3d4b59dbd9ed7f0a6de6a447422559332ca11',
+  UPGRADE_CAP: process.env.NEXT_PUBLIC_UPGRADE_CAP || '0x7ef7bc39eea080ebddb61426c3b81d099690d3d2eab836e80e6e0a70b5cf6c5b',
   
   // PREVIOUS Platform packages (for reference - incentivized testnet rewards tracking)
   // v0.0.7: '0xf19ee4bbe2183adc6bbe44801988e68982839566ddbca3c38321080d420ca7a5',
   // v0.0.6 (LEGACY): '0x98da9f73a80663ec6d8cf0f9d9e1edd030d9255b780f755e6a85ae468545fdd0',
   
-  // Faucet package (SUILFG_MEMEFI token) - same for both
-  FAUCET_PACKAGE: '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81',
-  FAUCET_OBJECT: '0xd5c81489322b9e74609be2986c02652390feba41f06e4a7fd936a2c312fb9dde',
+  // Faucet package (SUILFG_MEMEFI token) - testnet only
+  FAUCET_PACKAGE: process.env.NEXT_PUBLIC_FAUCET_PACKAGE || '0x97daa9c97517343c1126e548e352fc4d13b2799a36dea0def4397cb3add5cb81',
+  FAUCET_OBJECT: process.env.NEXT_PUBLIC_FAUCET_OBJECT || '0xd5c81489322b9e74609be2986c02652390feba41f06e4a7fd936a2c312fb9dde',
   
-  // Cetus integration (testnet)
-  CETUS_GLOBAL_CONFIG: '0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e',
-  CETUS_POOLS: '0x50eb61dd5928cec5ea04711a2e9b72e5237e79e9fbcd2ce3d5469dc8708e0ee2',
+  // Cetus integration
+  CETUS_GLOBAL_CONFIG: process.env.NEXT_PUBLIC_CETUS_GLOBAL_CONFIG || '0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e',
+  CETUS_POOLS: process.env.NEXT_PUBLIC_CETUS_POOLS || '0x50eb61dd5928cec5ea04711a2e9b72e5237e79e9fbcd2ce3d5469dc8708e0ee2',
   
   // OTHER DEPLOYMENTS (not needed anymore)
   // FRESH_V2: '0xc6a2e71b87b181251bcc44662616afad81288f78c330a6172792c1ec2c59761f',
@@ -36,8 +33,8 @@ export const CONTRACTS = {
 export const COIN_TYPES = {
   SUI: '0x2::sui::SUI',
   SUILFG_MEMEFI: `${CONTRACTS.FAUCET_PACKAGE}::suilfg_memefi::SUILFG_MEMEFI`,
-  // Payment token for trades (testnet uses SUILFG_MEMEFI, mainnet will use SUI)
-  PAYMENT_TOKEN: `${CONTRACTS.FAUCET_PACKAGE}::suilfg_memefi::SUILFG_MEMEFI`,
+  // Payment token: uses env var (testnet = SUILFG_MEMEFI, mainnet = SUI)
+  PAYMENT_TOKEN: process.env.NEXT_PUBLIC_PAYMENT_TOKEN || `${CONTRACTS.FAUCET_PACKAGE}::suilfg_memefi::SUILFG_MEMEFI`,
 } as const;
 
 // Bonding curve constants (from contract)
@@ -77,5 +74,8 @@ export function getContractForCurve(curveTypeOrPackage: string) {
 // RPC endpoints
 export const RPC_ENDPOINTS = {
   TESTNET: 'https://fullnode.testnet.sui.io:443',
+  MAINNET: 'https://fullnode.mainnet.sui.io:443',
   TESTNET_FAUCET: 'https://faucet.testnet.sui.io/v1/gas',
+  // Current RPC based on env var
+  CURRENT: process.env.NEXT_PUBLIC_RPC_URL || 'https://fullnode.testnet.sui.io:443',
 } as const;
