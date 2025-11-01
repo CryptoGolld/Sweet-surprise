@@ -118,8 +118,24 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     })).reverse(); // TradingView wants oldest first
 
     if (candles.length > 0) {
-      candleSeriesRef.current.setData(candles);
-      chartRef.current?.timeScale().fitContent();
+      console.log('📊 Setting chart data:', {
+        totalCandles: candles.length,
+        firstCandle: candles[0],
+        lastCandle: candles[candles.length - 1],
+        timeRange: {
+          first: new Date(candles[0].time * 1000).toISOString(),
+          last: new Date(candles[candles.length - 1].time * 1000).toISOString(),
+        }
+      });
+      
+      try {
+        candleSeriesRef.current.setData(candles);
+        chartRef.current?.timeScale().fitContent();
+        console.log('✅ Chart data set successfully');
+      } catch (err) {
+        console.error('❌ Error setting chart data:', err);
+        setDebugInfo(prev => ({ ...prev, chartError: err.message }));
+      }
     }
   }, [data]);
 
