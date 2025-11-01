@@ -32,11 +32,12 @@ console.log('🌐 RPC:', SUI_RPC_URL);
 
 // Index historical events (run once on first start)
 async function indexHistoricalEvents() {
-  const stateResult = await db.query('SELECT last_timestamp FROM indexer_state WHERE id = 1');
+  const stateResult = await db.query('SELECT last_timestamp, historical_sync_complete FROM indexer_state WHERE id = 1');
   const lastTimestamp = stateResult.rows[0]?.last_timestamp;
+  const historicalSyncComplete = stateResult.rows[0]?.historical_sync_complete;
   
-  // Only run if this is the first time (no timestamp saved) OR timestamp is very old
-  if (lastTimestamp && parseInt(lastTimestamp) > 0) {
+  // Skip if historical sync is already marked complete
+  if (historicalSyncComplete) {
     console.log('⏭️  Skipping historical indexing (already synced)');
     console.log(`   Last indexed: ${new Date(parseInt(lastTimestamp)).toISOString()}`);
     return;
@@ -106,6 +107,11 @@ async function indexHistoricalEvents() {
   }
   
   console.log(`\n✅ Historical indexing complete! Indexed ${totalIndexed} total events`);
+  
+  // Mark historical sync as complete so we don't re-run it
+  await db.query(
+    'UPDATE indexer_state SET historical_sync_complete = TRUE WHERE id = 1'
+  );
   
   // Generate initial candles
   await generateCandles();
