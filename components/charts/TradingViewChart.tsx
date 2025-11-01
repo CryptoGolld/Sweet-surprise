@@ -164,7 +164,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         console.log('✅ Chart data set successfully');
       } catch (err: any) {
         console.error('❌ Error setting chart data:', err);
-        setDebugInfo(prev => ({ ...prev, chartError: err?.message || String(err) }));
+        setDebugInfo((prev: any) => ({ ...prev, chartError: err?.message || String(err) }));
       }
     }
   }, [data]);
