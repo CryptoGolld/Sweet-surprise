@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const INDEXER_API = 'http://51.20.74.15:3002';
+// Use env var to support both testnet and mainnet
+const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || 'http://51.20.74.15:3002';
 
 // Mark route as dynamic
 export const dynamic = 'force-dynamic';
