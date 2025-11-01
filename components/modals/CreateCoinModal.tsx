@@ -105,6 +105,10 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       newErrors.ticker = 'Ticker is required';
     } else if (formData.ticker.length > 10) {
       newErrors.ticker = 'Ticker must be 10 characters or less';
+    } else if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(formData.ticker)) {
+      newErrors.ticker = 'Ticker must start with a letter and contain only letters, numbers, and underscores';
+    } else if (/^\d/.test(formData.ticker)) {
+      newErrors.ticker = "Ticker can't start with a number (Move requirement)";
     }
     
     if (!formData.name) {
