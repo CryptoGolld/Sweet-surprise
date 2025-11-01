@@ -170,8 +170,8 @@ export function createCurveTransaction(params: {
 export function buyTokensTransaction(params: {
   curveId: string;
   coinType: string;
-  paymentCoinIds: string[]; // Array of SUILFG_MEMEFI coin object IDs (not SUI!)
-  maxSuiIn: string; // Amount in MIST (called "SUI" for consistency, but actually SUILFG_MEMEFI)
+  paymentCoinIds: string[]; // Array of payment coin object IDs
+  maxSuiIn: string; // Amount in MIST
   minTokensOut: string;
 }): Transaction {
   const tx = new Transaction();
@@ -189,10 +189,29 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
+  // On mainnet, payment token IS SUI (same as gas)
+  // Need to reserve one coin for gas and use others for payment
+  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
+  
+  let paymentCoinIds = params.paymentCoinIds;
+  if (isMainnet && paymentCoinIds.length > 0) {
+    // Reserve last coin for gas, use others for payment
+    const gasCoinId = paymentCoinIds[paymentCoinIds.length - 1];
+    paymentCoinIds = paymentCoinIds.slice(0, -1);
+    
+    // If only one coin, we'll split from gas coin
+    if (paymentCoinIds.length === 0) {
+      paymentCoinIds = [gasCoinId];
+    } else {
+      // Use reserved coin as gas
+      tx.setGasPayment([{ objectId: gasCoinId, version: null, digest: null } as any]);
+    }
+  }
+  
   // Merge all payment coins first if there are multiple
-  let mergedCoin = tx.object(params.paymentCoinIds[0]);
-  if (params.paymentCoinIds.length > 1) {
-    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+  let mergedCoin = tx.object(paymentCoinIds[0]);
+  if (paymentCoinIds.length > 1) {
+    const coinsToMerge = paymentCoinIds.slice(1).map(id => tx.object(id));
     tx.mergeCoins(mergedCoin, coinsToMerge);
   }
   
