@@ -15,6 +15,7 @@ import {
   formatTokenAmount,
   calculateSpotPrice 
 } from '@/lib/utils/bondingCurve';
+import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 import { toast } from 'sonner';
 import { PriceChart } from '@/components/charts/PriceChart';
 import { TradeHistory } from '@/components/charts/TradeHistory';
@@ -109,7 +110,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
       if (mode === 'buy') {
         // Validate payment balance
         if (paymentCoins.length === 0) {
-          toast.error('No SUILFG_MEMEFI tokens found', {
+          toast.error(`No ${getPaymentTokenSymbol()} tokens found`, {
             description: 'Get some from the faucet first',
           });
           return;
@@ -120,7 +121,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
         if (BigInt(amountInSmallest) > userBalanceBigInt) {
           toast.error('Insufficient balance', {
-            description: `You only have ${formatAmount(paymentBalance, 9)} SUILFG`,
+            description: `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
           });
           return;
         }
@@ -269,7 +270,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
   }
 
   const userBalance = mode === 'buy' ? formatAmount(paymentBalance, 9) : formatAmount(memeBalance, 9);
-  const tokenSymbol = mode === 'buy' ? 'SUILFG' : curve.ticker;
+  const tokenSymbol = mode === 'buy' ? getPaymentTokenSymbol() : curve.ticker;
   
   // Raw balance values for percentage calculations (not formatted)
   const rawBalance = mode === 'buy' 
@@ -506,7 +507,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                   <div className="flex justify-between">
                     <span className="text-gray-400">You {mode === 'buy' ? 'pay' : 'sell'}:</span>
                     <span className="font-semibold">
-                      {tradePreview.input.toFixed(2)} {mode === 'buy' ? 'SUILFG' : curve.ticker}
+                      {tradePreview.input.toFixed(2)} {mode === 'buy' ? getPaymentTokenSymbol() : curve.ticker}
                     </span>
                   </div>
                   
@@ -515,7 +516,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                     <span className="font-bold text-white text-base">
                       {mode === 'buy' 
                         ? `${formatTokenAmount(tradePreview.output)} ${curve.ticker}`
-                        : `${tradePreview.output.toFixed(4)} SUILFG`
+                        : `${tradePreview.output.toFixed(4)} ${getPaymentTokenSymbol()}`
                       }
                     </span>
                   </div>
