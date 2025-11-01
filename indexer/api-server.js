@@ -121,9 +121,14 @@ app.get('/api/chart/:coinType', async (req, res) => {
     let tradeIndex = 0;
 
     // Generate candles for each minute in last 24 hours
-    for (let candleTime = new Date(chartStartTime); candleTime <= currentTime; candleTime = new Date(candleTime.getTime() + 60000)) {
+    // Safety: limit to max 1440 candles (24 hours × 60 minutes)
+    let candleCount = 0;
+    const MAX_CANDLES = 1440;
+    
+    for (let candleTime = new Date(chartStartTime); candleTime <= currentTime && candleCount < MAX_CANDLES; candleTime = new Date(candleTime.getTime() + 60000)) {
       const candleStart = candleTime;
       const candleEnd = new Date(candleTime.getTime() + 60000);
+      candleCount++;
 
       // Find trades in this minute
       const candleTrades = [];
