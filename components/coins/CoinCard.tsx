@@ -6,7 +6,7 @@ import { TradingModal } from '../modals/TradingModal';
 import { calculatePercentage } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
-import { calculateMarketCap, getInitialMarketCap } from '@/lib/utils/bondingCurve';
+import { findSupplyForTvl, calculateSpotPrice, calculateMarketCap } from '@/lib/utils/bondingCurveCalculations';
 import Link from 'next/link';
 
 interface CoinCardProps {
@@ -17,20 +17,36 @@ export function CoinCard({ curve }: CoinCardProps) {
   const [showTrading, setShowTrading] = useState(false);
   const { data: suiPrice = 1.0 } = useSuiPrice();
 
-  // CRITICAL: curve.curveSupply is ALREADY in whole tokens (not mist!)
-  // MAX_CURVE_SUPPLY is also in whole tokens (737M), so compare directly
-  const progress = calculatePercentage(
-    curve.curveSupply,
-    BONDING_CURVE.MAX_CURVE_SUPPLY
-  );
-
   const age = Math.floor((Date.now() - curve.createdAt) / (1000 * 60)); // minutes
 
-  // Use FDV (Fully Diluted Valuation) from indexer
-  // FDV = current_price × total_supply (1B tokens)
-  // This gives consistent valuation across all tokens
-  const fdvSui = curve.fullyDilutedValuation || 0;
-  const marketCapUsd = fdvSui * suiPrice;
+  // CALCULATE MARKET CAP FROM TVL (using Newton-Raphson method)
+  // This is more reliable than trusting backend calculations
+  // Get TVL from curve_balance (SUI raised)
+  const tvlSui = Number(curve.curveBalance) / 1e9; // Convert mist to SUI
+  
+  let marketCapSui = 0;
+  let currentSupply = 0;
+  
+  if (tvlSui > 0) {
+    // Use Newton-Raphson to find supply from TVL
+    const supplyBigInt = findSupplyForTvl(tvlSui);
+    currentSupply = Number(supplyBigInt);
+    
+    // Calculate spot price and market cap
+    const spotPrice = calculateSpotPrice(currentSupply);
+    marketCapSui = spotPrice * 1_000_000_000; // FDV = price × total supply
+  } else {
+    // At launch: market cap = 1000 SUI
+    marketCapSui = 1000;
+  }
+  
+  const marketCapUsd = marketCapSui * suiPrice;
+
+  // Calculate progress from supply (not TVL)
+  const progress = calculatePercentage(
+    currentSupply,
+    BONDING_CURVE.MAX_CURVE_SUPPLY
+  );
 
   const formatAge = (mins: number) => {
     if (mins < 60) return `${mins}m`;
