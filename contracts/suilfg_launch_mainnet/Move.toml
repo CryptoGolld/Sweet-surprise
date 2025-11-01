@@ -1,0 +1,13 @@
+[package]
+name = "suilfg_launch_mainnet"
+version = "1.0.0"
+edition = "2024.beta"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.42.2" }
+CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "mainnet-v1.26.0" }
+
+[dev-dependencies]
+
+[addresses]
+suilfg_launch_mainnet = "0x0"
