@@ -250,11 +250,12 @@ export function UserPortfolio() {
 
   // Calculate total portfolio value
   const totalPortfolioValue = coins.reduce((acc, coin) => {
-    const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
+    // Check if this is the payment token (SUI on mainnet, SUILFG_MEMEFI on testnet)
+    const isPaymentToken = coin.type === COIN_TYPES.PAYMENT_TOKEN || coin.type === COIN_TYPES.SUI;
     const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
     
     let totalValue = 0;
-    if (isMainToken) {
+    if (isPaymentToken) {
       totalValue = balanceNum * suiPrice;
     } else {
       const curve = curveData.get(coin.type);
