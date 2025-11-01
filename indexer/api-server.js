@@ -112,18 +112,18 @@ app.get('/api/chart/:coinType', async (req, res) => {
     const trades = tradesResult.rows;
     
     // Generate 1-minute candles from trades
-    const now = new Date();
-    const startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const currentTime = new Date();
+    const chartStartTime = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000);
     const candles = [];
     
     // Get initial price (first trade price or 0)
     let currentPrice = parseFloat(trades[0].price_per_token);
     let tradeIndex = 0;
 
-    // Generate candles for each minute
-    for (let time = new Date(startTime); time <= now; time = new Date(time.getTime() + 60000)) {
-      const candleStart = time;
-      const candleEnd = new Date(time.getTime() + 60000);
+    // Generate candles for each minute in last 24 hours
+    for (let candleTime = new Date(chartStartTime); candleTime <= currentTime; candleTime = new Date(candleTime.getTime() + 60000)) {
+      const candleStart = candleTime;
+      const candleEnd = new Date(candleTime.getTime() + 60000);
 
       // Find trades in this minute
       const candleTrades = [];
