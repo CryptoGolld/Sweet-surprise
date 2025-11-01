@@ -7,11 +7,14 @@ import { ConnectButton } from './wallet/ConnectButton';
 import { CreateCoinModal } from './modals/CreateCoinModal';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { NETWORK } from '@/lib/constants';
+import { useSuiPrice } from '@/lib/hooks/useSuiPrice';
+import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 
 export function Header() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const account = useCurrentAccount();
   const pathname = usePathname();
+  const { data: suiPrice } = useSuiPrice();
   
   const isActive = (path: string) => pathname === path;
   const isHomePage = pathname === '/';
