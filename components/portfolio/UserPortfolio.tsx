@@ -292,7 +292,8 @@ export function UserPortfolio() {
       {/* Token List */}
       <div className="space-y-3">
       {coins.map((coin) => {
-        const isMainToken = coin.type === COIN_TYPES.SUILFG_MEMEFI;
+        // Check if this is the payment token (SUI on mainnet, SUILFG_MEMEFI on testnet)
+        const isPaymentToken = coin.type === COIN_TYPES.PAYMENT_TOKEN || coin.type === COIN_TYPES.SUI;
         const balanceNum = Number(coin.balance) / Math.pow(10, coin.decimals);
         
         // Get the curve ID for this token to link to its page
@@ -303,7 +304,7 @@ export function UserPortfolio() {
         let pricePerToken = 0;
         let totalValue = 0;
         
-        if (isMainToken) {
+        if (isPaymentToken) {
           // Payment token (SUI on mainnet, SUILFG_MEMEFI on testnet) uses real-time SUI price
           pricePerToken = suiPrice;
           totalValue = balanceNum * suiPrice;
