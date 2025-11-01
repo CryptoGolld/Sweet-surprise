@@ -13,6 +13,20 @@ const db = new Pool({
 console.log('📊 Starting Candle Generator Bot...');
 console.log('⏱️  Generates OHLCV candles every 60 seconds');
 
+// Clean up old candles (keep only 7 days)
+async function cleanupOldCandles() {
+  try {
+    const result = await db.query(
+      `DELETE FROM price_snapshots WHERE timestamp < NOW() - INTERVAL '7 days'`
+    );
+    if (result.rowCount > 0) {
+      console.log(`🧹 Deleted ${result.rowCount} old candles (older than 7 days)`);
+    }
+  } catch (error) {
+    console.error('❌ Failed to cleanup old candles:', error.message);
+  }
+}
+
 // Generate OHLCV candles from trades
 async function generateCandles() {
   try {
@@ -130,6 +144,9 @@ async function generateCandles() {
 async function main() {
   console.log('✅ Candle bot started!\n');
   
+  // Clean up old candles on start
+  await cleanupOldCandles();
+  
   // Generate candles immediately on start
   await generateCandles();
   
@@ -137,6 +154,11 @@ async function main() {
   setInterval(async () => {
     await generateCandles();
   }, 60000); // 60 seconds
+  
+  // Clean up old candles every hour
+  setInterval(async () => {
+    await cleanupOldCandles();
+  }, 60 * 60 * 1000); // 1 hour
 }
 
 // Graceful shutdown
