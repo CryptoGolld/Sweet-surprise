@@ -110,8 +110,12 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
       if (mode === 'buy') {
         // Validate payment balance
         if (paymentCoins.length === 0) {
-          toast.error(`No ${getPaymentTokenSymbol()} tokens found`, {
-            description: 'Get some from the faucet first',
+          const tokenSymbol = getPaymentTokenSymbol();
+          const instructions = process.env.NEXT_PUBLIC_NETWORK === 'mainnet' 
+            ? 'Please fund your wallet with SUI'
+            : 'Get some from the faucet first';
+          toast.error(`No ${tokenSymbol} tokens found`, {
+            description: instructions,
           });
           return;
         }
