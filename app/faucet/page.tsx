@@ -3,8 +3,25 @@
 import { Header } from '@/components/Header';
 import { BottomNav } from '@/components/BottomNav';
 import { FaucetClaim } from '@/components/faucet/FaucetClaim';
+import { NETWORK } from '@/lib/constants';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function FaucetPage() {
+  const router = useRouter();
+  
+  // Redirect to home on mainnet (faucet only for testnet)
+  useEffect(() => {
+    if (NETWORK === 'mainnet') {
+      router.push('/');
+    }
+  }, [router]);
+  
+  // Don't render on mainnet
+  if (NETWORK === 'mainnet') {
+    return null;
+  }
+  
   return (
     <div className="min-h-screen pb-20 md:pb-0">
       <Header />

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { ConnectButton } from './wallet/ConnectButton';
 import { CreateCoinModal } from './modals/CreateCoinModal';
 import { useCurrentAccount } from '@mysten/dapp-kit';
+import { NETWORK } from '@/lib/constants';
 
 export function Header() {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,12 +42,14 @@ export function Header() {
               >
                 🔥 Tokens
               </Link>
-              <Link 
-                href="/faucet" 
-                className={`transition-colors ${isActive('/faucet') ? 'text-gradient font-semibold' : 'text-gray-300 hover:text-white'}`}
-              >
-                💧 Faucet
-              </Link>
+              {NETWORK === 'testnet' && (
+                <Link 
+                  href="/faucet" 
+                  className={`transition-colors ${isActive('/faucet') ? 'text-gradient font-semibold' : 'text-gray-300 hover:text-white'}`}
+                >
+                  💧 Faucet
+                </Link>
+              )}
               <Link 
                 href="/portfolio" 
                 className={`transition-colors ${isActive('/portfolio') ? 'text-gradient font-semibold' : 'text-gray-300 hover:text-white'}`}

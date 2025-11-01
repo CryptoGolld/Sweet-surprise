@@ -3,7 +3,7 @@
 import { Header } from '@/components/Header';
 import { Hero } from '@/components/Hero';
 import Link from 'next/link';
-
+import { NETWORK } from '@/lib/constants';
 import { BottomNav } from '@/components/BottomNav';
 
 export default function Home() {
@@ -20,16 +20,18 @@ export default function Home() {
             <span className="text-gradient">Get Started</span>
           </h2>
           
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            <Link href="/faucet" className="group">
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-meme-pink/50 transition-all duration-300 hover:scale-105">
-                <div className="text-5xl mb-4">💧</div>
-                <h3 className="text-xl font-bold mb-2 group-hover:text-gradient">Get Tokens</h3>
-                <p className="text-gray-400 text-sm">
-                  Claim free SUILFG_MEMEFI tokens from the faucet
-                </p>
-              </div>
-            </Link>
+          <div className={`grid ${NETWORK === 'testnet' ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-6 max-w-4xl mx-auto`}>
+            {NETWORK === 'testnet' && (
+              <Link href="/faucet" className="group">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-meme-pink/50 transition-all duration-300 hover:scale-105">
+                  <div className="text-5xl mb-4">💧</div>
+                  <h3 className="text-xl font-bold mb-2 group-hover:text-gradient">Get Tokens</h3>
+                  <p className="text-gray-400 text-sm">
+                    Claim free SUILFG_MEMEFI tokens from the faucet
+                  </p>
+                </div>
+              </Link>
+            )}
             
             <Link href="/tokens" className="group">
               <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 hover:border-meme-purple/50 transition-all duration-300 hover:scale-105">
