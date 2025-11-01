@@ -4,9 +4,10 @@ import { useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { formatAmount } from '@/lib/sui/client';
-import { COIN_TYPES, CONTRACTS } from '@/lib/constants';
+import { COIN_TYPES, CONTRACTS, NETWORK } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
 import { calculateSpotPrice } from '@/lib/utils/bondingCurve';
+import { getPaymentTokenName } from '@/lib/utils/networkText';
 import Link from 'next/link';
 
 interface CoinWithMetadata {
