@@ -84,20 +84,20 @@ export function CoinCard({ curve }: CoinCardProps) {
             </div>
 
             {/* Stats - Always Visible */}
-            <div className="flex items-center gap-4 text-xs flex-shrink-0">
+            <div className="flex items-center gap-3 md:gap-4 text-xs flex-shrink-0">
               {/* Market Cap */}
               <div className="text-right">
                 <div className="text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">MC</div>
                 <div className="font-bold text-meme-purple">{formatUSD(marketCapUsd)}</div>
               </div>
               
-              {/* Age */}
-              <div className="text-right hidden sm:block">
+              {/* Age - Now visible on mobile! */}
+              <div className="text-right">
                 <div className="text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">Age</div>
                 <div className="font-semibold">{formatAge(age)}</div>
               </div>
               
-              {/* Progress */}
+              {/* Progress - Desktop only */}
               <div className="text-right hidden md:block">
                 <div className="text-gray-400 text-[10px] uppercase tracking-wide mb-0.5">Prog</div>
                 <div className="font-semibold">{progress.toFixed(0)}%</div>
