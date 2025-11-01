@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { NETWORK } from '@/lib/constants';
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -27,13 +28,15 @@ export function BottomNav() {
           <span className="text-[10px] font-medium">Tokens</span>
         </Link>
         
-        <Link 
-          href="/faucet" 
-          className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors ${isActive('/faucet') ? 'text-gradient' : 'text-gray-400'}`}
-        >
-          <span className="text-xl">💧</span>
-          <span className="text-[10px] font-medium">Faucet</span>
-        </Link>
+        {NETWORK === 'testnet' && (
+          <Link 
+            href="/faucet" 
+            className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors ${isActive('/faucet') ? 'text-gradient' : 'text-gray-400'}`}
+          >
+            <span className="text-xl">💧</span>
+            <span className="text-[10px] font-medium">Faucet</span>
+          </Link>
+        )}
         
         <Link 
           href="/portfolio" 

@@ -216,13 +216,19 @@ export function UserPortfolio() {
         <div className="bg-white/5 border border-white/10 rounded-xl p-12 text-center">
           <div className="text-6xl mb-4">🪙</div>
           <h3 className="text-2xl font-bold mb-2">No Tokens Yet</h3>
-          <p className="text-gray-400 mb-6">Start by claiming free tokens</p>
-          <Link
-            href="/faucet"
-            className="inline-block px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
-          >
-            💧 Claim Tokens
-          </Link>
+          <p className="text-gray-400 mb-6">
+            {NETWORK === 'mainnet' 
+              ? 'Start by trading some tokens' 
+              : 'Start by claiming free tokens'}
+          </p>
+          {NETWORK === 'testnet' && (
+            <Link
+              href="/faucet"
+              className="inline-block px-6 py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-semibold hover:scale-105 transition-transform"
+            >
+              💧 Claim Tokens
+            </Link>
+          )}
         </div>
         
         {/* Debug Info */}
@@ -297,7 +303,7 @@ export function UserPortfolio() {
         let totalValue = 0;
         
         if (isMainToken) {
-          // SUILFG_MEMEFI uses real-time SUI price
+          // Payment token (SUI on mainnet, SUILFG_MEMEFI on testnet) uses real-time SUI price
           pricePerToken = suiPrice;
           totalValue = balanceNum * suiPrice;
         } else if (curve) {
