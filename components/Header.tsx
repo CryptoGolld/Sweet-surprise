@@ -69,6 +69,14 @@ export function Header() {
 
             {/* Actions */}
             <div className="flex items-center gap-2 md:gap-4">
+              {/* SUI Price */}
+              {suiPrice && (
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
+                  <span className="text-gray-400 text-sm">SUI</span>
+                  <span className="text-green-400 font-bold text-sm">${suiPrice.toFixed(3)}</span>
+                </div>
+              )}
+              
               {account && (
                 <button
                   onClick={() => setShowCreateModal(true)}
