@@ -15,7 +15,8 @@ export function useUserCoins(coinType?: string) {
     queryFn: async () => {
       if (!account?.address) return [];
       
-      const type = coinType || COIN_TYPES.SUILFG_MEMEFI;
+      // Use PAYMENT_TOKEN (SUI on mainnet, SUILFG_MEMEFI on testnet)
+      const type = coinType || COIN_TYPES.PAYMENT_TOKEN;
       
       const coins = await client.getCoins({
         owner: account.address,
