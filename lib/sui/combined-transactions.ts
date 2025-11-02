@@ -60,7 +60,7 @@ export function createCurveAndBuyTransaction(params: {
   let paymentCoin;
   if (isMainnet) {
     // Use gas coin for payment on mainnet
-    [paymentCoin] = tx.splitCoins(tx.gas, [maxSuiInNum]);
+    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(maxSuiInNum)]);
   } else {
     // Merge user's payment coins on testnet
     paymentCoin = tx.object(params.paymentCoinIds[0]);
@@ -91,8 +91,8 @@ export function createCurveAndBuyTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE),
       curve, // Use the curve we just created!
       paymentCoin,
-      maxSuiInNum,
-      minTokensOutNum,
+      tx.pure.u64(maxSuiInNum),
+      tx.pure.u64(minTokensOutNum),
       tx.pure.u64(deadline),
       tx.object(CONTRACTS.REFERRAL_REGISTRY),
       tx.pure.option('address', params.referrerAddress),
