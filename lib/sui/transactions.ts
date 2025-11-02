@@ -204,8 +204,8 @@ export function buyTokensTransaction(params: {
       tx.mergeCoins(mergedCoin, otherCoins);
     }
     
-    // Step 2: Split 0.01 SUI for gas
-    const gasAmount = 10_000_000; // 0.01 SUI
+    // Step 2: Split 0.05 SUI for gas (more buffer for complex transactions)
+    const gasAmount = 50_000_000; // 0.05 SUI
     const [gasCoin] = tx.splitCoins(mergedCoin, [gasAmount]);
     // mergedCoin now has: (total - 0.01 SUI)
     
