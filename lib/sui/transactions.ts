@@ -194,11 +194,21 @@ export function buyTokensTransaction(params: {
   // On testnet, payment = SUILFG_MEMEFI (different from gas), so merge user's coins
   const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
   
+  console.log('💳 Payment setup:', {
+    isMainnet,
+    paymentToken: COIN_TYPES.PAYMENT_TOKEN,
+    suiToken: COIN_TYPES.SUI,
+    match: COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI,
+    maxSuiIn: params.maxSuiIn,
+  });
+  
   let paymentCoin;
   if (isMainnet) {
     // Use gas coin for payment (wallet will handle gas budget automatically)
+    console.log('✅ Using tx.gas for payment (mainnet mode)');
     [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
   } else {
+    console.log('✅ Using user coins for payment (testnet mode)');
     // Merge all payment coins first if there are multiple
     let mergedCoin = tx.object(params.paymentCoinIds[0]);
     if (params.paymentCoinIds.length > 1) {
