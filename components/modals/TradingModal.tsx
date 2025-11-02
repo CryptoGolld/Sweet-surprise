@@ -223,7 +223,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
           debugLogger.debug('Dry run passed, creating fresh transaction for signing');
 
-          // Create fresh transaction for signing (dry run modified the original)
+          // Create fresh transaction for signing (deadline recalculated inside buyTokensTransaction)
           const txForSigning = buyTokensTransaction({
             curveId: curve.id,
             coinType: curve.coinType,
@@ -231,6 +231,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
             maxSuiIn: amountInSmallest,
             minTokensOut: '0',
           });
+          
+          debugLogger.debug('Fresh transaction created with updated deadline (30 min buffer)');
 
           debugLogger.debug('Fresh transaction created, attempting to sign and execute');
 

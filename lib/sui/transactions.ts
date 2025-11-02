@@ -178,8 +178,9 @@ export function buyTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Deadline: 5 minutes from now
-  const deadlineMs = Date.now() + 300000;
+  // Deadline: 30 minutes from now (large buffer to avoid clock sync issues)
+  // The blockchain clock might be ahead of client clock, so use a large buffer
+  const deadlineMs = Date.now() + 1800000; // 30 minutes
   
   // Detect which contract this curve belongs to based on coinType
   const contractInfo = getContractForCurve(params.coinType);
@@ -284,7 +285,7 @@ export function sellTokensTransaction(params: {
   const tx = new Transaction();
   
   // Deadline: 5 minutes from now
-  const deadlineMs = Date.now() + 300000;
+  const deadlineMs = Date.now() + 1800000; // 30 minutes (large buffer for clock sync)
   
   // Detect which contract this curve belongs to based on coinType
   const contractInfo = getContractForCurve(params.coinType);
