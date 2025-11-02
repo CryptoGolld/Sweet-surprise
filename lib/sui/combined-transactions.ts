@@ -49,13 +49,24 @@ export function createCurveAndBuyTransaction(params: {
   // The curve is the first returned object
   const curve = curveResult[0];
   
-  // PART 2: Merge payment coins if multiple
-  let paymentCoin = tx.object(params.paymentCoinIds[0]);
-  if (params.paymentCoinIds.length > 1) {
-    tx.mergeCoins(
-      paymentCoin,
-      params.paymentCoinIds.slice(1).map(id => tx.object(id))
-    );
+  // PART 2: Prepare payment coin
+  // On mainnet (payment = SUI = gas), use tx.gas
+  // On testnet (payment = SUILFG_MEMEFI), merge user's coins
+  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
+  
+  let paymentCoin;
+  if (isMainnet) {
+    // Use gas coin for payment on mainnet
+    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
+  } else {
+    // Merge user's payment coins on testnet
+    paymentCoin = tx.object(params.paymentCoinIds[0]);
+    if (params.paymentCoinIds.length > 1) {
+      tx.mergeCoins(
+        paymentCoin,
+        params.paymentCoinIds.slice(1).map(id => tx.object(id))
+      );
+    }
   }
   
   // PART 3: Buy tokens immediately
