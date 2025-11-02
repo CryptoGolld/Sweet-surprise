@@ -131,12 +131,20 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         }
 
         // Build buy transaction
-        // On mainnet, tx.gas is used inside buyTokensTransaction
-        // On testnet, all payment coins are used
+        // On mainnet: payment = SUI = gas, so DON'T pass all coins - reserve last one for gas!
+        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
+        let coinsForPayment = paymentCoins;
+        
+        if (isMainnet && paymentCoins.length > 1) {
+          // Reserve last coin for gas, use others for payment
+          coinsForPayment = paymentCoins.slice(0, -1);
+          console.log(`?? Mainnet: Using ${coinsForPayment.length} coins for payment, reserving 1 for gas`);
+        }
+        
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
+          paymentCoinIds: coinsForPayment.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });

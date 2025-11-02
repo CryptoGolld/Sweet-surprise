@@ -190,34 +190,17 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // Check if payment token = gas token (mainnet)
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
-  console.log('💳 Payment setup:', {
-    isMainnet,
-    paymentToken: COIN_TYPES.PAYMENT_TOKEN,
-    maxSuiIn: params.maxSuiIn,
-  });
-  
-  let paymentCoin;
-  if (isMainnet) {
-    // On mainnet: payment = gas (both SUI)
-    // Use gas coin directly - the Move contract will handle it and refund excess
-    // The wallet SDK will ensure enough SUI for both payment + gas fees
-    console.log('✅ Mainnet: Using tx.gas (SDK handles gas budget)');
-    paymentCoin = tx.gas;
-  } else {
-    // On testnet: payment token is different from gas
-    // Merge all payment coins first if there are multiple
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, coinsToMerge);
-    }
-    
-    // Split the payment amount from the merged coin
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+  // Merge all payment coins first if there are multiple
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+    tx.mergeCoins(mergedCoin, coinsToMerge);
   }
+  
+  // Split the payment amount from the merged coin
+  // On mainnet (payment = SUI = gas), the SDK will automatically deduct gas from remaining SUI
+  // On testnet (payment = SUILFG_MEMEFI), gas is separate SUI coins
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [
