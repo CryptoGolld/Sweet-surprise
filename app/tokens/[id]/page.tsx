@@ -96,8 +96,9 @@ export default function TokenPage() {
         }
 
         const amountInSmallest = parseAmount(amount, 9);
-        if (BigInt(amountInSmallest) > BigInt(paymentBalance)) {
-          toast.error(`Insufficient balance. You have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`);
+        // Check against available balance (reserves gas)
+        if (BigInt(amountInSmallest) > BigInt(availableBalance)) {
+          toast.error(`Insufficient balance. You have ${userBalance} ${getPaymentTokenSymbol()} (${formatAmount(GAS_BUFFER.toString(), 9)} reserved for gas)`);
           return;
         }
 
@@ -280,7 +281,16 @@ export default function TokenPage() {
   }
 
   const progress = (Number(token.curveSupply) / BONDING_CURVE.MAX_CURVE_SUPPLY) * 100;
-  const userBalance = mode === 'buy' ? formatAmount(paymentBalance, 9) : formatAmount(memeBalance, 9);
+  
+  // Reserve gas for transactions (0.01 SUI = 10M MIST)
+  const GAS_BUFFER = 10_000_000; // 0.01 SUI
+  
+  // For buy mode, subtract gas buffer from available balance
+  const availableBalance = mode === 'buy' 
+    ? Math.max(0, Number(paymentBalance) - GAS_BUFFER)
+    : Number(memeBalance);
+  
+  const userBalance = formatAmount(availableBalance.toString(), 9);
   const tokenSymbol = mode === 'buy' ? getPaymentTokenSymbol() : token.ticker;
 
   return (
@@ -483,9 +493,8 @@ export default function TokenPage() {
                   <button
                     key={percent}
                     onClick={() => {
-                      const rawBalance = mode === 'buy' 
-                        ? Number(paymentBalance) / 1e9 
-                        : Number(memeBalance) / 1e9;
+                      // Use availableBalance (already has gas buffer subtracted for buy mode)
+                      const rawBalance = availableBalance / 1e9;
                       setAmount(((rawBalance * percent) / 100).toFixed(4));
                     }}
                     className="py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors"

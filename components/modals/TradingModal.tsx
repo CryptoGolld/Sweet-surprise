@@ -121,11 +121,11 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         }
 
         const amountInSmallest = parseAmount(amount, 9);
-        const userBalanceBigInt = BigInt(paymentBalance);
 
-        if (BigInt(amountInSmallest) > userBalanceBigInt) {
+        // Check against available balance (reserves gas)
+        if (BigInt(amountInSmallest) > BigInt(availableBalance)) {
           toast.error('Insufficient balance', {
-            description: `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
+            description: `You have ${userBalance} ${getPaymentTokenSymbol()} available (${formatAmount(GAS_BUFFER.toString(), 9)} reserved for gas)`,
           });
           return;
         }
@@ -293,13 +293,19 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
     }
   }
 
-  const userBalance = mode === 'buy' ? formatAmount(paymentBalance, 9) : formatAmount(memeBalance, 9);
+  // Reserve gas for transactions (0.01 SUI = 10M MIST)
+  const GAS_BUFFER = 10_000_000; // 0.01 SUI
+  
+  // For buy mode, subtract gas buffer from available balance
+  const availableBalance = mode === 'buy' 
+    ? Math.max(0, Number(paymentBalance) - GAS_BUFFER)
+    : Number(memeBalance);
+  
+  const userBalance = formatAmount(availableBalance.toString(), 9);
   const tokenSymbol = mode === 'buy' ? getPaymentTokenSymbol() : curve.ticker;
   
   // Raw balance values for percentage calculations (not formatted)
-  const rawBalance = mode === 'buy' 
-    ? Number(paymentBalance) / 1e9 
-    : Number(memeBalance) / 1e9;
+  const rawBalance = availableBalance / 1e9;
 
   function handleShare() {
     const url = `${window.location.origin}/tokens/${curve.id}`;
