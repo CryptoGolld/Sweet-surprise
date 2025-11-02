@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { SuiProvider } from "@/components/providers/SuiProvider";
+import { DebugLogViewer } from "@/components/debug/DebugLogViewer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,6 +33,7 @@ export default function RootLayout({
           <div className="relative z-10">
             {children}
           </div>
+          <DebugLogViewer />
         </SuiProvider>
       </body>
     </html>

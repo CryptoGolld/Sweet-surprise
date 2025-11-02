@@ -17,6 +17,7 @@ import {
 } from '@/lib/utils/bondingCurve';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 import { toast } from 'sonner';
+import { debugLogger } from '@/lib/utils/debugLogger';
 import { PriceChart } from '@/components/charts/PriceChart';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 
@@ -136,7 +137,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         const selectedCoins = paymentCoins;
         
         // Debug: Log coin objects being used
-        console.log('?? DEBUG - Payment Coins:', {
+        debugLogger.debug('Payment Coins', {
           count: selectedCoins.length,
           coins: selectedCoins.map(c => ({
             coinObjectId: c.coinObjectId,
@@ -178,7 +179,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
             },
             onError: (error) => {
               const errorMsg = error.message || '';
-              console.error('?? Buy error full:', error);
+              debugLogger.error('Buy transaction failed', { error, errorMsg, fullError: error });
               
               // Parse common Move abort codes
               let userMessage = 'Purchase failed';

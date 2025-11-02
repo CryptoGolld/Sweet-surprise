@@ -7,6 +7,7 @@ import { bcs } from '@mysten/sui/bcs';
 import { SuiClient } from '@mysten/sui/client';
 import { CONTRACTS, COIN_TYPES, getContractForCurve } from '../constants';
 import { getReferrerAddress } from '../utils/referrals';
+import { debugLogger } from '../utils/debugLogger';
 
 /**
  * Estimate gas for a transaction with a 30% safety buffer
@@ -192,7 +193,7 @@ export function buyTokensTransaction(params: {
   
   // Strategy: Create coin references, merge if needed, split payment amount
   // DEBUG: Log payment coin IDs being used
-  console.log('🔍 DEBUG - Buy Transaction Construction:', {
+  debugLogger.debug('Buy Transaction Construction', {
     paymentCoinIds: params.paymentCoinIds,
     coinCount: params.paymentCoinIds.length,
     maxSuiIn: params.maxSuiIn,
@@ -205,19 +206,19 @@ export function buyTokensTransaction(params: {
     // Multiple coins - merge them all at once
     const rest = params.paymentCoinIds.slice(1);
     const restObjects = rest.map(id => tx.object(id));
-    console.log('🔍 DEBUG - Merging coins:', {
+    debugLogger.debug('Merging coins', {
       primary: params.paymentCoinIds[0],
       rest: rest,
     });
     tx.mergeCoins(mergedCoin, restObjects);
   } else {
-    console.log('🔍 DEBUG - Single coin, no merge needed:', params.paymentCoinIds[0]);
+    debugLogger.debug('Single coin, no merge needed', params.paymentCoinIds[0]);
   }
   
   // Split the payment amount from the merged coin
   // The Move function requires coin value <= max_sui_in (aborts if >)
   // It will handle refunds internally if not all is used
-  console.log('🔍 DEBUG - Splitting coin for payment:', {
+  debugLogger.debug('Splitting coin for payment', {
     amount: params.maxSuiIn,
     amountType: typeof params.maxSuiIn,
   });
@@ -226,11 +227,11 @@ export function buyTokensTransaction(params: {
     tx.pure.u64(params.maxSuiIn)
   ]);
   
-  console.log('✅ DEBUG - Payment coin created, building moveCall');
+  debugLogger.debug('Payment coin created, building moveCall');
   
   // Both legacy and new contracts use the same signature
   // Function signature: buy(cfg, curve, referral_registry, payment, max_sui_in, min_tokens_out, deadline, referrer, clock)
-  console.log('🔍 DEBUG - Building moveCall with arguments:', {
+  debugLogger.debug('Building moveCall with arguments', {
     target: `${platformPackage}::bonding_curve::buy`,
     coinType: params.coinType,
     state,
@@ -260,7 +261,7 @@ export function buyTokensTransaction(params: {
     arguments: buyArgs,
   });
   
-  console.log('✅ DEBUG - moveCall constructed successfully');
+  debugLogger.debug('moveCall constructed successfully');
   
   // Don't set gas budget - wallet SDK will estimate automatically (SAME AS SELL)
   // This provides the most accurate gas estimation without extra RPC calls
