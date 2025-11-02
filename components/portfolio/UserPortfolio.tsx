@@ -306,18 +306,21 @@ export function UserPortfolio() {
         let totalValue = 0;
         
         if (isPaymentToken) {
-          // Payment token (SUI on mainnet, SUILFG_MEMEFI on testnet) uses real-time SUI price
+          // Payment token uses real-time SUI price (SUI on mainnet, SUILFG_MEMEFI values at SUI price on testnet)
           pricePerToken = suiPrice;
           totalValue = balanceNum * suiPrice;
         } else if (curve) {
-          // For meme tokens, calculate current spot price from bonding curve
+          // For meme tokens, calculate spot price from bonding curve in SUI
           const currentSupply = Number(curve.curveSupply);
           
           if (currentSupply > 0 && !isNaN(currentSupply)) {
-            pricePerToken = calculateSpotPrice(currentSupply) * suiPrice;
+            // Spot price is already in SUI, multiply by SUI USD price for display
+            const spotPriceInSui = calculateSpotPrice(currentSupply);
+            pricePerToken = spotPriceInSui * suiPrice; // Convert to USD
             totalValue = balanceNum * pricePerToken;
           } else {
-            pricePerToken = calculateSpotPrice(0) * suiPrice;
+            const spotPriceInSui = calculateSpotPrice(0);
+            pricePerToken = spotPriceInSui * suiPrice;
             totalValue = balanceNum * pricePerToken;
           }
         }
