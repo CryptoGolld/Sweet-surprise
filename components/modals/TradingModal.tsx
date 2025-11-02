@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
+import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { BondingCurve } from '@/lib/hooks/useBondingCurves';
 import { useCoinBalance } from '@/lib/hooks/useCoins';
 import { buyTokensTransaction, sellTokensTransaction } from '@/lib/sui/transactions';
@@ -30,6 +30,7 @@ interface TradingModalProps {
 
 export function TradingModal({ isOpen, onClose, curve, fullPage = false }: TradingModalProps) {
   const currentAccount = useCurrentAccount();
+  const client = useSuiClient();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
   const { data: suiPrice = 1.0 } = useSuiPrice();
   
@@ -165,11 +166,76 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
 
-        debugLogger.debug('Transaction ready, attempting to sign and execute');
+        debugLogger.debug('Transaction ready, performing dry run first');
 
         try {
+          // Perform dry run to catch errors before wallet signs
+          if (currentAccount?.address) {
+            debugLogger.debug('Building transaction for dry run', {
+              sender: currentAccount.address,
+            });
+            
+            tx.setSender(currentAccount.address);
+            const dryRunTxBytes = await tx.build({ client });
+            
+            debugLogger.debug('Dry run transaction bytes built, running dry run');
+            
+            try {
+              const dryRunResult = await client.dryRunTransactionBlock({
+                transactionBlock: dryRunTxBytes,
+              });
+              
+              debugLogger.debug('Dry run completed', {
+                status: dryRunResult.effects?.status?.status,
+                error: dryRunResult.effects?.status?.error,
+                gasUsed: dryRunResult.effects?.gasUsed,
+              });
+              
+              if (dryRunResult.effects?.status?.status !== 'success') {
+                const errorMsg = dryRunResult.effects?.status?.error || 'Dry run failed';
+                debugLogger.error('Dry run failed before signing', {
+                  status: dryRunResult.effects?.status?.status,
+                  error: errorMsg,
+                  fullEffects: dryRunResult.effects,
+                });
+                
+                toast.error('Transaction validation failed', {
+                  description: errorMsg,
+                });
+                return;
+              }
+              
+              debugLogger.debug('Dry run successful, proceeding to wallet signing');
+            } catch (dryRunError: any) {
+              debugLogger.error('Dry run exception thrown', {
+                error: dryRunError,
+                errorMessage: dryRunError?.message,
+                errorStack: dryRunError?.stack,
+                fullError: JSON.stringify(dryRunError, Object.getOwnPropertyNames(dryRunError || {}), 2),
+              });
+              
+              toast.error('Transaction validation failed', {
+                description: dryRunError?.message || 'Failed to validate transaction',
+              });
+              return;
+            }
+          }
+
+          debugLogger.debug('Dry run passed, creating fresh transaction for signing');
+
+          // Create fresh transaction for signing (dry run modified the original)
+          const txForSigning = buyTokensTransaction({
+            curveId: curve.id,
+            coinType: curve.coinType,
+            paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
+            maxSuiIn: amountInSmallest,
+            minTokensOut: '0',
+          });
+
+          debugLogger.debug('Fresh transaction created, attempting to sign and execute');
+
           signAndExecute(
-            { transaction: tx },
+            { transaction: txForSigning },
             {
               onSuccess: (result) => {
                 debugLogger.debug('Buy transaction succeeded', {
