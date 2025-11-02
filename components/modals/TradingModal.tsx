@@ -123,9 +123,17 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         const amountInSmallest = parseAmount(amount, 9);
         const userBalanceBigInt = BigInt(paymentBalance);
 
-        if (BigInt(amountInSmallest) > userBalanceBigInt) {
+        // On mainnet, ensure user leaves enough for gas
+        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
+        const gasReserve = isMainnet ? 20_000_000n : 0n; // 0.02 SUI reserve on mainnet
+        const totalNeeded = BigInt(amountInSmallest) + gasReserve;
+
+        if (totalNeeded > userBalanceBigInt) {
+          const shortfall = totalNeeded - userBalanceBigInt;
           toast.error('Insufficient balance', {
-            description: `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
+            description: isMainnet 
+              ? `You need ${formatAmount(totalNeeded.toString(), 9)} SUI (${amount} + 0.02 for gas). You're short ${formatAmount(shortfall.toString(), 9)} SUI.`
+              : `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
           });
           return;
         }
