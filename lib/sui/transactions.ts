@@ -190,51 +190,49 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // EXACT SAME PATTERN as working createCurveAndBuyTransaction (step 3)
-  // Merge user's payment coins first
+  // Merge all payment coins first if there are multiple
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
   if (params.paymentCoinIds.length > 1) {
-    tx.mergeCoins(
-      mergedCoin,
-      params.paymentCoinIds.slice(1).map(id => tx.object(id))
-    );
+    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+    tx.mergeCoins(mergedCoin, coinsToMerge);
   }
   
   // Split the payment amount from the merged coin
-  // Convert to Number like in the working step 3 code
-  const maxSuiInNum = Number(params.maxSuiIn);
-  const minTokensOutNum = Number(params.minTokensOut);
-  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(maxSuiInNum)]);
+  // The Move function requires coin value <= max_sui_in (aborts if >)
+  // It will handle refunds internally if not all is used
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [
+    tx.pure.u64(params.maxSuiIn)
+  ]);
   
-  console.log('💳 Buy transaction:', {
-    curveId: params.curveId,
-    paymentCoinCount: params.paymentCoinIds.length,
-    maxSuiIn: maxSuiInNum,
-    minTokensOut: minTokensOutNum,
-  });
-  
-  // EXACT SAME argument order and format as working step 3
+  // Get referrer address (same as step 3 but with referrer support)
   const referrerAddr = getReferrerAddress();
+  
+  // Both legacy and new contracts use the same signature
+  const buyArgs = [
+    tx.object(state), // cfg: &PlatformConfig
+    tx.object(params.curveId), // curve: &mut BondingCurve<T>
+    tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
+    paymentCoin, // payment: Coin<SUI>
+    tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
+    tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
+    tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
+    referrerAddr 
+      ? tx.pure.option('address', referrerAddr)
+      : tx.pure.option('address', null), // referrer: Option<address>
+    tx.object('0x6'), // clk: &Clock
+  ];
+  
   tx.moveCall({
     target: `${platformPackage}::bonding_curve::buy`,
     typeArguments: [params.coinType],
-    arguments: [
-      tx.object(state),
-      tx.object(params.curveId),
-      tx.object(referralRegistry),
-      paymentCoin, // The SPLIT coin (not the full merged coin)
-      tx.pure.u64(maxSuiInNum),
-      tx.pure.u64(minTokensOutNum),
-      tx.pure.u64(deadlineMs),
-      referrerAddr 
-        ? tx.pure.option('address', referrerAddr)
-        : tx.pure.option('address', null),
-      tx.object('0x6'),
-    ],
+    arguments: buyArgs,
   });
   
   // Note: buy is an entry function, tokens are auto-transferred to sender
-  // Don't set gas budget - let wallet estimate automatically (same as step 3)
+  
+  // Don't set gas budget - wallet SDK will estimate automatically
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
   
   return tx;
 }
