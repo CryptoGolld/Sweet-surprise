@@ -123,19 +123,30 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         const amountInSmallest = parseAmount(amount, 9);
         const userBalanceBigInt = BigInt(paymentBalance);
 
-        // On mainnet, ensure user leaves enough for gas
+        // On mainnet, ensure user has enough for payment + fees + gas
         const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
-        const gasReserve = isMainnet ? 50_000_000n : 0n; // 0.05 SUI reserve on mainnet
-        const totalNeeded = BigInt(amountInSmallest) + gasReserve;
-
-        if (totalNeeded > userBalanceBigInt) {
-          const shortfall = totalNeeded - userBalanceBigInt;
-          toast.error('Insufficient balance', {
-            description: isMainnet 
-              ? `You need ${formatAmount(totalNeeded.toString(), 9)} SUI (${amount} + 0.05 for gas). You're short ${formatAmount(shortfall.toString(), 9)} SUI.`
-              : `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
-          });
-          return;
+        const amountBigInt = BigInt(amountInSmallest);
+        
+        if (isMainnet) {
+          // Need: payment amount + 3% for fees + 0.05 for gas
+          const feeBuffer = amountBigInt * 3n / 100n; // 3% for contract fees
+          const gasReserve = 50_000_000n; // 0.05 SUI for gas
+          const totalNeeded = amountBigInt + feeBuffer + gasReserve;
+          
+          if (totalNeeded > userBalanceBigInt) {
+            const shortfall = totalNeeded - userBalanceBigInt;
+            toast.error('Insufficient balance', {
+              description: `You need ${formatAmount(totalNeeded.toString(), 9)} SUI total (${amount} + 3% fees + 0.05 gas). Short: ${formatAmount(shortfall.toString(), 9)} SUI.`,
+            });
+            return;
+          }
+        } else {
+          if (amountBigInt > userBalanceBigInt) {
+            toast.error('Insufficient balance', {
+              description: `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
+            });
+            return;
+          }
         }
 
         // On mainnet: reserve ONE coin for gas, pass rest for payment
