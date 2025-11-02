@@ -50,27 +50,21 @@ export function createCurveAndBuyTransaction(params: {
   const curve = curveResult[0];
   
   // PART 2: Prepare payment coin
-  // On mainnet (payment = SUI = gas), use tx.gas
-  // On testnet (payment = SUILFG_MEMEFI), merge user's coins
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
-  // Convert maxSuiIn to number for proper u64 handling
+  // Always use user's coins for payment (whether mainnet or testnet)
+  // The wallet will automatically deduct gas from the remaining SUI balance on mainnet
   const maxSuiInNum = Number(params.maxSuiIn);
   
-  let paymentCoin;
-  if (isMainnet) {
-    // Use gas coin for payment on mainnet
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(maxSuiInNum)]);
-  } else {
-    // Merge user's payment coins on testnet
-    paymentCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      tx.mergeCoins(
-        paymentCoin,
-        params.paymentCoinIds.slice(1).map(id => tx.object(id))
-      );
-    }
+  // Merge user's payment coins first
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    tx.mergeCoins(
+      mergedCoin,
+      params.paymentCoinIds.slice(1).map(id => tx.object(id))
+    );
   }
+  
+  // Split the payment amount from the merged coin
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(maxSuiInNum)]);
   
   // PART 3: Buy tokens immediately
   const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
@@ -81,7 +75,6 @@ export function createCurveAndBuyTransaction(params: {
     maxSuiIn: maxSuiInNum,
     minTokensOut: minTokensOutNum,
     deadline,
-    isMainnet,
   });
   
   tx.moveCall({

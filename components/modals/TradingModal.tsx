@@ -131,8 +131,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         }
 
         // Build buy transaction
-        // On mainnet, tx.gas is used inside buyTokensTransaction
-        // On testnet, all payment coins are used
+        // Wallet handles gas automatically, payment coins are used for purchase
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
