@@ -190,21 +190,36 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // Merge all payment coins first if there are multiple
-  let mergedCoin = tx.object(params.paymentCoinIds[0]);
-  if (params.paymentCoinIds.length > 1) {
-    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-    tx.mergeCoins(mergedCoin, coinsToMerge);
+  // On mainnet (payment = SUI = gas): Don't manually manage coins at all!
+  // Let the SDK automatically select, merge, and split coins for both payment and gas
+  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
+  
+  let paymentCoin;
+  if (isMainnet) {
+    // On mainnet: Don't merge/split manually - just use gas coin
+    // The Move contract accepts Coin<SUI> and will only take max_sui_in amount
+    // Excess is refunded automatically
+    // SDK handles gas separately
+    console.log('💎 Mainnet: Letting SDK handle coin selection and gas');
+    
+    // Use the first coin and let SDK handle the rest
+    paymentCoin = tx.object(params.paymentCoinIds[0]);
+    
+    // Merge additional coins if needed
+    if (params.paymentCoinIds.length > 1) {
+      tx.mergeCoins(paymentCoin, params.paymentCoinIds.slice(1).map(id => tx.object(id)));
+    }
+  } else {
+    // On testnet: Manual merge and split (gas is separate SUI coins)
+    let mergedCoin = tx.object(params.paymentCoinIds[0]);
+    if (params.paymentCoinIds.length > 1) {
+      const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+      tx.mergeCoins(mergedCoin, coinsToMerge);
+    }
+    
+    // Split exact payment amount
+    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   }
-  
-  // Split the payment amount from the merged coin
-  // On mainnet: After splitting payment, mergedCoin has remainder which SDK can use for gas
-  // On testnet: Gas is separate SUI coins
-  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-  
-  // The remainder in mergedCoin will be refunded
-  // On mainnet, SDK will use OTHER SUI coins for gas (not this merged one)
-  // User needs to have extra SUI beyond what they're spending
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [
