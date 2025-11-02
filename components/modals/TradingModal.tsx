@@ -139,8 +139,19 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         let selectedCoins: typeof paymentCoins = [];
         let totalSelected = 0n;
         const targetAmount = BigInt(amountInSmallest);
+        // Reserve 50M MIST (0.05 SUI) for gas - leave it unselected
+        const gasReserve = 50_000_000n;
+        const availableBalance = userBalanceBigInt - gasReserve;
         
-        // Select coins until we have enough
+        // Ensure user has enough balance including gas reserve
+        if (targetAmount > availableBalance) {
+          toast.error('Insufficient balance for gas', {
+            description: `Need ${formatAmount((targetAmount + gasReserve).toString(), 9)} ${getPaymentTokenSymbol()} (including gas)`,
+          });
+          return;
+        }
+        
+        // Select coins until we have enough, but don't use all coins
         for (const coin of sortedCoins) {
           selectedCoins.push(coin);
           totalSelected += BigInt(coin.balance);

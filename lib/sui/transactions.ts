@@ -164,7 +164,7 @@ export function createCurveTransaction(params: {
 
 /**
  * Buy tokens from bonding curve
- * Gas is estimated automatically by the wallet - no need to set it
+ * Sets explicit gas budget to avoid estimation failures
  * 
  * Note: Payment must be in SUILFG_MEMEFI tokens on testnet (SUI on mainnet)
  */
@@ -190,18 +190,31 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // EXACT SAME PATTERN as working createCurveAndBuyTransaction (step 3)
-  // Merge user's payment coins first
-  let mergedCoin = tx.object(params.paymentCoinIds[0]);
-  if (params.paymentCoinIds.length > 1) {
+  // Handle coin selection and splitting
+  // If single coin and amount matches exactly, use it directly (optimization)
+  // Otherwise merge coins and split the exact amount needed
+  let paymentCoin;
+  
+  if (params.paymentCoinIds.length === 1) {
+    // Single coin - check if we need to split or can use it directly
+    // For now, always split to ensure we only send the exact amount
+    // (The contract should handle this, but splitting is safer)
+    const [splitCoin] = tx.splitCoins(
+      tx.object(params.paymentCoinIds[0]),
+      [tx.pure.u64(params.maxSuiIn)]
+    );
+    paymentCoin = splitCoin;
+  } else {
+    // Multiple coins - merge first, then split
+    const mergedCoin = tx.object(params.paymentCoinIds[0]);
     tx.mergeCoins(
       mergedCoin,
       params.paymentCoinIds.slice(1).map(id => tx.object(id))
     );
+    // Split the payment amount from the merged coin
+    const [splitCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+    paymentCoin = splitCoin;
   }
-  
-  // Split the payment amount from the merged coin
-  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   
   console.log('💳 Buy transaction:', {
     curveId: params.curveId,
@@ -230,9 +243,9 @@ export function buyTokensTransaction(params: {
   // Note: buy is an entry function, tokens are auto-transferred to sender
   
   // Set explicit gas budget to avoid "could not automatically determine a budget" errors
-  // This happens when the wallet's dry run fails, preventing automatic estimation
-  // 200M MIST = 0.2 SUI, which is sufficient for buy transactions
-  tx.setGasBudget(200_000_000);
+  // Using 50M MIST (0.05 SUI) which is reasonable for buy transactions
+  // The wallet will use separate coins for gas payment automatically
+  tx.setGasBudget(50_000_000);
   
   return tx;
 }
@@ -320,9 +333,9 @@ export function sellTokensTransaction(params: {
   });
   
   // Set explicit gas budget to avoid "could not automatically determine a budget" errors
-  // This happens when the wallet's dry run fails, preventing automatic estimation
-  // 200M MIST = 0.2 SUI, which is sufficient for sell transactions
-  tx.setGasBudget(200_000_000);
+  // Using 50M MIST (0.05 SUI) which is reasonable for sell transactions
+  // The wallet will use separate coins for gas payment automatically
+  tx.setGasBudget(50_000_000);
   
   return tx;
 }
