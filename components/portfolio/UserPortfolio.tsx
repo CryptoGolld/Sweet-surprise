@@ -113,7 +113,8 @@ export function UserPortfolio() {
     if (!coins || coins.length === 0) return;
     
     const fetchCurveData = async () => {
-      const memeCoins = coins.filter(c => c.type !== COIN_TYPES.SUILFG_MEMEFI);
+      // Filter out payment token (SUI on mainnet, SUILFG_MEMEFI on testnet)
+      const memeCoins = coins.filter(c => c.type !== COIN_TYPES.PAYMENT_TOKEN && c.type !== COIN_TYPES.SUI);
       if (memeCoins.length === 0) return;
       
       console.log(`Fetching curve data from indexer for ${memeCoins.length} tokens...`);
