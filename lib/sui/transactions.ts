@@ -233,11 +233,9 @@ export function buyTokensTransaction(params: {
     arguments: buyArgs,
   });
   
-  // Set explicit gas budget to avoid "could not automatically determine a budget" errors
-  // Using 50M MIST (0.05 SUI) which is reasonable for buy transactions
-  // The wallet will use separate coins for gas payment automatically
-  // SAME AS SELL
-  tx.setGasBudget(50_000_000);
+  // Don't set gas budget - wallet SDK will estimate automatically (SAME AS SELL)
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
   
   return tx;
 }
@@ -324,10 +322,9 @@ export function sellTokensTransaction(params: {
     arguments: sellArgs,
   });
   
-  // Set explicit gas budget to avoid "could not automatically determine a budget" errors
-  // Using 50M MIST (0.05 SUI) which is reasonable for sell transactions
-  // The wallet will use separate coins for gas payment automatically
-  tx.setGasBudget(50_000_000);
+  // Don't set gas budget - wallet SDK will estimate automatically
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
   
   return tx;
 }
