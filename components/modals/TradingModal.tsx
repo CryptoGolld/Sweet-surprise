@@ -150,11 +150,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         }
 
         // Build buy transaction - all coin handling inside buyTokensTransaction
-        
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: coinsForPayment.map(c => c.coinObjectId),
+          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });
