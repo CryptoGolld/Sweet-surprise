@@ -209,11 +209,14 @@ export function buyTokensTransaction(params: {
     const [gasCoin] = tx.splitCoins(mergedCoin, [gasAmount]);
     // mergedCoin now has: (total - 0.01 SUI)
     
-    // Step 3: Pass the remainder (mergedCoin) to Move function as payment
-    // The Move function will take max_sui_in amount and refund the rest
-    paymentCoin = mergedCoin;
+    // Step 3: Split EXACT payment amount from remainder
+    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+    // Now we have:
+    // - gasCoin: 0.01 SUI (for gas)
+    // - paymentCoin: exact buy amount (e.g., 0.45 SUI)
+    // - mergedCoin: remainder (e.g., 1.34 SUI) - will be refunded
     
-    console.log('✅ Created gas coin (0.01 SUI), passing merged remainder for payment');
+    console.log('✅ Gas coin (0.01) and payment coin (exact amount) created');
   } else {
     // TESTNET: payment = SUILFG_MEMEFI (different from gas)
     let mergedCoin = tx.object(params.paymentCoinIds[0]);
