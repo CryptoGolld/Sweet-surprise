@@ -229,9 +229,10 @@ export function buyTokensTransaction(params: {
   
   // Note: buy is an entry function, tokens are auto-transferred to sender
   
-  // Don't set gas budget - wallet SDK will estimate automatically
-  // This provides the most accurate gas estimation without extra RPC calls
-  // The wallet will dry-run the transaction to calculate exact gas needed
+  // Set explicit gas budget to avoid "could not automatically determine a budget" errors
+  // This happens when the wallet's dry run fails, preventing automatic estimation
+  // 200M MIST = 0.2 SUI, which is sufficient for buy transactions
+  tx.setGasBudget(200_000_000);
   
   return tx;
 }
@@ -318,9 +319,10 @@ export function sellTokensTransaction(params: {
     arguments: sellArgs,
   });
   
-  // Don't set gas budget - wallet SDK will estimate automatically
-  // This provides the most accurate gas estimation without extra RPC calls
-  // The wallet will dry-run the transaction to calculate exact gas needed
+  // Set explicit gas budget to avoid "could not automatically determine a budget" errors
+  // This happens when the wallet's dry run fails, preventing automatic estimation
+  // 200M MIST = 0.2 SUI, which is sufficient for sell transactions
+  tx.setGasBudget(200_000_000);
   
   return tx;
 }

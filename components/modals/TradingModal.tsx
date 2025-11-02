@@ -180,7 +180,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               let userMessage = 'Purchase failed';
               let description = errorMsg.slice(0, 150);
               
-              if (errorMsg.includes('0x6')) {
+              if (errorMsg.includes('could not automatically determine a budget') || errorMsg.includes('Dry run failed')) {
+                userMessage = 'Transaction failed';
+                description = 'Gas estimation failed. This should be fixed now - please try again. If the issue persists, check your wallet balance.';
+              } else if (errorMsg.includes('0x6')) {
                 userMessage = 'Supply cap reached!';
                 description = 'The bonding curve has sold out';
               } else if (errorMsg.includes('E_DEADLINE_EXPIRED') || errorMsg.includes('abort 4')) {
@@ -189,6 +192,12 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               } else if (errorMsg.includes('E_MAX_IN_EXCEEDED') || errorMsg.includes('abort 5')) {
                 userMessage = 'Amount exceeds limit';
                 description = 'Try a smaller amount';
+              } else if (errorMsg.includes('MoveAbort') || errorMsg.includes('abort')) {
+                // Better handling for Move abort errors
+                userMessage = 'Transaction failed';
+                description = errorMsg.includes('Module') 
+                  ? 'Contract error occurred. Check console for details.'
+                  : errorMsg.slice(0, 100);
               }
               
               toast.error(userMessage, {
