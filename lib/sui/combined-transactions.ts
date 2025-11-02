@@ -48,26 +48,25 @@ export function createCurveAndBuyTransaction(params: {
   // The curve is the first returned object
   const curve = curveResult[0];
   
-  // PART 2: Prepare payment coin - same pattern as standalone buy
+  // PART 2: Prepare payment coin
   const maxSuiInNum = Number(params.maxSuiIn);
-  const minTokensOutNum = Number(params.minTokensOut);
+  
+  // Merge user's payment coins first
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    tx.mergeCoins(
+      mergedCoin,
+      params.paymentCoinIds.slice(1).map(id => tx.object(id))
+    );
+  }
+  
+  // Split the payment amount from the merged coin
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(maxSuiInNum)]);
+  
+  // PART 3: Buy tokens immediately
   const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
   
-  // Merge payment coins - exact same pattern as sell (which works)
-  let coinArg;
-  
-  if (params.paymentCoinIds.length === 1) {
-    // Single coin - use it directly
-    coinArg = tx.object(params.paymentCoinIds[0]);
-  } else {
-    // Multiple coins - merge them all at once
-    const [first, ...rest] = params.paymentCoinIds;
-    coinArg = tx.object(first);
-    const restObjects = rest.map(id => tx.object(id));
-    
-    // Merge all at once (not in a loop)
-    tx.mergeCoins(coinArg, restObjects);
-  }
+  const minTokensOutNum = Number(params.minTokensOut);
   
   console.log('?? Buy params:', {
     maxSuiIn: maxSuiInNum,
@@ -75,20 +74,19 @@ export function createCurveAndBuyTransaction(params: {
     deadline,
   });
   
-  // PART 3: Buy tokens immediately - arguments in correct order per Move contract
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
     typeArguments: [coinType],
     arguments: [
-      tx.object(CONTRACTS.PLATFORM_STATE),       // cfg
-      curve,                                     // curve (just created)
-      tx.object(CONTRACTS.REFERRAL_REGISTRY),   // referral_registry
-      coinArg,                                   // payment coin (merged)
-      tx.pure.u64(maxSuiInNum),                 // max_sui_in
-      tx.pure.u64(minTokensOutNum),             // min_tokens_out
-      tx.pure.u64(deadline),                     // deadline
-      tx.pure.option('address', params.referrerAddress), // referrer
-      tx.object('0x6'),                          // Clock
+      tx.object(CONTRACTS.PLATFORM_STATE),
+      curve, // Use the curve we just created!
+      tx.object(CONTRACTS.REFERRAL_REGISTRY),
+      paymentCoin,
+      tx.pure.u64(maxSuiInNum),
+      tx.pure.u64(minTokensOutNum),
+      tx.pure.u64(deadline),
+      tx.pure.option('address', params.referrerAddress),
+      tx.object('0x6'), // Clock
     ],
   });
   

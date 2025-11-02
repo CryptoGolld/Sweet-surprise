@@ -190,21 +190,18 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // Prepare payment coin - exact same pattern as sell (which works)
-  let coinArg;
-  
-  if (params.paymentCoinIds.length === 1) {
-    // Single coin - use it directly
-    coinArg = tx.object(params.paymentCoinIds[0]);
-  } else {
-    // Multiple coins - merge them all at once
-    const [first, ...rest] = params.paymentCoinIds;
-    coinArg = tx.object(first);
-    const restObjects = rest.map(id => tx.object(id));
-    
-    // Merge all at once (not in a loop)
-    tx.mergeCoins(coinArg, restObjects);
+  // EXACT SAME PATTERN as working createCurveAndBuyTransaction (step 3)
+  // Merge user's payment coins first
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    tx.mergeCoins(
+      mergedCoin,
+      params.paymentCoinIds.slice(1).map(id => tx.object(id))
+    );
   }
+  
+  // Split the payment amount from the merged coin
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   
   console.log('💳 Buy transaction:', {
     curveId: params.curveId,
@@ -213,23 +210,21 @@ export function buyTokensTransaction(params: {
     minTokensOut: params.minTokensOut,
   });
   
-  // Build arguments in exact order matching Move contract and working sell function
-  const buyArgs = [
-    tx.object(state),
-    tx.object(params.curveId),
-    tx.object(referralRegistry),
-    coinArg, // Pass the coin (single or merged) - exact same as sell
-    tx.pure.u64(params.maxSuiIn),
-    tx.pure.u64(params.minTokensOut),
-    tx.pure.u64(deadlineMs),
-    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
-    tx.object('0x6'),
-  ];
-  
+  // EXACT SAME argument order as working step 3
   tx.moveCall({
     target: `${platformPackage}::bonding_curve::buy`,
     typeArguments: [params.coinType],
-    arguments: buyArgs,
+    arguments: [
+      tx.object(state),
+      tx.object(params.curveId),
+      tx.object(referralRegistry),
+      paymentCoin, // The SPLIT coin (not the full merged coin)
+      tx.pure.u64(params.maxSuiIn),
+      tx.pure.u64(params.minTokensOut),
+      tx.pure.u64(deadlineMs),
+      tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+      tx.object('0x6'),
+    ],
   });
   
   // Note: buy is an entry function, tokens are auto-transferred to sender
