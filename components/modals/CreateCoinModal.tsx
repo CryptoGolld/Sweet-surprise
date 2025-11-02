@@ -295,11 +295,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         const { createCurveAndBuyTransaction } = await import('@/lib/sui/combined-transactions');
         
         const combinedTx = createCurveAndBuyTransaction({
-          packageId: publishedData.packageId,
-          moduleName: publishedData.moduleName,
-          structName: publishedData.structName,
-          treasuryCapId: publishedData.treasuryCapId,
-          metadataId: publishedData.metadataId,
+          packageId: publishedData!.packageId,
+          moduleName: publishedData!.moduleName,
+          structName: publishedData!.structName,
+          treasuryCapId: publishedData!.treasuryCapId,
+          metadataId: publishedData!.metadataId,
           paymentCoinIds: coins.data.map(c => c.coinObjectId),
           maxSuiIn: buyAmountMist,
           minTokensOut: minTokensOut,
