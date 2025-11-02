@@ -190,39 +190,40 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // Always use user's coins for payment (whether mainnet or testnet)
-  // The wallet will automatically deduct gas from the remaining SUI balance on mainnet
-  // On testnet, gas (SUI) and payment (SUILFG_MEMEFI) are separate coins
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
+  // Prepare payment coin - exact same pattern as sell (which works)
+  let coinArg;
   
-  console.log('💳 Payment setup:', {
-    isMainnet,
-    paymentToken: COIN_TYPES.PAYMENT_TOKEN,
-    numCoins: params.paymentCoinIds.length,
-    maxSuiIn: params.maxSuiIn,
-  });
-  
-  // Merge all payment coins first if there are multiple
-  let mergedCoin = tx.object(params.paymentCoinIds[0]);
-  if (params.paymentCoinIds.length > 1) {
-    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-    tx.mergeCoins(mergedCoin, coinsToMerge);
+  if (params.paymentCoinIds.length === 1) {
+    // Single coin - use it directly
+    coinArg = tx.object(params.paymentCoinIds[0]);
+  } else {
+    // Multiple coins - merge them all at once
+    const [first, ...rest] = params.paymentCoinIds;
+    coinArg = tx.object(first);
+    const restObjects = rest.map(id => tx.object(id));
+    
+    // Merge all at once (not in a loop)
+    tx.mergeCoins(coinArg, restObjects);
   }
   
-  // Split the payment amount from the merged coin
-  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+  console.log('💳 Buy transaction:', {
+    curveId: params.curveId,
+    paymentCoinCount: params.paymentCoinIds.length,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+  });
   
-  // Both legacy and new contracts use the same signature
+  // Build arguments in exact order matching Move contract and working sell function
   const buyArgs = [
-    tx.object(state), // cfg: &PlatformConfig
-    tx.object(params.curveId), // curve: &mut BondingCurve<T>
-    tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
-    paymentCoin, // payment: Coin<SUILFG_MEMEFI> (not SUI!)
-    tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
-    tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
-    tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address>
-    tx.object('0x6'), // clk: &Clock
+    tx.object(state),
+    tx.object(params.curveId),
+    tx.object(referralRegistry),
+    coinArg, // Pass the coin (single or merged) - exact same as sell
+    tx.pure.u64(params.maxSuiIn),
+    tx.pure.u64(params.minTokensOut),
+    tx.pure.u64(deadlineMs),
+    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+    tx.object('0x6'),
   ];
   
   tx.moveCall({
