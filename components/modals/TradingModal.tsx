@@ -132,14 +132,11 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
         // Build buy transaction - pass all coins, SDK handles gas
         const tx = buyTokensTransaction({
-        // Build buy transaction
-        
-        const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: coinsForPayment.map(c => c.coinObjectId),
+          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
-          minTokensOut: '0', // No minimum for now (can add slippage calculation)
+          minTokensOut: '0',
         });
 
         signAndExecute(
