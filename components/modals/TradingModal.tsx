@@ -166,7 +166,6 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
             onSuccess: (result) => {
               debugLogger.debug('Buy transaction succeeded', {
                 digest: result.digest,
-                effectsStatus: result.effects?.status,
               });
               toast.success('Purchase successful!', {
                 description: `You bought ${curve.ticker}`,
