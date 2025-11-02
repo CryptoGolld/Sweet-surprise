@@ -54,10 +54,13 @@ export function createCurveAndBuyTransaction(params: {
   // On testnet (payment = SUILFG_MEMEFI), merge user's coins
   const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
   
+  // Convert maxSuiIn to number for proper u64 handling
+  const maxSuiInNum = Number(params.maxSuiIn);
+  
   let paymentCoin;
   if (isMainnet) {
     // Use gas coin for payment on mainnet
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
+    [paymentCoin] = tx.splitCoins(tx.gas, [maxSuiInNum]);
   } else {
     // Merge user's payment coins on testnet
     paymentCoin = tx.object(params.paymentCoinIds[0]);
@@ -72,7 +75,6 @@ export function createCurveAndBuyTransaction(params: {
   // PART 3: Buy tokens immediately
   const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
   
-  const maxSuiInNum = Number(params.maxSuiIn);
   const minTokensOutNum = Number(params.minTokensOut);
   
   console.log('?? Buy params:', {
