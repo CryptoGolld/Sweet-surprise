@@ -284,7 +284,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         const networkType = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'mainnet';
         const client = new SuiClient({ url: getFullnodeUrl(networkType) });
         const coins = await client.getCoins({
-          owner: currentAccount.address,
+          owner: currentAccount!.address,
           coinType: COIN_TYPES.PAYMENT_TOKEN,
         });
         
