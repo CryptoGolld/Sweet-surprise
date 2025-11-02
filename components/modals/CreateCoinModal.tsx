@@ -293,6 +293,31 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         
         const { createCurveAndBuyTransaction } = await import('@/lib/sui/combined-transactions');
         
+        // Debug info for troubleshooting
+        const debugInfo = {
+          buyAmountFloat,
+          buyAmountMist,
+          minTokensOut,
+          coinCount: coins.data.length,
+          firstCoinBalance: coins.data[0]?.balance,
+          network: process.env.NEXT_PUBLIC_NETWORK,
+        };
+        
+        console.log('🐛 Step 2 Debug:', debugInfo);
+        
+        // Show debug popup
+        toast.info('Transaction Debug', {
+          description: 'Tap to copy debug info',
+          duration: 10000,
+          action: {
+            label: '📋 Copy Debug',
+            onClick: () => {
+              navigator.clipboard.writeText(JSON.stringify(debugInfo, null, 2));
+              toast.success('Debug info copied!');
+            },
+          },
+        });
+        
         const combinedTx = createCurveAndBuyTransaction({
           packageId: publishedData.packageId,
           moduleName: publishedData.moduleName,
