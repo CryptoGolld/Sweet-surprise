@@ -190,35 +190,24 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // On mainnet, payment = SUI (same as gas), so use tx.splitCoins(tx.gas)
-  // On testnet, payment = SUILFG_MEMEFI (different from gas), so merge user's coins
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
+  // On mainnet and testnet, merge user's payment coins
+  // The SDK will automatically handle gas from OTHER coins
   console.log('💳 Payment setup:', {
-    isMainnet,
     paymentToken: COIN_TYPES.PAYMENT_TOKEN,
-    suiToken: COIN_TYPES.SUI,
-    match: COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI,
     maxSuiIn: params.maxSuiIn,
+    coinCount: params.paymentCoinIds.length,
   });
   
-  let paymentCoin;
-  if (isMainnet) {
-    // Use gas coin for payment (wallet will handle gas budget automatically)
-    console.log('✅ Using tx.gas for payment (mainnet mode)');
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
-  } else {
-    console.log('✅ Using user coins for payment (testnet mode)');
-    // Merge all payment coins first if there are multiple
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, coinsToMerge);
-    }
-    
-    // Split the payment amount from the merged coin
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+  // Merge all payment coins first if there are multiple
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+    tx.mergeCoins(mergedCoin, coinsToMerge);
   }
+  
+  // Split the payment amount from the merged coin
+  // Wallet SDK will automatically use remaining balance or other coins for gas
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [
