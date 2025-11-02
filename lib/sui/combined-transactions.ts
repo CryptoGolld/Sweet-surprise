@@ -4,6 +4,7 @@
  */
 
 import { Transaction } from '@mysten/sui/transactions';
+import { bcs } from '@mysten/sui/bcs';
 import { CONTRACTS, COIN_TYPES } from '../constants';
 
 /**
@@ -67,9 +68,9 @@ export function createCurveAndBuyTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE),
       curve, // Use the curve we just created!
       paymentCoin,
-      tx.pure.u64(params.maxSuiIn),
-      tx.pure.u64(params.minTokensOut),
-      tx.pure.u64(deadline),
+      tx.pure(bcs.u64().serialize(params.maxSuiIn)),
+      tx.pure(bcs.u64().serialize(params.minTokensOut)),
+      tx.pure(bcs.u64().serialize(deadline)),
       tx.object(CONTRACTS.REFERRAL_REGISTRY),
       tx.pure.option('address', params.referrerAddress),
       tx.object('0x6'), // Clock
