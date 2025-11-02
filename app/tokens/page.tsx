@@ -5,6 +5,17 @@ import { BottomNav } from '@/components/BottomNav';
 import { CoinList } from '@/components/coins/CoinList';
 
 export default function TokensPage() {
+  const searchParams = useSearchParams();
+  
+  // Capture referral code from URL on page load
+  useEffect(() => {
+    const ref = searchParams?.get('ref');
+    if (ref && ref.startsWith('0x')) {
+      getReferrerAddress(); // This will save to localStorage
+      console.log('📎 Referral captured:', ref.slice(0, 10) + '...');
+    }
+  }, [searchParams]);
+  
   return (
     <div className="min-h-screen pb-20 md:pb-0">
       <Header />
