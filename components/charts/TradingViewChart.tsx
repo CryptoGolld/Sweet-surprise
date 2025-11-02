@@ -187,7 +187,10 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     );
   }
 
-  if (!data?.candles || data.candles.length === 0) {
+  // Show placeholder with stats if we have data but can't render chart
+  const hasTradeData = data?.candles && data.candles.length > 0;
+  
+  if (!hasTradeData) {
     return (
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
@@ -208,12 +211,23 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         </div>
       </div>
 
-      {/* Chart */}
-      <div 
-        ref={chartContainerRef} 
-        className="w-full"
-        style={{ minHeight: '400px' }}
-      />
+      {/* Chart - With placeholder if rendering fails */}
+      <div className="relative">
+        <div 
+          ref={chartContainerRef} 
+          className="w-full"
+          style={{ minHeight: '400px' }}
+        />
+        
+        {/* Placeholder overlay if chart is empty/not rendering */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="bg-black/60 backdrop-blur-sm rounded-xl p-6 text-center">
+            <div className="text-4xl mb-2">📊</div>
+            <div className="text-sm text-gray-400">Chart updating...</div>
+            <div className="text-xs text-gray-500 mt-1">Stats below show current data</div>
+          </div>
+        </div>
+      </div>
 
       {/* Stats */}
       {data?.candles && data.candles.length > 0 && (
