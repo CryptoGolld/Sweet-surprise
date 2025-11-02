@@ -173,17 +173,23 @@ export default function ReferralsPage() {
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-white/5 rounded-lg">
-                <div className="text-2xl font-bold text-meme-pink mb-1">0</div>
+                <div className="text-2xl font-bold text-meme-pink mb-1">
+                  {referralData?.totalReferrals || 0}
+                </div>
                 <div className="text-xs text-gray-400">Referrals</div>
               </div>
               
               <div className="text-center p-4 bg-white/5 rounded-lg">
-                <div className="text-2xl font-bold text-meme-purple mb-1">0</div>
+                <div className="text-2xl font-bold text-meme-purple mb-1">
+                  {referralData?.referrals?.reduce((sum: number, r: any) => sum + r.trade_count, 0) || 0}
+                </div>
                 <div className="text-xs text-gray-400">Total Trades</div>
               </div>
               
               <div className="text-center p-4 bg-white/5 rounded-lg">
-                <div className="text-2xl font-bold text-sui-blue mb-1">0 SUI</div>
+                <div className="text-2xl font-bold text-sui-blue mb-1">
+                  {referralData?.totalEarned ? (Number(referralData.totalEarned) / 1e9).toFixed(4) : '0'} SUI
+                </div>
                 <div className="text-xs text-gray-400">Earned</div>
               </div>
               
