@@ -134,9 +134,6 @@ export default function Home() {
           <p className="mb-2">
             <span className="text-gradient font-bold">SuiLFG MemeFi</span> - Built on Sui
           </p>
-          <p className="text-xs text-gray-500">
-            🚀 Testnet Campaign
-          </p>
         </div>
       </footer>
       

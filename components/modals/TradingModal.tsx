@@ -130,17 +130,31 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           return;
         }
 
-        // Build buy transaction with explicit gas budget
+        // Select only the coins needed for payment (leave some for gas)
+        // Sort coins by balance descending to use largest coins first
+        const sortedCoins = [...paymentCoins].sort((a, b) => 
+          Number(BigInt(b.balance) - BigInt(a.balance))
+        );
+        
+        let selectedCoins: typeof paymentCoins = [];
+        let totalSelected = 0n;
+        const targetAmount = BigInt(amountInSmallest);
+        
+        // Select coins until we have enough
+        for (const coin of sortedCoins) {
+          selectedCoins.push(coin);
+          totalSelected += BigInt(coin.balance);
+          if (totalSelected >= targetAmount) break;
+        }
+        
+        // Build buy transaction
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
+          paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
-        
-        // Set explicit gas budget for buy transactions (unused gas is refunded)
-        tx.setGasBudget(10_000_000); // 0.01 SUI
 
         signAndExecute(
           { transaction: tx },
