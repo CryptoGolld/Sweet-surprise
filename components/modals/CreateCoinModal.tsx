@@ -341,7 +341,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
         setCurveData({
           curveId,
           curveDigest: result.digest,
-          coinType: `${publishedData.packageId}::${publishedData.moduleName}::${publishedData.structName}`,
+          coinType: `${publishedData!.packageId}::${publishedData!.moduleName}::${publishedData!.structName}`,
         });
         
         toast.success('🎉 Token Launched!', {
@@ -361,11 +361,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       // NORMAL PATH: Just create curve (no immediate buy)
       setStatus('Creating bonding curve...');
       const curveTx = createCurveTransaction({
-        packageId: publishedData.packageId,
-        moduleName: publishedData.moduleName,
-        structName: publishedData.structName,
-        treasuryCapId: publishedData.treasuryCapId,
-        metadataId: publishedData.metadataId,
+        packageId: publishedData!.packageId,
+        moduleName: publishedData!.moduleName,
+        structName: publishedData!.structName,
+        treasuryCapId: publishedData!.treasuryCapId,
+        metadataId: publishedData!.metadataId,
       });
       
       setStatus('Please sign to publish...');
@@ -403,7 +403,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       const curveId = (curveObj as any).objectId;
       
       // Construct coin type
-      const coinType = `${publishedData.packageId}::${publishedData.moduleName}::${publishedData.structName}`;
+      const coinType = `${publishedData!.packageId}::${publishedData!.moduleName}::${publishedData!.structName}`;
       
       // Save curve data and move to step 3 (optional initial buy)
       setCurveData({
@@ -827,11 +827,11 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
                 <p><span className="text-gray-400">Ticker:</span> {formData.ticker}</p>
                 <p><span className="text-gray-400">Name:</span> {formData.name}</p>
                 <p className="text-xs text-gray-400 break-all">
-                  Package: {publishedData.packageId.slice(0, 20)}...
+                  Package: {publishedData!.packageId.slice(0, 20)}...
                 </p>
               </div>
               <a
-                href={getExplorerLink(publishedData.publishDigest, 'txblock')}
+                href={getExplorerLink(publishedData!.publishDigest, 'txblock')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-sui-blue hover:underline"
