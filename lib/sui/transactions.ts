@@ -190,34 +190,48 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // On mainnet (payment = SUI = gas): Don't manually manage coins at all!
-  // Let the SDK automatically select, merge, and split coins for both payment and gas
   const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
   
   let paymentCoin;
   if (isMainnet) {
-    // On mainnet: Don't merge/split manually - just use gas coin
-    // The Move contract accepts Coin<SUI> and will only take max_sui_in amount
-    // Excess is refunded automatically
-    // SDK handles gas separately
-    console.log('💎 Mainnet: Letting SDK handle coin selection and gas');
+    // MAINNET: payment = gas (both SUI)
+    // Solution: Split gas from first coin, then merge everything for payment
     
-    // Use the first coin and let SDK handle the rest
-    paymentCoin = tx.object(params.paymentCoinIds[0]);
+    console.log('💎 Mainnet mode: Splitting gas reserve, then merging for payment');
     
-    // Merge additional coins if needed
+    // Step 1: Take first coin
+    const firstCoin = tx.object(params.paymentCoinIds[0]);
+    
+    // Step 2: Split 0.02 SUI for gas from first coin
+    const gasAmount = 20_000_000; // 0.02 SUI
+    const [gasCoin] = tx.splitCoins(firstCoin, [tx.pure.u64(gasAmount)]);
+    
+    // Step 3: Merge ALL coins (including remainder of firstCoin) for payment
     if (params.paymentCoinIds.length > 1) {
-      tx.mergeCoins(paymentCoin, params.paymentCoinIds.slice(1).map(id => tx.object(id)));
+      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+      tx.mergeCoins(firstCoin, otherCoins);
     }
+    // firstCoin now has: (original - 0.02) + all other coins
+    
+    // Step 4: Split exact payment amount from merged coin
+    [paymentCoin] = tx.splitCoins(firstCoin, [tx.pure.u64(params.maxSuiIn)]);
+    
+    // Step 5: Set gas payment to use our reserved gas coin
+    tx.setGasPayment([{
+      objectId: params.paymentCoinIds[0], // This will be the gasCoin after split
+      version: null as any,
+      digest: null as any,
+    }]);
+    
+    console.log('✅ Gas reserved and payment split successfully');
   } else {
-    // On testnet: Manual merge and split (gas is separate SUI coins)
+    // TESTNET: payment = SUILFG_MEMEFI (different from gas)
     let mergedCoin = tx.object(params.paymentCoinIds[0]);
     if (params.paymentCoinIds.length > 1) {
       const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
       tx.mergeCoins(mergedCoin, coinsToMerge);
     }
     
-    // Split exact payment amount
     [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   }
   
