@@ -89,9 +89,11 @@ class DebugLogger {
     this.listeners.forEach(listener => listener([]));
   }
 
-  subscribe(listener: (logs: LogEntry[]) => void) {
+  subscribe(listener: (logs: LogEntry[]) => void): () => void {
     this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   formatForCopy(): string {
