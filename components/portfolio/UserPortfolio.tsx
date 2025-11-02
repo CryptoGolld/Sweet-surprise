@@ -128,17 +128,23 @@ export function UserPortfolio() {
         const tokens = data.tokens || [];
         
         // Match owned coins with indexed tokens
+        const newCurveData = new Map<string, { curveSupply: string; curveId: string }>();
+        
         for (const coin of memeCoins) {
           const indexedToken = tokens.find((t: any) => t.coinType === coin.type);
           if (indexedToken) {
-            setCurveData(prev => new Map(prev).set(coin.type, {
+            newCurveData.set(coin.type, {
               curveSupply: indexedToken.curveSupply || '0',
               curveId: indexedToken.id,
-            }));
+            });
+            console.log(`📊 Matched ${coin.symbol}: curveId=${indexedToken.id.slice(0, 10)}...`);
+          } else {
+            console.log(`⚠️ No curve found for ${coin.symbol} (${coin.type.slice(0, 30)}...)`);
           }
         }
         
-        console.log(`✅ Loaded curve data from indexer for ${curveData.size} tokens`);
+        setCurveData(newCurveData);
+        console.log(`✅ Loaded curve data for ${newCurveData.size} tokens`);
       } catch (error) {
         console.error('Failed to fetch curve data from indexer:', error);
       }
