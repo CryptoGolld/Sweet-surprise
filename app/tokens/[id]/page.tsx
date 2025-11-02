@@ -101,24 +101,11 @@ export default function TokenPage() {
           return;
         }
 
-        // On mainnet, select only needed coins (leave rest for gas)
-        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
-        let selectedCoins = paymentCoins;
-        if (isMainnet) {
-          const paymentAmount = BigInt(amountInSmallest);
-          let accumulated = 0n;
-          selectedCoins = [];
-          for (const coin of paymentCoins) {
-            selectedCoins.push(coin);
-            accumulated += BigInt(coin.balance);
-            if (accumulated >= paymentAmount * 150n / 100n) break;
-          }
-        }
-
+        // Build buy transaction (gas handled inside with tx.gas on mainnet)
         const tx = buyTokensTransaction({
           curveId: token.id,
           coinType: token.coinType,
-          paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
+          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });
