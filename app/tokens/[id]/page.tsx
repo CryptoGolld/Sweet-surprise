@@ -101,11 +101,28 @@ export default function TokenPage() {
           return;
         }
 
-        // Build buy transaction (gas handled inside with tx.gas on mainnet)
+        // Select only the coins needed for payment (leave some for gas)
+        // Sort coins by balance descending to use largest coins first
+        const sortedCoins = [...paymentCoins].sort((a, b) => 
+          Number(BigInt(b.balance) - BigInt(a.balance))
+        );
+        
+        let selectedCoins: typeof paymentCoins = [];
+        let totalSelected = 0n;
+        const targetAmount = BigInt(amountInSmallest);
+        
+        // Select coins until we have enough (with 10% buffer for fees)
+        for (const coin of sortedCoins) {
+          selectedCoins.push(coin);
+          totalSelected += BigInt(coin.balance);
+          if (totalSelected >= targetAmount) break;
+        }
+        
+        // Build buy transaction
         const tx = buyTokensTransaction({
           curveId: token.id,
           coinType: token.coinType,
-          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
+          paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });

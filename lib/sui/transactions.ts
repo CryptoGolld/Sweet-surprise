@@ -190,53 +190,41 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // On mainnet, payment = SUI (same as gas), so use tx.splitCoins(tx.gas)
-  // On testnet, payment = SUILFG_MEMEFI (different from gas), so merge user's coins
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
-  console.log('💳 Payment setup:', {
-    isMainnet,
-    paymentToken: COIN_TYPES.PAYMENT_TOKEN,
-    suiToken: COIN_TYPES.SUI,
-    match: COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI,
-    maxSuiIn: params.maxSuiIn,
-  });
-  
-  let paymentCoin;
-  if (isMainnet) {
-    // Use gas coin for payment (wallet will handle gas budget automatically)
-    console.log('✅ Using tx.gas for payment (mainnet mode)');
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
-  } else {
-    console.log('✅ Using user coins for payment (testnet mode)');
-    // Merge all payment coins first if there are multiple
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, coinsToMerge);
-    }
-    
-    // Split the payment amount from the merged coin
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+  // EXACT SAME PATTERN as working createCurveAndBuyTransaction (step 3)
+  // Merge user's payment coins first
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    tx.mergeCoins(
+      mergedCoin,
+      params.paymentCoinIds.slice(1).map(id => tx.object(id))
+    );
   }
   
-  // Both legacy and new contracts use the same signature
-  const buyArgs = [
-    tx.object(state), // cfg: &PlatformConfig
-    tx.object(params.curveId), // curve: &mut BondingCurve<T>
-    tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
-    paymentCoin, // payment: Coin<SUILFG_MEMEFI> (not SUI!)
-    tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
-    tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
-    tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address>
-    tx.object('0x6'), // clk: &Clock
-  ];
+  // Split the payment amount from the merged coin
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   
+  console.log('💳 Buy transaction:', {
+    curveId: params.curveId,
+    paymentCoinCount: params.paymentCoinIds.length,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+  });
+  
+  // EXACT SAME argument order as working step 3
   tx.moveCall({
     target: `${platformPackage}::bonding_curve::buy`,
     typeArguments: [params.coinType],
-    arguments: buyArgs,
+    arguments: [
+      tx.object(state),
+      tx.object(params.curveId),
+      tx.object(referralRegistry),
+      paymentCoin, // The SPLIT coin (not the full merged coin)
+      tx.pure.u64(params.maxSuiIn),
+      tx.pure.u64(params.minTokensOut),
+      tx.pure.u64(deadlineMs),
+      tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+      tx.object('0x6'),
+    ],
   });
   
   // Note: buy is an entry function, tokens are auto-transferred to sender

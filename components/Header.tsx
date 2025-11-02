@@ -33,7 +33,6 @@ export function Header() {
                 <h1 className={`font-bold text-gradient transition-all ${isHomePage ? 'text-2xl' : 'text-lg'}`}>
                   SuiLFG MemeFi
                 </h1>
-                {isHomePage && <p className="text-xs text-gray-400">Testnet Campaign</p>}
               </div>
             </Link>
 

@@ -210,9 +210,10 @@ Implemented advanced mathematical methods for accurate price predictions:
 - Milestone predictions for future valuations
 
 ### Gas Optimization
-- On **Mainnet:** Uses `tx.gas` for payment (SUI = payment = gas)
+- On **Mainnet:** Payment and gas both use SUI (wallet manages automatically)
 - On **Testnet:** Separate payment token (SUILFG_MEMEFI) and gas (SUI)
 - Automatic gas estimation by wallet SDK
+- Always uses user's actual coin objects for payment
 
 ### Supabase Integration
 - Migrated from self-hosted PostgreSQL to Supabase

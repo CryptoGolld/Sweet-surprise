@@ -4,7 +4,6 @@
  */
 
 import { Transaction } from '@mysten/sui/transactions';
-import { bcs } from '@mysten/sui/bcs';
 import { CONTRACTS, COIN_TYPES } from '../constants';
 
 /**
@@ -50,27 +49,19 @@ export function createCurveAndBuyTransaction(params: {
   const curve = curveResult[0];
   
   // PART 2: Prepare payment coin
-  // On mainnet (payment = SUI = gas), use tx.gas
-  // On testnet (payment = SUILFG_MEMEFI), merge user's coins
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
-  // Convert maxSuiIn to number for proper u64 handling
   const maxSuiInNum = Number(params.maxSuiIn);
   
-  let paymentCoin;
-  if (isMainnet) {
-    // Use gas coin for payment on mainnet
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(maxSuiInNum)]);
-  } else {
-    // Merge user's payment coins on testnet
-    paymentCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      tx.mergeCoins(
-        paymentCoin,
-        params.paymentCoinIds.slice(1).map(id => tx.object(id))
-      );
-    }
+  // Merge user's payment coins first
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    tx.mergeCoins(
+      mergedCoin,
+      params.paymentCoinIds.slice(1).map(id => tx.object(id))
+    );
   }
+  
+  // Split the payment amount from the merged coin
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(maxSuiInNum)]);
   
   // PART 3: Buy tokens immediately
   const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
@@ -81,7 +72,6 @@ export function createCurveAndBuyTransaction(params: {
     maxSuiIn: maxSuiInNum,
     minTokensOut: minTokensOutNum,
     deadline,
-    isMainnet,
   });
   
   tx.moveCall({
@@ -90,11 +80,11 @@ export function createCurveAndBuyTransaction(params: {
     arguments: [
       tx.object(CONTRACTS.PLATFORM_STATE),
       curve, // Use the curve we just created!
+      tx.object(CONTRACTS.REFERRAL_REGISTRY),
       paymentCoin,
       tx.pure.u64(maxSuiInNum),
       tx.pure.u64(minTokensOutNum),
       tx.pure.u64(deadline),
-      tx.object(CONTRACTS.REFERRAL_REGISTRY),
       tx.pure.option('address', params.referrerAddress),
       tx.object('0x6'), // Clock
     ],
