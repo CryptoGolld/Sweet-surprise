@@ -61,6 +61,13 @@ export function createCurveAndBuyTransaction(params: {
   // PART 3: Buy tokens immediately
   const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
   
+  console.log('?? Buy params:', {
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+    deadline,
+    type_maxSuiIn: typeof params.maxSuiIn,
+  });
+  
   tx.moveCall({
     target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::buy`,
     typeArguments: [coinType],
