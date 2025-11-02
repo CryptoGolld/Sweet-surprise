@@ -138,11 +138,19 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           return;
         }
 
-        // Build buy transaction - pass all coins, SDK handles gas
+        // On mainnet: reserve ONE coin for gas, pass rest for payment
+        // On testnet: pass all payment coins (gas is separate SUI)
+        let coinsForPayment = paymentCoins;
+        if (isMainnet && paymentCoins.length >= 2) {
+          // Reserve FIRST coin for gas (usually has most balance), use rest for payment
+          coinsForPayment = paymentCoins.slice(1);
+          console.log(`?? Mainnet: Reserved 1 coin for gas, using ${coinsForPayment.length} for payment`);
+        }
+        
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
+          paymentCoinIds: coinsForPayment.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });
