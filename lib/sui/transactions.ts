@@ -191,40 +191,67 @@ export function buyTokensTransaction(params: {
   });
   
   // Strategy: Create coin references, merge if needed, split payment amount
+  // DEBUG: Log payment coin IDs being used
+  console.log('🔍 DEBUG - Buy Transaction Construction:', {
+    paymentCoinIds: params.paymentCoinIds,
+    coinCount: params.paymentCoinIds.length,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+    curveId: params.curveId,
+  });
+
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
   if (params.paymentCoinIds.length > 1) {
     // Multiple coins - merge them all at once
     const rest = params.paymentCoinIds.slice(1);
     const restObjects = rest.map(id => tx.object(id));
+    console.log('🔍 DEBUG - Merging coins:', {
+      primary: params.paymentCoinIds[0],
+      rest: rest,
+    });
     tx.mergeCoins(mergedCoin, restObjects);
+  } else {
+    console.log('🔍 DEBUG - Single coin, no merge needed:', params.paymentCoinIds[0]);
   }
   
   // Split the payment amount from the merged coin
   // The Move function requires coin value <= max_sui_in (aborts if >)
   // It will handle refunds internally if not all is used
+  console.log('🔍 DEBUG - Splitting coin for payment:', {
+    amount: params.maxSuiIn,
+    amountType: typeof params.maxSuiIn,
+  });
+  
   const [paymentCoin] = tx.splitCoins(mergedCoin, [
     tx.pure.u64(params.maxSuiIn)
   ]);
   
-  console.log('Buy transaction:', {
-    curveId: params.curveId,
-    paymentCoinCount: params.paymentCoinIds.length,
-    maxSuiIn: params.maxSuiIn,
-    minTokensOut: params.minTokensOut,
-  });
+  console.log('✅ DEBUG - Payment coin created, building moveCall');
   
   // Both legacy and new contracts use the same signature
-  // EXACT SAME format as sell transaction (which works)
+  // Function signature: buy(cfg, curve, referral_registry, payment, max_sui_in, min_tokens_out, deadline, referrer, clock)
+  console.log('🔍 DEBUG - Building moveCall with arguments:', {
+    target: `${platformPackage}::bonding_curve::buy`,
+    coinType: params.coinType,
+    state,
+    curveId: params.curveId,
+    referralRegistry,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+    deadlineMs,
+    referrer: getReferrerAddress(),
+  });
+
   const buyArgs = [
-    tx.object(state),
-    tx.object(params.curveId),
+    tx.object(state), // cfg: &PlatformConfig
+    tx.object(params.curveId), // curve: &mut BondingCurve<T>
     tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
-    paymentCoin, // payment: Coin<SUI>
+    paymentCoin, // mut payment: Coin<SUI> or Coin<SUILFG_MEMEFI>
     tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
     tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
     tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address> - SAME AS SELL
-    tx.object('0x6'),
+    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address>
+    tx.object('0x6'), // clk: &Clock
   ];
   
   tx.moveCall({
@@ -232,6 +259,8 @@ export function buyTokensTransaction(params: {
     typeArguments: [params.coinType],
     arguments: buyArgs,
   });
+  
+  console.log('✅ DEBUG - moveCall constructed successfully');
   
   // Don't set gas budget - wallet SDK will estimate automatically (SAME AS SELL)
   // This provides the most accurate gas estimation without extra RPC calls

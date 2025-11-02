@@ -135,6 +135,19 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         // The wallet will automatically handle gas from available coins
         const selectedCoins = paymentCoins;
         
+        // Debug: Log coin objects being used
+        console.log('?? DEBUG - Payment Coins:', {
+          count: selectedCoins.length,
+          coins: selectedCoins.map(c => ({
+            coinObjectId: c.coinObjectId,
+            balance: c.balance,
+            version: c.version,
+            digest: c.digest,
+          })),
+          totalBalance: paymentBalance,
+          amountNeeded: amountInSmallest,
+        });
+
         // Build buy transaction
         const tx = buyTokensTransaction({
           curveId: curve.id,
@@ -143,6 +156,9 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           maxSuiIn: amountInSmallest,
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
+
+        // Debug: Log the PTB structure before signing
+        console.log('?? DEBUG - Transaction Block Data:', JSON.stringify(tx.blockData, null, 2));
 
         signAndExecute(
           { transaction: tx },
