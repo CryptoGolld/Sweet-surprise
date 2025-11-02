@@ -14,6 +14,7 @@ import { calculateTokensOut, calculateSuiOut } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
 import { TradingViewChart } from '@/components/charts/TradingViewChart';
 import { TradeHistory } from '@/components/charts/TradeHistory';
+import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 
 export default function TokenPage() {
   const params = useParams();
@@ -86,13 +87,17 @@ export default function TokenPage() {
     try {
       if (mode === 'buy') {
         if (paymentCoins.length === 0) {
-          toast.error('No SUILFG_MEMEFI tokens found. Get some from the faucet first.');
+          const tokenName = getPaymentTokenSymbol();
+          const instructions = process.env.NEXT_PUBLIC_NETWORK === 'mainnet' 
+            ? 'Please fund your wallet with SUI'
+            : 'Get some from the faucet first';
+          toast.error(`No ${tokenName} tokens found. ${instructions}`);
           return;
         }
 
         const amountInSmallest = parseAmount(amount, 9);
         if (BigInt(amountInSmallest) > BigInt(paymentBalance)) {
-          toast.error(`Insufficient balance. You have ${formatAmount(paymentBalance, 9)} SUILFG`);
+          toast.error(`Insufficient balance. You have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`);
           return;
         }
 
@@ -275,7 +280,7 @@ export default function TokenPage() {
 
   const progress = (Number(token.curveSupply) / BONDING_CURVE.MAX_CURVE_SUPPLY) * 100;
   const userBalance = mode === 'buy' ? formatAmount(paymentBalance, 9) : formatAmount(memeBalance, 9);
-  const tokenSymbol = mode === 'buy' ? 'SUILFG' : token.ticker;
+  const tokenSymbol = mode === 'buy' ? getPaymentTokenSymbol() : token.ticker;
 
   return (
     <div className="min-h-screen pb-20 md:pb-0 bg-sui-dark">
@@ -381,7 +386,7 @@ export default function TokenPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                   <div className="bg-white/5 rounded-lg p-3">
                     <div className="text-xs text-gray-400 mb-1">Current Price</div>
-                    <div className="font-bold text-sm">{token.currentPrice.toFixed(10)} SUILFG</div>
+                    <div className="font-bold text-sm">{token.currentPrice.toFixed(10)} {getPaymentTokenSymbol()}</div>
                   </div>
                   <div className="bg-white/5 rounded-lg p-3">
                     <div className="text-xs text-gray-400 mb-1">24h Change</div>
@@ -495,7 +500,7 @@ export default function TokenPage() {
               <div className="bg-white/5 rounded-lg p-3 space-y-1">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">You {mode === 'buy' ? 'receive' : 'get'}</span>
-                  <span className="font-bold">{tradePreview.output.toFixed(4)} {mode === 'buy' ? token.ticker : 'SUILFG'}</span>
+                  <span className="font-bold">{tradePreview.output.toFixed(4)} {mode === 'buy' ? token.ticker : getPaymentTokenSymbol()}</span>
                 </div>
               </div>
             )}
