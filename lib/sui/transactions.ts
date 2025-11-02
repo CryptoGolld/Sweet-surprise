@@ -190,9 +190,6 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // Check if we're on mainnet (payment token = gas token)
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
   // Merge all payment coins first if there are multiple
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
   if (params.paymentCoinIds.length > 1) {
@@ -201,20 +198,13 @@ export function buyTokensTransaction(params: {
   }
   
   // Split the payment amount from the merged coin
+  // On mainnet: After splitting payment, mergedCoin has remainder which SDK can use for gas
+  // On testnet: Gas is separate SUI coins
   const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   
-  // On mainnet: After splitting payment, split gas from the remaining balance
-  if (isMainnet) {
-    // Split 0.1 SUI from remaining balance for gas
-    const gasAmount = 100_000_000; // 0.1 SUI in MIST
-    const [gasCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(gasAmount)]);
-    
-    // Set this as the gas payment coin
-    tx.setGasPayment([gasCoin]);
-    
-    console.log('💎 Mainnet mode: Reserved 0.1 SUI for gas from remaining balance');
-  }
-  // On testnet: gas is separate SUI coins, handled automatically by SDK
+  // The remainder in mergedCoin will be refunded
+  // On mainnet, SDK will use OTHER SUI coins for gas (not this merged one)
+  // User needs to have extra SUI beyond what they're spending
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [
