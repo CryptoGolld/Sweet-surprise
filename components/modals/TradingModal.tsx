@@ -131,29 +131,12 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         }
 
         // Build buy transaction
-        // On mainnet (payment = SUI), pass only enough coins for payment, let SDK handle gas
-        // On testnet (payment = SUILFG_MEMEFI), pass all payment coins
-        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
-        const paymentAmount = BigInt(amountInSmallest);
-        
-        let selectedCoins = paymentCoins;
-        if (isMainnet) {
-          // On mainnet, only pass coins needed for payment (not all SUI coins)
-          // This leaves some SUI for gas
-          let accumulated = 0n;
-          selectedCoins = [];
-          for (const coin of paymentCoins) {
-            selectedCoins.push(coin);
-            accumulated += BigInt(coin.balance);
-            // Stop when we have enough (+50% buffer for gas)
-            if (accumulated >= paymentAmount * 150n / 100n) break;
-          }
-        }
-        
+        // On mainnet, tx.gas is used inside buyTokensTransaction
+        // On testnet, all payment coins are used
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
+          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
