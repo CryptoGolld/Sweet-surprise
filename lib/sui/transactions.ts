@@ -190,40 +190,31 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // Handle coin selection and splitting
-  // If single coin and amount matches exactly, use it directly (optimization)
-  // Otherwise merge coins and split the exact amount needed
-  let paymentCoin;
-  
-  if (params.paymentCoinIds.length === 1) {
-    // Single coin - check if we need to split or can use it directly
-    // For now, always split to ensure we only send the exact amount
-    // (The contract should handle this, but splitting is safer)
-    const [splitCoin] = tx.splitCoins(
-      tx.object(params.paymentCoinIds[0]),
-      [tx.pure.u64(params.maxSuiIn)]
-    );
-    paymentCoin = splitCoin;
-  } else {
-    // Multiple coins - merge first, then split
-    const mergedCoin = tx.object(params.paymentCoinIds[0]);
+  // EXACT SAME PATTERN as working createCurveAndBuyTransaction (step 3)
+  // Merge user's payment coins first
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
     tx.mergeCoins(
       mergedCoin,
       params.paymentCoinIds.slice(1).map(id => tx.object(id))
     );
-    // Split the payment amount from the merged coin
-    const [splitCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    paymentCoin = splitCoin;
   }
+  
+  // Split the payment amount from the merged coin
+  // Convert to Number like in the working step 3 code
+  const maxSuiInNum = Number(params.maxSuiIn);
+  const minTokensOutNum = Number(params.minTokensOut);
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(maxSuiInNum)]);
   
   console.log('💳 Buy transaction:', {
     curveId: params.curveId,
     paymentCoinCount: params.paymentCoinIds.length,
-    maxSuiIn: params.maxSuiIn,
-    minTokensOut: params.minTokensOut,
+    maxSuiIn: maxSuiInNum,
+    minTokensOut: minTokensOutNum,
   });
   
-  // EXACT SAME argument order as working step 3
+  // EXACT SAME argument order and format as working step 3
+  const referrerAddr = getReferrerAddress();
   tx.moveCall({
     target: `${platformPackage}::bonding_curve::buy`,
     typeArguments: [params.coinType],
@@ -232,20 +223,18 @@ export function buyTokensTransaction(params: {
       tx.object(params.curveId),
       tx.object(referralRegistry),
       paymentCoin, // The SPLIT coin (not the full merged coin)
-      tx.pure.u64(params.maxSuiIn),
-      tx.pure.u64(params.minTokensOut),
+      tx.pure.u64(maxSuiInNum),
+      tx.pure.u64(minTokensOutNum),
       tx.pure.u64(deadlineMs),
-      tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+      referrerAddr 
+        ? tx.pure.option('address', referrerAddr)
+        : tx.pure.option('address', null),
       tx.object('0x6'),
     ],
   });
   
   // Note: buy is an entry function, tokens are auto-transferred to sender
-  
-  // Set explicit gas budget to avoid "could not automatically determine a budget" errors
-  // Using 50M MIST (0.05 SUI) which is reasonable for buy transactions
-  // The wallet will use separate coins for gas payment automatically
-  tx.setGasBudget(50_000_000);
+  // Don't set gas budget - let wallet estimate automatically (same as step 3)
   
   return tx;
 }

@@ -130,33 +130,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           return;
         }
 
-        // Select only the coins needed for payment (leave some for gas)
-        // Sort coins by balance descending to use largest coins first
-        const sortedCoins = [...paymentCoins].sort((a, b) => 
-          Number(BigInt(b.balance) - BigInt(a.balance))
-        );
-        
-        let selectedCoins: typeof paymentCoins = [];
-        let totalSelected = 0n;
-        const targetAmount = BigInt(amountInSmallest);
-        // Reserve 50M MIST (0.05 SUI) for gas - leave it unselected
-        const gasReserve = 50_000_000n;
-        const availableBalance = userBalanceBigInt - gasReserve;
-        
-        // Ensure user has enough balance including gas reserve
-        if (targetAmount > availableBalance) {
-          toast.error('Insufficient balance for gas', {
-            description: `Need ${formatAmount((targetAmount + gasReserve).toString(), 9)} ${getPaymentTokenSymbol()} (including gas)`,
-          });
-          return;
-        }
-        
-        // Select coins until we have enough, but don't use all coins
-        for (const coin of sortedCoins) {
-          selectedCoins.push(coin);
-          totalSelected += BigInt(coin.balance);
-          if (totalSelected >= targetAmount) break;
-        }
+        // Select coins - use same pattern as working step 3
+        // In step 3, they use ALL coins, so let's do the same
+        // The wallet will automatically handle gas from available coins
+        const selectedCoins = paymentCoins;
         
         // Build buy transaction
         const tx = buyTokensTransaction({
