@@ -5,6 +5,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
 
 export default function ReferralsPage() {
   const account = useCurrentAccount();
@@ -14,6 +15,19 @@ export default function ReferralsPage() {
   const referralLink = account?.address 
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/tokens?ref=${account.address}`
     : '';
+  
+  // Fetch referral data from indexer
+  const { data: referralData } = useQuery({
+    queryKey: ['referral', account?.address],
+    queryFn: async () => {
+      if (!account?.address) return null;
+      const response = await fetch(`/api/proxy/referral/${account.address}`);
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: !!account?.address,
+    refetchInterval: 10000,
+  });
 
   function copyReferralLink() {
     if (!account?.address) {
