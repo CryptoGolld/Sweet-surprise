@@ -72,8 +72,8 @@ export function createCurveAndBuyTransaction(params: {
   // PART 3: Buy tokens immediately
   const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
   
-  console.log('?? Buy params:', {
-    maxSuiIn: params.maxSuiIn,
+  const maxSuiInNum = Number(params.maxSuiIn);
+  const minTokensOutNum = Number(params.minTokensOut);
     minTokensOut: params.minTokensOut,
     deadline,
     type_maxSuiIn: typeof params.maxSuiIn,
@@ -86,8 +86,8 @@ export function createCurveAndBuyTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE),
       curve, // Use the curve we just created!
       paymentCoin,
-      tx.pure.u64(params.maxSuiIn),
-      tx.pure.u64(params.minTokensOut),
+      maxSuiInNum,
+      minTokensOutNum,
       tx.pure.u64(deadline),
       tx.object(CONTRACTS.REFERRAL_REGISTRY),
       tx.pure.option('address', params.referrerAddress),
