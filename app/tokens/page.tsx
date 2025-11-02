@@ -3,24 +3,30 @@
 import { Header } from '@/components/Header';
 import { BottomNav } from '@/components/BottomNav';
 import { CoinList } from '@/components/coins/CoinList';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getReferrerAddress } from '@/lib/utils/referrals';
 
-export default function TokensPage() {
+function ReferralCapture() {
   const searchParams = useSearchParams();
   
-  // Capture referral code from URL on page load
   useEffect(() => {
     const ref = searchParams?.get('ref');
     if (ref && ref.startsWith('0x')) {
-      getReferrerAddress(); // This will save to localStorage
+      getReferrerAddress();
       console.log('📎 Referral captured:', ref.slice(0, 10) + '...');
     }
   }, [searchParams]);
   
+  return null;
+}
+
+export default function TokensPage() {
   return (
     <div className="min-h-screen pb-20 md:pb-0">
+      <Suspense fallback={null}>
+        <ReferralCapture />
+      </Suspense>
       <Header />
       
       <main className="container mx-auto px-4 py-6">
