@@ -74,9 +74,12 @@ export function createCurveAndBuyTransaction(params: {
   
   const maxSuiInNum = Number(params.maxSuiIn);
   const minTokensOutNum = Number(params.minTokensOut);
-    minTokensOut: params.minTokensOut,
+  
+  console.log('?? Buy params:', {
+    maxSuiIn: maxSuiInNum,
+    minTokensOut: minTokensOutNum,
     deadline,
-    type_maxSuiIn: typeof params.maxSuiIn,
+    isMainnet,
   });
   
   tx.moveCall({
