@@ -177,8 +177,8 @@ export function buyTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Deadline: 5 minutes from now
-  const deadlineMs = Date.now() + 300000;
+  // Deadline: 30 minutes from now (longer to avoid expiration issues)
+  const deadlineMs = Date.now() + 30 * 60 * 1000;
   
   // Detect which contract this curve belongs to based on coinType
   const contractInfo = getContractForCurve(params.coinType);
@@ -261,8 +261,8 @@ export function sellTokensTransaction(params: {
 }): Transaction {
   const tx = new Transaction();
   
-  // Deadline: 5 minutes from now
-  const deadlineMs = Date.now() + 300000;
+  // Deadline: 30 minutes from now (longer to avoid expiration issues)
+  const deadlineMs = Date.now() + 30 * 60 * 1000;
   
   // Detect which contract this curve belongs to based on coinType
   const contractInfo = getContractForCurve(params.coinType);
