@@ -158,13 +158,16 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
 
-        // Debug: Log the PTB structure before signing
-        console.log('?? DEBUG - Transaction Block Data:', JSON.stringify(tx.blockData, null, 2));
+        debugLogger.debug('Transaction ready, attempting to sign and execute');
 
         signAndExecute(
           { transaction: tx },
           {
             onSuccess: (result) => {
+              debugLogger.debug('Buy transaction succeeded', {
+                digest: result.digest,
+                effectsStatus: result.effects?.status,
+              });
               toast.success('Purchase successful!', {
                 description: `You bought ${curve.ticker}`,
                 action: {
@@ -179,7 +182,13 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
             },
             onError: (error) => {
               const errorMsg = error.message || '';
-              debugLogger.error('Buy transaction failed', { error, errorMsg, fullError: error });
+              debugLogger.error('Buy transaction failed', { 
+                error: errorMsg,
+                errorObject: error,
+                errorString: String(error),
+                errorJSON: JSON.stringify(error, null, 2),
+                errorKeys: Object.keys(error || {}),
+              });
               
               // Parse common Move abort codes
               let userMessage = 'Purchase failed';
