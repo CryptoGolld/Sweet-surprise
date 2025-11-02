@@ -190,11 +190,13 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // Merge all payment coins first if there are multiple
+  // Strategy: Create coin references, merge if needed, split payment amount
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
   if (params.paymentCoinIds.length > 1) {
-    const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-    tx.mergeCoins(mergedCoin, coinsToMerge);
+    // Multiple coins - merge them all at once
+    const rest = params.paymentCoinIds.slice(1);
+    const restObjects = rest.map(id => tx.object(id));
+    tx.mergeCoins(mergedCoin, restObjects);
   }
   
   // Split the payment amount from the merged coin
@@ -204,22 +206,25 @@ export function buyTokensTransaction(params: {
     tx.pure.u64(params.maxSuiIn)
   ]);
   
-  // Get referrer address (same as step 3 but with referrer support)
-  const referrerAddr = getReferrerAddress();
+  console.log('Buy transaction:', {
+    curveId: params.curveId,
+    paymentCoinCount: params.paymentCoinIds.length,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+  });
   
   // Both legacy and new contracts use the same signature
+  // EXACT SAME format as sell transaction (which works)
   const buyArgs = [
-    tx.object(state), // cfg: &PlatformConfig
-    tx.object(params.curveId), // curve: &mut BondingCurve<T>
+    tx.object(state),
+    tx.object(params.curveId),
     tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
     paymentCoin, // payment: Coin<SUI>
     tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
     tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
     tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-    referrerAddr 
-      ? tx.pure.option('address', referrerAddr)
-      : tx.pure.option('address', null), // referrer: Option<address>
-    tx.object('0x6'), // clk: &Clock
+    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address> - SAME AS SELL
+    tx.object('0x6'),
   ];
   
   tx.moveCall({
@@ -228,11 +233,11 @@ export function buyTokensTransaction(params: {
     arguments: buyArgs,
   });
   
-  // Note: buy is an entry function, tokens are auto-transferred to sender
-  
-  // Don't set gas budget - wallet SDK will estimate automatically
-  // This provides the most accurate gas estimation without extra RPC calls
-  // The wallet will dry-run the transaction to calculate exact gas needed
+  // Set explicit gas budget to avoid "could not automatically determine a budget" errors
+  // Using 50M MIST (0.05 SUI) which is reasonable for buy transactions
+  // The wallet will use separate coins for gas payment automatically
+  // SAME AS SELL
+  tx.setGasBudget(50_000_000);
   
   return tx;
 }
