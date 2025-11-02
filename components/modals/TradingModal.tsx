@@ -159,15 +159,34 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
             },
             onError: (error) => {
               const errorMsg = error.message || '';
+              console.error('?? Buy error full:', error);
+              
+              // Parse common Move abort codes
+              let userMessage = 'Purchase failed';
+              let description = errorMsg.slice(0, 150);
+              
               if (errorMsg.includes('0x6')) {
-                toast.error('Supply cap reached!', {
-                  description: 'The bonding curve has sold out',
-                });
-              } else {
-                toast.error('Purchase failed', {
-                  description: errorMsg.slice(0, 100),
-                });
+                userMessage = 'Supply cap reached!';
+                description = 'The bonding curve has sold out';
+              } else if (errorMsg.includes('E_DEADLINE_EXPIRED') || errorMsg.includes('abort 4')) {
+                userMessage = 'Transaction expired';
+                description = 'Please try again';
+              } else if (errorMsg.includes('E_MAX_IN_EXCEEDED') || errorMsg.includes('abort 5')) {
+                userMessage = 'Amount exceeds limit';
+                description = 'Try a smaller amount';
               }
+              
+              toast.error(userMessage, {
+                description,
+                duration: 10000,
+                action: {
+                  label: '?? Copy Error',
+                  onClick: () => {
+                    navigator.clipboard.writeText(JSON.stringify({error: errorMsg, full: error}, null, 2));
+                    toast.success('Error copied!');
+                  },
+                },
+              });
             },
           }
         );
