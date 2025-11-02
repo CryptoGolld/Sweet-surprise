@@ -3,6 +3,9 @@
 import { Header } from '@/components/Header';
 import { BottomNav } from '@/components/BottomNav';
 import { CoinList } from '@/components/coins/CoinList';
+import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { getReferrerAddress } from '@/lib/utils/referrals';
 
 export default function TokensPage() {
   const searchParams = useSearchParams();
