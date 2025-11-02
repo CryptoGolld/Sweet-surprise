@@ -194,33 +194,26 @@ export function buyTokensTransaction(params: {
   
   let paymentCoin;
   if (isMainnet) {
-    // MAINNET: payment = gas (both SUI)
-    // Solution: Reserve first coin completely for gas, merge rest for payment
+    // MAINNET: Merge all coins, split 0.01 for gas, use remainder for payment
+    console.log('💎 Mainnet mode: Merge all → split 0.01 gas → use rest for payment');
     
-    console.log('💎 Mainnet mode: First coin reserved for gas, merging rest for payment');
-    
-    if (params.paymentCoinIds.length < 2) {
-      // With only 1 coin, we can't separate gas and payment
-      // Use it for payment and hope SDK handles gas (risky but only option)
-      console.warn('⚠️ Only 1 SUI coin - may not have enough for gas!');
-      paymentCoin = tx.object(params.paymentCoinIds[0]);
-    } else {
-      // We have 2+ coins - use first for gas, rest for payment
-      // Step 1: Merge coins #2, #3, etc. for payment (skip first)
-      const paymentCoinIds = params.paymentCoinIds.slice(1);
-      let mergedPayment = tx.object(paymentCoinIds[0]);
-      
-      if (paymentCoinIds.length > 1) {
-        const coinsToMerge = paymentCoinIds.slice(1).map(id => tx.object(id));
-        tx.mergeCoins(mergedPayment, coinsToMerge);
-      }
-      
-      // Step 2: Split exact payment amount
-      [paymentCoin] = tx.splitCoins(mergedPayment, [tx.pure.u64(params.maxSuiIn)]);
-      
-      // First coin (params.paymentCoinIds[0]) remains untouched - SDK uses it for gas automatically
-      console.log('✅ Payment coin ready, first coin reserved for gas');
+    // Step 1: Merge ALL SUI coins into one
+    let mergedCoin = tx.object(params.paymentCoinIds[0]);
+    if (params.paymentCoinIds.length > 1) {
+      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+      tx.mergeCoins(mergedCoin, otherCoins);
     }
+    
+    // Step 2: Split 0.01 SUI for gas
+    const gasAmount = 10_000_000; // 0.01 SUI
+    const [gasCoin] = tx.splitCoins(mergedCoin, [gasAmount]);
+    // mergedCoin now has: (total - 0.01 SUI)
+    
+    // Step 3: Pass the remainder (mergedCoin) to Move function as payment
+    // The Move function will take max_sui_in amount and refund the rest
+    paymentCoin = mergedCoin;
+    
+    console.log('✅ Created gas coin (0.01 SUI), passing merged remainder for payment');
   } else {
     // TESTNET: payment = SUILFG_MEMEFI (different from gas)
     let mergedCoin = tx.object(params.paymentCoinIds[0]);
