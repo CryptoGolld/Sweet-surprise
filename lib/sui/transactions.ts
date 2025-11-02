@@ -6,6 +6,7 @@ import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/sui/bcs';
 import { SuiClient } from '@mysten/sui/client';
 import { CONTRACTS, COIN_TYPES, getContractForCurve } from '../constants';
+import { getReferrerAddress } from '../utils/referrals';
 
 /**
  * Estimate gas for a transaction with a 30% safety buffer
@@ -218,7 +219,7 @@ export function buyTokensTransaction(params: {
     tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
     tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
     tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
-    tx.pure(bcs.option(bcs.Address).serialize(null)), // referrer: Option<address>
+    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address>
     tx.object('0x6'), // clk: &Clock
   ];
   
@@ -309,7 +310,7 @@ export function sellTokensTransaction(params: {
     tx.pure.u64(tokensInSmallestUnits.toString()), // amount_tokens in SMALLEST UNITS!
     tx.pure.u64(params.minSuiOut),
     tx.pure.u64(deadlineMs),
-    tx.pure(bcs.option(bcs.Address).serialize(null)), // referrer: Option<address>
+    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address>
     tx.object('0x6'),
   ];
   

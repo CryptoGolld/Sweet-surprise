@@ -175,13 +175,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         <div className="text-6xl mb-4">📊</div>
         <div className="text-white/60">Chart unavailable</div>
         <div className="text-sm text-white/40 mt-2">Error: {error.message}</div>
-        {/* Debug info for mobile */}
-        <details className="mt-4 text-left bg-black/30 rounded p-3 text-xs">
-          <summary className="cursor-pointer text-yellow-400">🐛 Debug Info (tap to expand)</summary>
-          <pre className="mt-2 text-white/60 overflow-auto">
-            {JSON.stringify({ error: error.message, coinType }, null, 2)}
-          </pre>
-        </details>
       </div>
     );
   }
@@ -201,18 +194,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         <div className="text-xl font-semibold mb-2">No Trading History Yet</div>
         <div className="text-white/60 mb-2">This token hasn't had any trades yet</div>
         <div className="text-sm text-white/40">Be the first to trade and the chart will appear!</div>
-        {/* Debug info for mobile */}
-        <details className="mt-4 text-left bg-black/30 rounded p-3 text-xs">
-          <summary className="cursor-pointer text-yellow-400">🐛 Debug Info (tap to expand)</summary>
-          <pre className="mt-2 text-white/60 overflow-auto">
-            {JSON.stringify({ 
-              candleCount: data?.candles?.length || 0,
-              hasData: !!data,
-              coinType,
-              debugInfo 
-            }, null, 2)}
-          </pre>
-        </details>
       </div>
     );
   }
@@ -226,32 +207,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
           Powered by TradingView
         </div>
       </div>
-
-      {/* Debug Info (temporary - remove after fixing) */}
-      <details className="text-xs bg-black/30 rounded p-2">
-        <summary className="cursor-pointer text-yellow-400">
-          🐛 Chart Debug (tap to see) {consoleErrors.length > 0 && `⚠️ ${consoleErrors.length} errors`}
-        </summary>
-        <div className="mt-2 space-y-2">
-          {/* Console Errors */}
-          {consoleErrors.length > 0 && (
-            <div>
-              <div className="text-red-400 font-semibold mb-1">Console Errors:</div>
-              <pre className="text-red-300 overflow-auto max-h-32 bg-red-900/20 p-2 rounded">
-                {consoleErrors.map((err, i) => `${i + 1}. ${err}`).join('\n\n')}
-              </pre>
-            </div>
-          )}
-          
-          {/* Debug Data */}
-          <div>
-            <div className="text-blue-400 font-semibold mb-1">Chart Data:</div>
-            <pre className="text-white/60 overflow-auto max-h-40 bg-blue-900/20 p-2 rounded">
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
-          </div>
-        </div>
-      </details>
 
       {/* Chart */}
       <div 

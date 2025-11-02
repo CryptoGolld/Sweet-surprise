@@ -309,19 +309,22 @@ export function UserPortfolio() {
           // Payment token uses real-time SUI price (SUI on mainnet, SUILFG_MEMEFI values at SUI price on testnet)
           pricePerToken = suiPrice;
           totalValue = balanceNum * suiPrice;
-        } else if (curve) {
+        } else {
           // For meme tokens, calculate spot price from bonding curve in SUI
-          const currentSupply = Number(curve.curveSupply);
-          
-          if (currentSupply > 0 && !isNaN(currentSupply)) {
-            // Spot price is already in SUI, multiply by SUI USD price for display
-            const spotPriceInSui = calculateSpotPrice(currentSupply);
-            pricePerToken = spotPriceInSui * suiPrice; // Convert to USD
-            totalValue = balanceNum * pricePerToken;
-          } else {
-            const spotPriceInSui = calculateSpotPrice(0);
-            pricePerToken = spotPriceInSui * suiPrice;
-            totalValue = balanceNum * pricePerToken;
+          const curve = curveData.get(coin.type);
+          if (curve) {
+            const currentSupply = Number(curve.curveSupply);
+            
+            if (currentSupply > 0 && !isNaN(currentSupply)) {
+              // Spot price is already in SUI, multiply by SUI USD price for display
+              const spotPriceInSui = calculateSpotPrice(currentSupply);
+              pricePerToken = spotPriceInSui * suiPrice; // Convert to USD
+              totalValue = balanceNum * pricePerToken;
+            } else {
+              const spotPriceInSui = calculateSpotPrice(0);
+              pricePerToken = spotPriceInSui * suiPrice;
+              totalValue = balanceNum * pricePerToken;
+            }
           }
         }
 
@@ -366,15 +369,11 @@ export function UserPortfolio() {
                   {formatAmount(coin.balance, coin.decimals)}
                 </div>
                 <div className="text-xs text-gray-400">{coin.symbol}</div>
-                {totalValue > 0 ? (
+                {totalValue > 0 && (
                   <div className="text-xs md:text-sm text-meme-purple font-semibold">
                     {formatUSD(totalValue)}
                   </div>
-                ) : !isPaymentToken && !curveData.get(coin.type) ? (
-                  <div className="text-xs text-gray-500 italic">
-                    Loading...
-                  </div>
-                ) : null}
+                )}
               </div>
             </div>
           </Link>
