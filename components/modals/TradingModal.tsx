@@ -97,6 +97,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
   const volumeUsd = volume24h * suiPrice;
 
   async function handleTrade() {
+    debugLogger.debug('handleTrade called', { mode, amount, hasAccount: !!currentAccount });
+    
     if (!currentAccount) {
       toast.error('Please connect your wallet');
       return;
@@ -109,6 +111,11 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
     try {
       if (mode === 'buy') {
+        debugLogger.debug('Starting buy flow', { 
+          amount, 
+          paymentCoinsCount: paymentCoins.length,
+          paymentBalance,
+        });
         // Validate payment balance
         if (paymentCoins.length === 0) {
           const tokenSymbol = getPaymentTokenSymbol();
@@ -160,34 +167,46 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
         debugLogger.debug('Transaction ready, attempting to sign and execute');
 
-        signAndExecute(
-          { transaction: tx },
-          {
-            onSuccess: (result) => {
-              debugLogger.debug('Buy transaction succeeded', {
-                digest: result.digest,
-              });
-              toast.success('Purchase successful!', {
-                description: `You bought ${curve.ticker}`,
-                action: {
-                  label: 'View',
-                  onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank'),
-                },
-              });
-              setAmount('');
-              
-              // Close modal instead of reloading - parent will refetch automatically
-              setTimeout(() => onClose(), 1500);
-            },
-            onError: (error) => {
-              const errorMsg = error.message || '';
-              debugLogger.error('Buy transaction failed', { 
-                error: errorMsg,
-                errorObject: error,
-                errorString: String(error),
-                errorJSON: JSON.stringify(error, null, 2),
-                errorKeys: Object.keys(error || {}),
-              });
+        try {
+          signAndExecute(
+            { transaction: tx },
+            {
+              onSuccess: (result) => {
+                debugLogger.debug('Buy transaction succeeded', {
+                  digest: result.digest,
+                });
+                toast.success('Purchase successful!', {
+                  description: `You bought ${curve.ticker}`,
+                  action: {
+                    label: 'View',
+                    onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank'),
+                  },
+                });
+                setAmount('');
+                
+                // Close modal instead of reloading - parent will refetch automatically
+                setTimeout(() => onClose(), 1500);
+              },
+              onError: (error: any) => {
+                const errorMsg = error?.message || String(error) || 'Unknown error';
+                
+                // Log to both debugLogger and console to ensure we capture it
+                console.error('?? BUY ERROR:', error);
+                console.error('?? Error message:', errorMsg);
+                console.error('?? Full error:', JSON.stringify(error, null, 2));
+                
+                try {
+                  debugLogger.error('Buy transaction failed in onError handler', { 
+                    error,
+                    errorMessage: errorMsg,
+                    errorName: error?.name,
+                    errorStack: error?.stack,
+                    errorToString: String(error),
+                    fullError: JSON.stringify(error, Object.getOwnPropertyNames(error || {}), 2),
+                  });
+                } catch (logError) {
+                  console.error('Failed to log to debugLogger:', logError);
+                }
               
               // Parse common Move abort codes
               let userMessage = 'Purchase failed';
@@ -226,7 +245,22 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               });
             },
           }
-        );
+          );
+        } catch (error: any) {
+          debugLogger.error('Buy transaction failed in try-catch', {
+            error,
+            errorMessage: error?.message,
+            errorName: error?.name,
+            errorStack: error?.stack,
+            errorToString: String(error),
+            errorType: typeof error,
+            isError: error instanceof Error,
+            fullError: JSON.stringify(error, Object.getOwnPropertyNames(error || {}), 2),
+          });
+          toast.error('Transaction failed', {
+            description: error?.message || 'Unknown error occurred',
+          });
+        }
       } else {
         // Sell mode
         if (memeCoins.length === 0) {
