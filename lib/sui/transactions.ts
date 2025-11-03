@@ -190,44 +190,28 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
+  // CLEAN SOLUTION: Merge all coins, split payment, let SDK handle gas from remainder
+  // Works for both mainnet (payment = SUI) and testnet (payment = SUILFG_MEMEFI)
   
-  let paymentCoin;
-  if (isMainnet) {
-    // MAINNET: Merge all coins, split 0.01 for gas, use remainder for payment
-    console.log('💎 Mainnet mode: Merge all → split 0.01 gas → use rest for payment');
-    
-    // Step 1: Merge ALL SUI coins into one
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, otherCoins);
-    }
-    
-    // Step 2: Split 0.05 SUI for gas (more buffer for complex transactions)
-    const gasAmount = 50_000_000; // 0.05 SUI
-    const [gasCoin] = tx.splitCoins(mergedCoin, [gasAmount]);
-    // mergedCoin now has: (total - 0.01 SUI)
-    
-    // Step 3: Split EXACT payment amount (no buffer!)
-    // Contract checks: coin_value <= max_sui_in, then takes fees INTERNALLY
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    // Now we have:
-    // - gasCoin: 0.05 SUI (for gas)
-    // - paymentCoin: EXACT buy amount (e.g., 0.45 SUI)
-    // - mergedCoin: remainder (refunded)
-    
-    console.log(`✅ Gas coin (0.05) and payment coin (EXACT amount) created`);
-  } else {
-    // TESTNET: payment = SUILFG_MEMEFI (different from gas)
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const coinsToMerge = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, coinsToMerge);
-    }
-    
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+  console.log(`💎 Merging ${params.paymentCoinIds.length} coins for payment`);
+  
+  // Step 1: Merge ALL payment coins into one
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+    tx.mergeCoins(mergedCoin, otherCoins);
   }
+  
+  // Step 2: Split EXACT payment amount from merged coin
+  // The SDK will automatically use the remainder (or other coins) for gas
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+  
+  // After split:
+  // - paymentCoin: exact buy amount (passed to Move function)
+  // - mergedCoin: has remainder (SDK uses this for gas on mainnet, refunded after)
+  // This works because SDK is smart enough to handle gas from the remainder!
+  
+  console.log(`✅ Payment coin split, SDK will handle gas from ${params.paymentCoinIds.length > 1 ? 'merged' : 'single'} coin remainder`);
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [

@@ -123,30 +123,12 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         const amountInSmallest = parseAmount(amount, 9);
         const userBalanceBigInt = BigInt(paymentBalance);
 
-        // On mainnet, ensure user has enough for payment + fees + gas
-        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
-        const amountBigInt = BigInt(amountInSmallest);
-        
-        if (isMainnet) {
-          // Need: payment amount + 3% for fees + 0.05 for gas
-          const feeBuffer = amountBigInt * 3n / 100n; // 3% for contract fees
-          const gasReserve = 50_000_000n; // 0.05 SUI for gas
-          const totalNeeded = amountBigInt + feeBuffer + gasReserve;
-          
-          if (totalNeeded > userBalanceBigInt) {
-            const shortfall = totalNeeded - userBalanceBigInt;
-            toast.error('Insufficient balance', {
-              description: `You need ${formatAmount(totalNeeded.toString(), 9)} SUI total (${amount} + 3% fees + 0.05 gas). Short: ${formatAmount(shortfall.toString(), 9)} SUI.`,
-            });
-            return;
-          }
-        } else {
-          if (amountBigInt > userBalanceBigInt) {
-            toast.error('Insufficient balance', {
-              description: `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
-            });
-            return;
-          }
+        // Simple check: user has more than they want to spend (for gas buffer)
+        if (BigInt(amountInSmallest) > userBalanceBigInt) {
+          toast.error('Insufficient balance', {
+            description: `You only have ${formatAmount(paymentBalance, 9)} ${getPaymentTokenSymbol()}`,
+          });
+          return;
         }
 
         // Build buy transaction - all coin handling inside buyTokensTransaction
