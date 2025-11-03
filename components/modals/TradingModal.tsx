@@ -35,6 +35,14 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
   
+  // Detect if this is truly the first ever transaction on this curve
+  // Check both: supply is 0 AND no trading history
+  const isFirstEverBuy = useMemo(() => {
+    const supplyIsZero = Number(curve.curveSupply) === 0;
+    const noTradeHistory = !curve.lastTradeAt; // No trades ever recorded
+    return supplyIsZero && noTradeHistory;
+  }, [curve.curveSupply, curve.lastTradeAt]);
+  
   // Get user's payment token balance
   const { balance: paymentBalance, coins: paymentCoins } = useCoinBalance();
   
@@ -50,8 +58,12 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
     const inputAmount = parseFloat(amount);
     
     if (mode === 'buy') {
-      // Calculate how many tokens user will get
-      const tokensOut = calculateTokensOut(currentSupply, inputAmount);
+      // First buyer fee: 1 SUI is deducted from payment if this is first ever buy
+      const firstBuyerFee = isFirstEverBuy ? 1.0 : 0;
+      const effectiveAmount = Math.max(0, inputAmount - firstBuyerFee);
+      
+      // Calculate how many tokens user will get (based on amount AFTER fee)
+      const tokensOut = calculateTokensOut(currentSupply, effectiveAmount);
       const priceImpact = calculatePriceImpact(currentSupply, tokensOut);
       const costUsd = inputAmount * suiPrice;
       
@@ -60,6 +72,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         output: tokensOut,
         priceImpact,
         usdValue: costUsd,
+        firstBuyerFee,
+        effectiveAmount,
       };
     } else {
       // Calculate how much SUI user will get
@@ -72,9 +86,11 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         output: suiOut,
         priceImpact: -priceImpact, // Negative because selling
         usdValue: valueUsd,
+        firstBuyerFee: 0,
+        effectiveAmount: inputAmount,
       };
     }
-  }, [amount, mode, curve.curveSupply, suiPrice]);
+  }, [amount, mode, curve.curveSupply, suiPrice, isFirstEverBuy]);
 
   useEffect(() => {
     if (isOpen) {
@@ -104,6 +120,18 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
     if (!amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
+    }
+    
+    // Validate first ever buyer amount (must be > 1 SUI due to contract fee)
+    if (mode === 'buy' && isFirstEverBuy) {
+      const buyAmount = parseFloat(amount);
+      if (buyAmount <= 1.0) {
+        toast.error('First buy must be more than 1 SUI', {
+          description: 'The contract charges a 1 SUI first buyer fee. Try 1.5 SUI or more.',
+          duration: 5000,
+        });
+        return;
+      }
     }
 
     try {
@@ -503,7 +531,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               <div className="flex gap-2 mt-2 flex-wrap">
                 {mode === 'buy' ? (
                   // Buy mode: Quick amount buttons in SUI
-                  [10, 50, 100, 500].map((preset) => (
+                  // For first ever buyer, show amounts > 1 SUI
+                  (isFirstEverBuy ? [2, 5, 10, 50] : [10, 50, 100, 500]).map((preset) => (
                     <button
                       key={preset}
                       onClick={() => setAmount(preset.toString())}
