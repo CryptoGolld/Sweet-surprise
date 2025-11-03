@@ -366,7 +366,7 @@ export function UserPortfolio() {
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-sm md:text-lg truncate">{coin.name}</div>
                   <div className="text-xs text-gray-400 truncate">
-                    {pricePerToken > 0 ? `$${pricePerToken.toFixed(6)}` : coin.symbol}
+                    {pricePerToken > 0 ? `$${pricePerToken.toFixed(6)}` : (isPaymentToken ? coin.symbol : 'Loading price...')}
                   </div>
                 </div>
               </div>

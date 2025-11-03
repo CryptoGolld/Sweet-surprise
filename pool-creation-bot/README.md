@@ -2,6 +2,22 @@
 
 Automated bot that creates Cetus pools and burns LP tokens for graduated bonding curves.
 
+## ⚠️ CRITICAL SECURITY NOTE
+
+**FRONTRUNNING PROTECTION REQUIRED!**
+
+There is a known vulnerability in `seed_pool_prepare()` that allows anyone to bypass the 10% platform graduation cut. See [CRITICAL_VULNERABILITIES.md](/CRITICAL_VULNERABILITIES.md) for details.
+
+**Impact**: 
+- Attacker can frontrun and withdraw liquidity BEFORE platform takes its cut
+- Funds still go to our controlled `lp_recipient_address` ✅
+- We lose ~1,373 SUI revenue per curve ❌
+
+**Bot Mitigation** (until contract upgrade):
+- Bot MUST call `distribute_payouts()` immediately after graduation
+- Bot MUST verify `reward_paid = true` before calling `prepare_pool_liquidity()`
+- Bot should have fallback logic if `seed_pool_prepare()` is called by attacker
+
 ## Features
 
 - ✅ Monitors blockchain for graduation events
@@ -11,6 +27,7 @@ Automated bot that creates Cetus pools and burns LP tokens for graduated bonding
 - ✅ Burns LP tokens using Cetus Burn Manager (permanent lock)
 - ✅ Production-ready with PM2 support
 - ✅ Comprehensive error handling and logging
+- ⚠️ **NEEDS FRONTRUN PROTECTION** (see above)
 
 ## Prerequisites
 

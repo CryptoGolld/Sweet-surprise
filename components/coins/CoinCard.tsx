@@ -27,7 +27,8 @@ export function CoinCard({ curve }: CoinCardProps) {
 
   // Use FDV (Fully Diluted Valuation) from indexer
   // After recalculation script runs, this will have correct values
-  const fdvSui = curve.fullyDilutedValuation || 0;
+  // If FDV is 0 (no volume yet), default to 1000 SUI market cap
+  const fdvSui = curve.fullyDilutedValuation || 1000;
   const marketCapUsd = fdvSui * suiPrice;
 
   const formatAge = (mins: number) => {

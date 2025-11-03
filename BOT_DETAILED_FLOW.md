@@ -1,12 +1,161 @@
 # Pool Creation Bot - Complete Step-by-Step Flow
 
+## 🚨 CRITICAL VULNERABILITIES TO FIX IN CONTRACT UPGRADE
+
+### Vulnerability #1: First Buyer Fee Can Be Charged Multiple Times
+
+**Location**: `bonding_curve.move` - Line 346 (buy function)
+
+**Issue**: The 1 SUI first buyer fee check only verifies `token_supply == 0`, but selling can reset supply to 0.
+
+**Attack Scenario**:
+```
+1. Alice buys tokens → token_supply: 0 → 100 (pays 1 SUI fee) ✅
+2. Alice sells all → token_supply: 100 → 0 
+3. Bob buys tokens → token_supply == 0 (pays 1 SUI fee AGAIN) ❌
+4. Bob sells all → token_supply: 0
+5. Repeat... (fee charged every time someone buys after full selloff)
+```
+
+**Impact**: First buyer fee charged multiple times per curve, unfair to buyers
+
+**Fix for Contract Upgrade**:
+```move
+// Add to BondingCurve struct:
+first_buyer_fee_collected: bool,
+
+// Update buy function check:
+if (curve.token_supply == 0 && !curve.first_buyer_fee_collected) {
+    let fee = platform_config::get_first_buyer_fee_mist(cfg);
+    if (fee > 0) {
+        let fee_coin = coin::split(&mut payment, fee, ctx);
+        transfer::public_transfer(fee_coin, treasury);
+        curve.first_buyer_fee_collected = true;  // Prevent re-charge
+    };
+}
+```
+
+---
+
+### Vulnerability #2: Anyone Can Bypass 10% Platform Graduation Cut ⚠️
+
+**Location**: `bonding_curve.move` - Line 729 (`seed_pool_prepare` function)
+
+**Issue**: NO access control + Missing `reward_paid` check allows frontrunning to withdraw liquidity BEFORE platform takes its 10% cut.
+
+**Attack Scenario**:
+```
+Normal Flow:
+1. Curve graduates (13,333 SUI in reserve)
+2. distribute_payouts() → Platform takes 10% (1,333 SUI)
+3. prepare_pool_liquidity() → Bot withdraws 12,000 SUI
+✅ Platform gets its cut
+
+Attack Flow:
+1. Curve graduates (13,333 SUI in reserve)  
+2. Attacker calls seed_pool_prepare() immediately ❌
+3. Withdraws ALL 13,333 SUI (skips platform cut!)
+4. Funds still go to lp_recipient_address (we control) ✅
+5. But we lose 1,333 SUI revenue per curve ❌
+```
+
+**Security Confirmation**:
+- ✅ Attacker CANNOT steal funds
+- ✅ All funds go to `lp_recipient_address` (admin-controlled, only AdminCap can change)
+- ❌ Platform loses 10% cut (~1,333 SUI per curve)
+- ❌ Creator loses graduation payout (40 SUI)
+- **Revenue Loss**: ~1,373 SUI per exploited curve
+
+**Fix for Contract Upgrade**:
+```move
+public entry fun seed_pool_prepare<T: drop>(
+    cfg: &PlatformConfig,
+    curve: &mut BondingCurve<T>,
+    bump_bps: u64,
+    ctx: &mut TxContext
+) {
+    if (!curve.graduated || curve.lp_seeded == true) { abort 9002; } else {};
+    assert!(curve.reward_paid, 9010);  // ADD THIS - Enforces platform cut first!
+    // ... rest unchanged
+}
+```
+
+**OR** deprecate `seed_pool_prepare` entirely and only use `prepare_pool_liquidity` (which has proper checks).
+
+---
+
+### BOT PROTECTION LOGIC (Until Contract Fix)
+
+**The bot MUST implement frontrun protection:**
+
+```javascript
+async handleGraduation(curveId, coinType) {
+  console.log('🎓 Graduation detected!', curveId);
+  
+  // STEP 1: IMMEDIATELY call distribute_payouts to secure platform cut
+  console.log('🚨 FRONTRUN PROTECTION: Calling distribute_payouts first!');
+  try {
+    const distributeTx = new Transaction();
+    distributeTx.moveCall({
+      target: `${PLATFORM_PACKAGE}::bonding_curve::distribute_payouts`,
+      typeArguments: [coinType],
+      arguments: [
+        distributeTx.object(PLATFORM_STATE),
+        distributeTx.object(curveId),
+      ],
+    });
+    
+    const distributeResult = await client.signAndExecuteTransaction({
+      signer: botKeypair,
+      transaction: distributeTx,
+    });
+    
+    if (distributeResult.effects.status.status === 'success') {
+      console.log('✅ Platform cut secured!', distributeResult.digest);
+    }
+  } catch (error) {
+    console.error('⚠️ distribute_payouts failed (might already be called):', error.message);
+    // Continue anyway - check if reward_paid is true
+  }
+  
+  // STEP 2: Verify reward_paid = true before proceeding
+  const curve = await client.getObject({
+    id: curveId,
+    options: { showContent: true }
+  });
+  
+  if (!curve.data.content.fields.reward_paid) {
+    console.error('❌ reward_paid is false! Someone may have frontrun with seed_pool_prepare!');
+    console.error('⚠️ Funds are safe (went to lp_recipient) but we lost our 10% cut!');
+    console.error('🔍 Check lp_recipient balance and manually create pool if needed');
+    return; // Can't call prepare_pool_liquidity
+  }
+  
+  console.log('✅ reward_paid = true, safe to proceed');
+  
+  // STEP 3: Continue with normal flow
+  await extractLiquidityAndCreatePool(curveId, coinType);
+}
+```
+
+**Fallback Logic if Exploited**:
+```javascript
+// If someone called seed_pool_prepare and bypassed platform cut:
+// 1. Funds are in lp_recipient wallet (we control it)
+// 2. Manually create pool with those funds
+// 3. Track lost revenue for that curve
+// 4. Prioritize contract upgrade to fix seed_pool_prepare
+```
+
+---
+
 ## 🔍 Exactly How The Bot Works
 
 ### Overview Timeline
 
 ```
 Every 10 seconds: Check for graduations
-When graduation found: Execute full pool creation flow
+When graduation found: Execute FRONTRUN PROTECTION + full pool creation flow
 After completion: Continue monitoring
 ```
 

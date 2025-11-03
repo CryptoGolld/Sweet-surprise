@@ -11,6 +11,25 @@
  * 3. Create Cetus pool using Cetus SDK
  * 4. Add liquidity to pool
  * 5. Burn LP tokens using Cetus Burn Manager (permanent lock)
+ * 
+ * ⚠️ CRITICAL SECURITY - READ BEFORE UPGRADING:
+ * 
+ * See CRITICAL_VULNERABILITIES.md and BOT_DETAILED_FLOW.md for:
+ * 
+ * 1. FRONTRUN PROTECTION REQUIRED:
+ *    - Call distribute_payouts() FIRST to secure 10% platform cut
+ *    - Verify reward_paid = true before calling prepare_pool_liquidity()
+ *    - Attacker can bypass platform cut but CAN'T steal (funds go to our lp_recipient)
+ *    - Revenue loss: ~1,373 SUI per curve if exploited
+ * 
+ * 2. FIRST BUYER FEE BUG:
+ *    - Can be charged multiple times if supply goes to 0
+ *    - Fix in contract upgrade
+ * 
+ * TODO FOR NEXT BOT UPGRADE:
+ * - [ ] Add distribute_payouts() call at start of handleGraduation()
+ * - [ ] Add reward_paid verification
+ * - [ ] Add fallback if seed_pool_prepare was called by someone else
  */
 
 import { SuiClient } from '@mysten/sui/client';

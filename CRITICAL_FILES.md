@@ -60,17 +60,67 @@ These files are regenerated automatically:
 
 ---
 
-## 🔵 Documentation (Safe but Useful)
+## 🔵 Documentation Files
 
-### **BOT_AUTO_RECOVERY.md**
+### 🔴 NEVER DELETE (Critical Security & Operations)
+
+**CRITICAL_VULNERABILITIES.md**
+- **Purpose**: Documents known contract vulnerabilities for future upgrade
+- **Contains**: 
+  - First buyer fee re-charge bug
+  - seed_pool_prepare frontrun vulnerability
+  - Security confirmations (no theft possible)
+- **Used for**: Contract upgrade planning
+- **⚠️ DO NOT DELETE** - Required before any contract upgrade
+
+**CONTRACT_UPGRADE_TODO.md**
+- **Purpose**: Actionable checklist for contract upgrade
+- **Contains**: 
+  - Exact code fixes needed
+  - Bot mitigation code
+  - Contract upgrade checklist
+  - Revenue loss calculations
+- **Used for**: Next contract deployment
+- **⚠️ DO NOT DELETE** - Blueprint for contract fix
+
+**BOT_DETAILED_FLOW.md**
+- **Purpose**: Complete bot operational flow + vulnerability mitigations
+- **Contains**:
+  - Step-by-step bot logic
+  - Frontrun protection code
+  - Fallback procedures
+- **Used for**: Bot upgrades and troubleshooting
+- **⚠️ DO NOT DELETE** - Critical for bot development
+
+**PM2_SERVICES.md**
+- **Purpose**: Production services documentation
+- **⚠️ DO NOT DELETE** - Critical for operations
+
+### 🟡 Keep Until Verified Obsolete
+
+**BOT_AUTO_RECOVERY.md**
 - Explains how pool bot recovers from crashes
-- Safe to delete but useful for understanding system
+- Useful for understanding system
 
-### **FIX_GRADUATION_BALANCE.md**
-- Deployment guide for contract fixes
-- Historical reference, can delete if needed
+**BOT_WALLET_SECURITY.md**
+- Bot wallet security best practices
+- Keep for security reference
 
-### Other *.md files
+**BOT_COIN_TRACKING_SAFETY.md**
+- Bot coin tracking mechanisms
+- Keep for debugging
+
+**BOT_SELF_FUNDING_EXPLAINED.md**
+- Bot self-funding mechanism
+- Keep for operations
+
+### 🟢 Safe to Delete (Historical/Obsolete)
+
+**FIX_GRADUATION_BALANCE.md**
+- Historical deployment guide
+- Can delete after verifying obsolete
+
+**Other *.md files** (review first)
 - Most are historical documentation
 - Can clean up old guides once verified they're obsolete
 
@@ -80,12 +130,15 @@ These files are regenerated automatically:
 
 ### Files You Should NEVER Delete:
 ```
-ecosystem.config.cjs          ← PM2 config
-PM2_SERVICES.md              ← Service docs
-indexer/                     ← Entire directory
-pool-creation-bot/           ← Entire directory
-compilation-service/         ← Entire directory
-.env files                   ← ALL OF THEM
+ecosystem.config.cjs             ← PM2 config
+PM2_SERVICES.md                  ← Service docs
+CRITICAL_VULNERABILITIES.md      ← Vulnerability analysis ⚠️
+CONTRACT_UPGRADE_TODO.md         ← Contract fix blueprint ⚠️
+BOT_DETAILED_FLOW.md            ← Bot logic + security mitigations ⚠️
+indexer/                        ← Entire directory
+pool-creation-bot/              ← Entire directory
+compilation-service/            ← Entire directory
+.env files                      ← ALL OF THEM
 ```
 
 ### Files Safe to Clean Up:
