@@ -40,7 +40,15 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
   const isFirstEverBuy = useMemo(() => {
     const supplyIsZero = Number(curve.curveSupply) === 0;
     const noTradeHistory = !curve.lastTradeAt; // No trades ever recorded
-    return supplyIsZero && noTradeHistory;
+    const result = supplyIsZero && noTradeHistory;
+    console.log('?? First buyer detection:', {
+      curveSupply: curve.curveSupply,
+      supplyIsZero,
+      lastTradeAt: curve.lastTradeAt,
+      noTradeHistory,
+      isFirstEverBuy: result,
+    });
+    return result;
   }, [curve.curveSupply, curve.lastTradeAt]);
   
   // Get user's payment token balance
@@ -125,13 +133,24 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
     // Validate first ever buyer amount (must be > 1 SUI due to contract fee)
     if (mode === 'buy' && isFirstEverBuy) {
       const buyAmount = parseFloat(amount);
+      console.log('?? First buyer validation:', {
+        isFirstEverBuy,
+        buyAmount,
+        willBlock: buyAmount <= 1.0,
+      });
+      
       if (buyAmount <= 1.0) {
+        console.log('? BLOCKING transaction: amount too low for first buyer');
         toast.error('First buy must be more than 1 SUI', {
-          description: 'The contract charges a 1 SUI first buyer fee. Try 1.5 SUI or more.',
-          duration: 5000,
+          description: 'The contract charges a 1 SUI first buyer fee. Your buy amount must be greater than 1 SUI. Try 1.5 SUI or more.',
+          duration: 6000,
         });
-        return;
+        return; // BLOCK the transaction
       }
+      
+      console.log('? First buyer amount valid, proceeding...');
+    } else if (mode === 'buy') {
+      console.log('? Not first buyer, no minimum required');
     }
 
     try {
@@ -522,9 +541,22 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               </div>
               <input
                 type="number"
-                placeholder="0.0"
+                placeholder={isFirstEverBuy && mode === 'buy' ? "Min: 1.01 SUI" : "0.0"}
+                min={isFirstEverBuy && mode === 'buy' ? "1.01" : undefined}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                onBlur={(e) => {
+                  // Show warning if first buyer tries to enter too little
+                  if (mode === 'buy' && isFirstEverBuy && e.target.value) {
+                    const val = parseFloat(e.target.value);
+                    if (val > 0 && val <= 1.0) {
+                      toast.warning('First buy requires more than 1 SUI', {
+                        description: 'Contract charges 1 SUI first buyer fee',
+                        duration: 3000,
+                      });
+                    }
+                  }
+                }}
                 disabled={curve.graduated}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none text-lg transition-colors disabled:opacity-50"
               />
