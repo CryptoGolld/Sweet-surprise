@@ -64,7 +64,7 @@ export function createCurveAndBuyTransaction(params: {
   const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(maxSuiInNum)]);
   
   // PART 3: Buy tokens immediately
-  const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
+  const deadline = Date.now() + 30 * 60 * 1000; // 30 minutes (large buffer to avoid clock sync issues)
   
   const minTokensOutNum = Number(params.minTokensOut);
   

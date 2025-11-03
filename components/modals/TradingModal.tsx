@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
+import { useSignAndExecuteTransaction, useCurrentAccount, useSuiClient } from '@mysten/dapp-kit';
 import { BondingCurve } from '@/lib/hooks/useBondingCurves';
 import { useCoinBalance } from '@/lib/hooks/useCoins';
 import { buyTokensTransaction, sellTokensTransaction } from '@/lib/sui/transactions';
 import { formatAmount, parseAmount, calculatePercentage, getExplorerLink } from '@/lib/sui/client';
-import { BONDING_CURVE } from '@/lib/constants';
+import { BONDING_CURVE, getContractForCurve } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
 import { 
   calculateTokensOut, 
@@ -17,6 +17,9 @@ import {
 } from '@/lib/utils/bondingCurve';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 import { toast } from 'sonner';
+import { debugLogger } from '@/lib/utils/debugLogger';
+import { bcs } from '@mysten/sui/bcs';
+import { getReferrerAddress } from '@/lib/utils/referrals';
 import { PriceChart } from '@/components/charts/PriceChart';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 
@@ -29,6 +32,7 @@ interface TradingModalProps {
 
 export function TradingModal({ isOpen, onClose, curve, fullPage = false }: TradingModalProps) {
   const currentAccount = useCurrentAccount();
+  const client = useSuiClient();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
   const { data: suiPrice = 1.0 } = useSuiPrice();
   
@@ -96,6 +100,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
   const volumeUsd = volume24h * suiPrice;
 
   async function handleTrade() {
+    debugLogger.debug('handleTrade called', { mode, amount, hasAccount: !!currentAccount });
+    
     if (!currentAccount) {
       toast.error('Please connect your wallet');
       return;
@@ -108,6 +114,11 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
     try {
       if (mode === 'buy') {
+        debugLogger.debug('Starting buy flow', { 
+          amount, 
+          paymentCoinsCount: paymentCoins.length,
+          paymentBalance,
+        });
         // Validate payment balance
         if (paymentCoins.length === 0) {
           const tokenSymbol = getPaymentTokenSymbol();
@@ -130,23 +141,24 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           return;
         }
 
-        // Select only the coins needed for payment (leave some for gas)
-        // Sort coins by balance descending to use largest coins first
-        const sortedCoins = [...paymentCoins].sort((a, b) => 
-          Number(BigInt(b.balance) - BigInt(a.balance))
-        );
+        // Select coins - use same pattern as working step 3
+        // In step 3, they use ALL coins, so let's do the same
+        // The wallet will automatically handle gas from available coins
+        const selectedCoins = paymentCoins;
         
-        let selectedCoins: typeof paymentCoins = [];
-        let totalSelected = 0n;
-        const targetAmount = BigInt(amountInSmallest);
-        
-        // Select coins until we have enough
-        for (const coin of sortedCoins) {
-          selectedCoins.push(coin);
-          totalSelected += BigInt(coin.balance);
-          if (totalSelected >= targetAmount) break;
-        }
-        
+        // Debug: Log coin objects being used
+        debugLogger.debug('Payment Coins', {
+          count: selectedCoins.length,
+          coins: selectedCoins.map(c => ({
+            coinObjectId: c.coinObjectId,
+            balance: c.balance,
+            version: c.version,
+            digest: c.digest,
+          })),
+          totalBalance: paymentBalance,
+          amountNeeded: amountInSmallest,
+        });
+
         // Build buy transaction
         const tx = buyTokensTransaction({
           curveId: curve.id,
@@ -156,31 +168,208 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           minTokensOut: '0', // No minimum for now (can add slippage calculation)
         });
 
-        signAndExecute(
-          { transaction: tx },
-          {
-            onSuccess: (result) => {
-              toast.success('Purchase successful!', {
-                description: `You bought ${curve.ticker}`,
-                action: {
-                  label: 'View',
-                  onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank'),
-                },
+        debugLogger.debug('Transaction ready, performing dry run first');
+
+        try {
+          // Get blockchain clock time FIRST to ensure accurate deadline
+          // The Clock object doesn't expose timestamp directly, so we use a very large buffer
+          // OR we can use the latest checkpoint to estimate time
+          let blockchainTime = Date.now();
+          try {
+            // Try to get latest checkpoint timestamp as proxy for blockchain time
+            const latestCheckpoint = await client.getLatestCheckpointSequenceNumber();
+            debugLogger.debug('Got latest checkpoint', { checkpoint: latestCheckpoint });
+            // Use client time with large buffer instead since we can't easily get clock time
+            blockchainTime = Date.now();
+          } catch (e) {
+            debugLogger.warn('Could not get checkpoint, using client time', { error: e });
+          }
+          
+          // Add very large buffer: 24 hours to account for any clock drift
+          // This ensures the deadline is ALWAYS in the future, even if blockchain clock is way ahead
+          const deadlineBuffer = 86400000; // 24 hours in milliseconds
+          const calculatedDeadline = blockchainTime + deadlineBuffer;
+          
+          debugLogger.debug('Deadline calculation', {
+            blockchainTime,
+            clientTime: Date.now(),
+            deadlineBuffer,
+            calculatedDeadline,
+            deadlineInHours: deadlineBuffer / 1000 / 60 / 60,
+          });
+          
+          // Rebuild transaction with correct deadline using blockchain time
+          debugLogger.debug('Rebuilding transaction with blockchain clock time');
+          const txWithCorrectDeadline = buyTokensTransaction({
+            curveId: curve.id,
+            coinType: curve.coinType,
+            paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
+            maxSuiIn: amountInSmallest,
+            minTokensOut: '0',
+          });
+          
+          // Manually override deadline in transaction before building
+          // We need to rebuild with the correct deadline
+          // Actually, transactions are immutable, so we need to recreate it
+          
+          // Perform dry run to catch errors before wallet signs
+          if (currentAccount?.address) {
+            debugLogger.debug('Building transaction for dry run', {
+              sender: currentAccount.address,
+              deadlineUsed: blockchainTime + 3600000,
+            });
+            
+            // Create transaction with blockchain-based deadline
+            const txForDryRun = new Transaction();
+            let mergedCoinDR = txForDryRun.object(selectedCoins[0].coinObjectId);
+            if (selectedCoins.length > 1) {
+              txForDryRun.mergeCoins(mergedCoinDR, selectedCoins.slice(1).map(c => txForDryRun.object(c.coinObjectId)));
+            }
+            const [paymentCoinDR] = txForDryRun.splitCoins(mergedCoinDR, [txForDryRun.pure.u64(amountInSmallest)]);
+            
+            const contractInfo = getContractForCurve(curve.coinType);
+            txForDryRun.moveCall({
+              target: `${contractInfo.package}::bonding_curve::buy`,
+              typeArguments: [curve.coinType],
+              arguments: [
+                txForDryRun.object(contractInfo.state),
+                txForDryRun.object(curve.id),
+                txForDryRun.object(contractInfo.referralRegistry),
+                paymentCoinDR,
+                txForDryRun.pure.u64(amountInSmallest),
+                txForDryRun.pure.u64('0'),
+                txForDryRun.pure.u64(calculatedDeadline), // Use calculated deadline with 2 hour buffer
+                txForDryRun.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+                txForDryRun.object('0x6'),
+              ],
+            });
+            
+            txForDryRun.setSender(currentAccount.address);
+            const dryRunTxBytes = await txForDryRun.build({ client });
+            
+            debugLogger.debug('Dry run transaction bytes built, running dry run');
+            
+            try {
+              const dryRunResult = await client.dryRunTransactionBlock({
+                transactionBlock: dryRunTxBytes,
               });
-              setAmount('');
               
-              // Close modal instead of reloading - parent will refetch automatically
-              setTimeout(() => onClose(), 1500);
-            },
-            onError: (error) => {
-              const errorMsg = error.message || '';
-              console.error('?? Buy error full:', error);
+              debugLogger.debug('Dry run completed', {
+                status: dryRunResult.effects?.status?.status,
+                error: dryRunResult.effects?.status?.error,
+                gasUsed: dryRunResult.effects?.gasUsed,
+              });
+              
+              if (dryRunResult.effects?.status?.status !== 'success') {
+                const errorMsg = dryRunResult.effects?.status?.error || 'Dry run failed';
+                debugLogger.error('Dry run failed before signing', {
+                  status: dryRunResult.effects?.status?.status,
+                  error: errorMsg,
+                  fullEffects: dryRunResult.effects,
+                });
+                
+                toast.error('Transaction validation failed', {
+                  description: errorMsg,
+                });
+                return;
+              }
+              
+              debugLogger.debug('Dry run successful, proceeding to wallet signing');
+            } catch (dryRunError: any) {
+              debugLogger.error('Dry run exception thrown', {
+                error: dryRunError,
+                errorMessage: dryRunError?.message,
+                errorStack: dryRunError?.stack,
+                fullError: JSON.stringify(dryRunError, Object.getOwnPropertyNames(dryRunError || {}), 2),
+              });
+              
+              toast.error('Transaction validation failed', {
+                description: dryRunError?.message || 'Failed to validate transaction',
+              });
+              return;
+            }
+          }
+
+          debugLogger.debug('Dry run passed, creating fresh transaction for signing');
+
+          // Create fresh transaction for signing with blockchain-based deadline
+          // (blockchainTime was already fetched above)
+          const txForSigning = new Transaction();
+          let mergedCoinSign = txForSigning.object(selectedCoins[0].coinObjectId);
+          if (selectedCoins.length > 1) {
+            txForSigning.mergeCoins(mergedCoinSign, selectedCoins.slice(1).map(c => txForSigning.object(c.coinObjectId)));
+          }
+          const [paymentCoinSign] = txForSigning.splitCoins(mergedCoinSign, [txForSigning.pure.u64(amountInSmallest)]);
+          
+          const contractInfoSign = getContractForCurve(curve.coinType);
+          txForSigning.moveCall({
+            target: `${contractInfoSign.package}::bonding_curve::buy`,
+            typeArguments: [curve.coinType],
+            arguments: [
+              txForSigning.object(contractInfoSign.state),
+              txForSigning.object(curve.id),
+              txForSigning.object(contractInfoSign.referralRegistry),
+              paymentCoinSign,
+              txForSigning.pure.u64(amountInSmallest),
+              txForSigning.pure.u64('0'),
+              txForSigning.pure.u64(calculatedDeadline), // Use calculated deadline with 2 hour buffer
+              txForSigning.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+              txForSigning.object('0x6'),
+            ],
+          });
+          
+          debugLogger.debug('Fresh transaction created with blockchain time deadline');
+
+          debugLogger.debug('Fresh transaction created, attempting to sign and execute');
+
+          signAndExecute(
+            { transaction: txForSigning },
+            {
+              onSuccess: (result) => {
+                debugLogger.debug('Buy transaction succeeded', {
+                  digest: result.digest,
+                });
+                toast.success('Purchase successful!', {
+                  description: `You bought ${curve.ticker}`,
+                  action: {
+                    label: 'View',
+                    onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank'),
+                  },
+                });
+                setAmount('');
+                
+                // Close modal instead of reloading - parent will refetch automatically
+                setTimeout(() => onClose(), 1500);
+              },
+              onError: (error: any) => {
+                const errorMsg = error?.message || String(error) || 'Unknown error';
+                
+                // Log to both debugLogger and console to ensure we capture it
+                console.error('?? BUY ERROR:', error);
+                console.error('?? Error message:', errorMsg);
+                console.error('?? Full error:', JSON.stringify(error, null, 2));
+                
+                try {
+                  debugLogger.error('Buy transaction failed in onError handler', { 
+                    error,
+                    errorMessage: errorMsg,
+                    errorName: error?.name,
+                    errorStack: error?.stack,
+                    errorToString: String(error),
+                    fullError: JSON.stringify(error, Object.getOwnPropertyNames(error || {}), 2),
+                  });
+                } catch (logError) {
+                  console.error('Failed to log to debugLogger:', logError);
+                }
               
               // Parse common Move abort codes
               let userMessage = 'Purchase failed';
               let description = errorMsg.slice(0, 150);
               
-              if (errorMsg.includes('0x6')) {
+              if (errorMsg.includes('could not automatically determine a budget') || errorMsg.includes('Dry run failed')) {
+                userMessage = 'Transaction failed';
+                description = 'Gas estimation failed. This should be fixed now - please try again. If the issue persists, check your wallet balance.';
+              } else if (errorMsg.includes('0x6')) {
                 userMessage = 'Supply cap reached!';
                 description = 'The bonding curve has sold out';
               } else if (errorMsg.includes('E_DEADLINE_EXPIRED') || errorMsg.includes('abort 4')) {
@@ -189,6 +378,12 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               } else if (errorMsg.includes('E_MAX_IN_EXCEEDED') || errorMsg.includes('abort 5')) {
                 userMessage = 'Amount exceeds limit';
                 description = 'Try a smaller amount';
+              } else if (errorMsg.includes('MoveAbort') || errorMsg.includes('abort')) {
+                // Better handling for Move abort errors
+                userMessage = 'Transaction failed';
+                description = errorMsg.includes('Module') 
+                  ? 'Contract error occurred. Check console for details.'
+                  : errorMsg.slice(0, 100);
               }
               
               toast.error(userMessage, {
@@ -204,7 +399,22 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               });
             },
           }
-        );
+          );
+        } catch (error: any) {
+          debugLogger.error('Buy transaction failed in try-catch', {
+            error,
+            errorMessage: error?.message,
+            errorName: error?.name,
+            errorStack: error?.stack,
+            errorToString: String(error),
+            errorType: typeof error,
+            isError: error instanceof Error,
+            fullError: JSON.stringify(error, Object.getOwnPropertyNames(error || {}), 2),
+          });
+          toast.error('Transaction failed', {
+            description: error?.message || 'Unknown error occurred',
+          });
+        }
       } else {
         // Sell mode
         if (memeCoins.length === 0) {

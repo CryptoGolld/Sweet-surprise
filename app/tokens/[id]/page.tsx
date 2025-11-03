@@ -101,22 +101,10 @@ export default function TokenPage() {
           return;
         }
 
-        // Select only the coins needed for payment (leave some for gas)
-        // Sort coins by balance descending to use largest coins first
-        const sortedCoins = [...paymentCoins].sort((a, b) => 
-          Number(BigInt(b.balance) - BigInt(a.balance))
-        );
-        
-        let selectedCoins: typeof paymentCoins = [];
-        let totalSelected = 0n;
-        const targetAmount = BigInt(amountInSmallest);
-        
-        // Select coins until we have enough (with 10% buffer for fees)
-        for (const coin of sortedCoins) {
-          selectedCoins.push(coin);
-          totalSelected += BigInt(coin.balance);
-          if (totalSelected >= targetAmount) break;
-        }
+        // Select coins - use same pattern as working step 3
+        // In step 3, they use ALL coins, so let's do the same
+        // The wallet will automatically handle gas from available coins
+        const selectedCoins = paymentCoins;
         
         // Build buy transaction
         const tx = buyTokensTransaction({
@@ -212,7 +200,7 @@ export default function TokenPage() {
         <Header />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-20">
-            <div className="text-6xl mb-4 animate-bounce">🔍</div>
+            <div className="text-6xl mb-4 animate-bounce">??</div>
             <h3 className="text-2xl font-bold">Loading...</h3>
           </div>
         </main>
@@ -227,7 +215,7 @@ export default function TokenPage() {
         <Header />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-20">
-            <div className="text-6xl mb-4">❌</div>
+            <div className="text-6xl mb-4">?</div>
             <h3 className="text-2xl font-bold mb-2">Token Not Found</h3>
             <button
               onClick={() => router.push('/tokens')}
@@ -249,7 +237,7 @@ export default function TokenPage() {
         <Header />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-20">
-            <div className="text-6xl mb-4 animate-bounce">🎉</div>
+            <div className="text-6xl mb-4 animate-bounce">??</div>
             <h3 className="text-2xl font-bold mb-4">Token Graduated!</h3>
             <p className="text-gray-300 mb-6">This token has graduated to Cetus DEX.</p>
             <p className="text-gray-400 mb-8">Redirecting you to trade on Cetus...</p>
@@ -268,13 +256,13 @@ export default function TokenPage() {
         <Header />
         <main className="container mx-auto px-4 py-8">
           <div className="text-center py-20">
-            <div className="text-6xl mb-4">🎓</div>
+            <div className="text-6xl mb-4">??</div>
             <h3 className="text-2xl font-bold mb-4">Token Graduated!</h3>
             <p className="text-gray-300 mb-4">
               This token completed its bonding curve and raised enough to graduate!
             </p>
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6 max-w-md mx-auto mb-6">
-              <div className="text-yellow-400 font-semibold mb-2">⏳ Pool Creation in Progress</div>
+              <div className="text-yellow-400 font-semibold mb-2">? Pool Creation in Progress</div>
               <p className="text-sm text-gray-300">
                 Our team is creating a Cetus DEX pool for this token. 
                 This usually takes 5-10 minutes.
@@ -310,7 +298,7 @@ export default function TokenPage() {
           onClick={() => router.back()}
           className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
         >
-          ← Back
+          ? Back
         </button>
       </div>
 
@@ -328,7 +316,7 @@ export default function TokenPage() {
                 />
               ) : (
                 <div className="flex items-center justify-center w-full h-full">
-                  <span className="text-8xl">🚀</span>
+                  <span className="text-8xl">??</span>
                 </div>
               )}
             </div>
@@ -393,7 +381,7 @@ export default function TokenPage() {
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg transition-colors"
                     >
-                      🌐 Website
+                      ?? Website
                     </a>
                   )}
                 </div>
@@ -529,7 +517,7 @@ export default function TokenPage() {
               disabled={isPending || !currentAccount || !amount}
               className="w-full py-3 bg-gradient-to-r from-meme-pink to-meme-purple rounded-lg font-bold hover:scale-[1.02] transition-transform disabled:opacity-50 disabled:hover:scale-100"
             >
-              {isPending ? '⏳ Processing...' : !currentAccount ? 'Connect Wallet' : mode === 'buy' ? '💰 Buy' : '💸 Sell'}
+              {isPending ? '? Processing...' : !currentAccount ? 'Connect Wallet' : mode === 'buy' ? '?? Buy' : '?? Sell'}
             </button>
           </div>
         </div>

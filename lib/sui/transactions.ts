@@ -7,6 +7,7 @@ import { bcs } from '@mysten/sui/bcs';
 import { SuiClient } from '@mysten/sui/client';
 import { CONTRACTS, COIN_TYPES, getContractForCurve } from '../constants';
 import { getReferrerAddress } from '../utils/referrals';
+import { debugLogger } from '../utils/debugLogger';
 
 /**
  * Estimate gas for a transaction with a 30% safety buffer
@@ -164,21 +165,35 @@ export function createCurveTransaction(params: {
 
 /**
  * Buy tokens from bonding curve
- * Gas is estimated automatically by the wallet - no need to set it
  * 
  * Note: Payment must be in SUILFG_MEMEFI tokens on testnet (SUI on mainnet)
  */
-export function buyTokensTransaction(params: {
+export async function buyTokensTransactionAsync(params: {
   curveId: string;
   coinType: string;
   paymentCoinIds: string[]; // Array of payment coin object IDs
   maxSuiIn: string; // Amount in MIST
   minTokensOut: string;
-}): Transaction {
+  client: any; // SuiClient to query blockchain clock
+}): Promise<Transaction> {
   const tx = new Transaction();
   
-  // Deadline: 5 minutes from now
-  const deadlineMs = Date.now() + 300000;
+  // Get blockchain clock time to avoid clock sync issues
+  // The blockchain clock might be ahead of client clock, causing deadline expiration
+  let blockchainTime = Date.now();
+  try {
+    const clock = await params.client.getObject({ id: '0x6' });
+    const clockFields = clock.data?.content?.fields as any;
+    // Clock object has timestamp_ms field
+    if (clockFields?.timestamp_ms) {
+      blockchainTime = Number(clockFields.timestamp_ms);
+    }
+  } catch (e) {
+    console.warn('Could not get blockchain clock, using client time', e);
+  }
+  
+  // Deadline: Use blockchain time + 24 hours to ensure it's always in the future
+  const deadlineMs = blockchainTime + 86400000; // 24 hours from blockchain time
   
   // Detect which contract this curve belongs to based on coinType
   const contractInfo = getContractForCurve(params.coinType);
@@ -190,46 +205,187 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // EXACT SAME PATTERN as working createCurveAndBuyTransaction (step 3)
-  // Merge user's payment coins first
+  // Strategy: Create coin references, merge if needed, split payment amount
+  // DEBUG: Log payment coin IDs being used
+  debugLogger.debug('Buy Transaction Construction', {
+    paymentCoinIds: params.paymentCoinIds,
+    coinCount: params.paymentCoinIds.length,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+    curveId: params.curveId,
+  });
+
   let mergedCoin = tx.object(params.paymentCoinIds[0]);
   if (params.paymentCoinIds.length > 1) {
-    tx.mergeCoins(
-      mergedCoin,
-      params.paymentCoinIds.slice(1).map(id => tx.object(id))
-    );
+    // Multiple coins - merge them all at once
+    const rest = params.paymentCoinIds.slice(1);
+    const restObjects = rest.map(id => tx.object(id));
+    debugLogger.debug('Merging coins', {
+      primary: params.paymentCoinIds[0],
+      rest: rest,
+    });
+    tx.mergeCoins(mergedCoin, restObjects);
+  } else {
+    debugLogger.debug('Single coin, no merge needed', params.paymentCoinIds[0]);
   }
   
   // Split the payment amount from the merged coin
-  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-  
-  console.log('💳 Buy transaction:', {
-    curveId: params.curveId,
-    paymentCoinCount: params.paymentCoinIds.length,
-    maxSuiIn: params.maxSuiIn,
-    minTokensOut: params.minTokensOut,
+  // The Move function requires coin value <= max_sui_in (aborts if >)
+  // It will handle refunds internally if not all is used
+  debugLogger.debug('Splitting coin for payment', {
+    amount: params.maxSuiIn,
+    amountType: typeof params.maxSuiIn,
   });
   
-  // EXACT SAME argument order as working step 3
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [
+    tx.pure.u64(params.maxSuiIn)
+  ]);
+  
+  debugLogger.debug('Payment coin created, building moveCall');
+  
+  // Both legacy and new contracts use the same signature
+  // Function signature: buy(cfg, curve, referral_registry, payment, max_sui_in, min_tokens_out, deadline, referrer, clock)
+  debugLogger.debug('Building moveCall with arguments', {
+    target: `${platformPackage}::bonding_curve::buy`,
+    coinType: params.coinType,
+    state,
+    curveId: params.curveId,
+    referralRegistry,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+    deadlineMs,
+    referrer: getReferrerAddress(),
+  });
+
+  const buyArgs = [
+    tx.object(state), // cfg: &PlatformConfig
+    tx.object(params.curveId), // curve: &mut BondingCurve<T>
+    tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
+    paymentCoin, // mut payment: Coin<SUI> or Coin<SUILFG_MEMEFI>
+    tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
+    tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
+    tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
+    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address>
+    tx.object('0x6'), // clk: &Clock
+  ];
+  
   tx.moveCall({
     target: `${platformPackage}::bonding_curve::buy`,
     typeArguments: [params.coinType],
-    arguments: [
-      tx.object(state),
-      tx.object(params.curveId),
-      tx.object(referralRegistry),
-      paymentCoin, // The SPLIT coin (not the full merged coin)
-      tx.pure.u64(params.maxSuiIn),
-      tx.pure.u64(params.minTokensOut),
-      tx.pure.u64(deadlineMs),
-      tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
-      tx.object('0x6'),
-    ],
+    arguments: buyArgs,
   });
   
-  // Note: buy is an entry function, tokens are auto-transferred to sender
+  debugLogger.debug('moveCall constructed successfully');
   
-  // Don't set gas budget - wallet SDK will estimate automatically
+  // Don't set gas budget - wallet SDK will estimate automatically (SAME AS SELL)
+  // This provides the most accurate gas estimation without extra RPC calls
+  // The wallet will dry-run the transaction to calculate exact gas needed
+  
+  return tx;
+}
+
+/**
+ * Buy tokens from bonding curve (synchronous version - uses client time)
+ * This is the fallback if you can't pass a client
+ */
+export function buyTokensTransaction(params: {
+  curveId: string;
+  coinType: string;
+  paymentCoinIds: string[]; // Array of payment coin object IDs
+  maxSuiIn: string; // Amount in MIST
+  minTokensOut: string;
+}): Transaction {
+  const tx = new Transaction();
+  
+  // Deadline: Use very large buffer (24 hours) to avoid clock sync issues
+  // The blockchain clock might be ahead of client clock, causing deadline expiration (abort 4)
+  // Note: TradingModal now queries blockchain clock and uses 24 hour buffer
+  const deadlineMs = Date.now() + 86400000; // 24 hours buffer
+  
+  // Detect which contract this curve belongs to based on coinType
+  const contractInfo = getContractForCurve(params.coinType);
+  const { package: platformPackage, state, referralRegistry } = contractInfo;
+  
+  console.log('🔍 Buy Transaction - Contract Detection:', {
+    coinType: params.coinType.substring(0, 80) + '...',
+    detectedPackage: platformPackage,
+    isLegacy: contractInfo.isLegacy,
+  });
+  
+  // Strategy: Create coin references, merge if needed, split payment amount
+  // DEBUG: Log payment coin IDs being used
+  debugLogger.debug('Buy Transaction Construction', {
+    paymentCoinIds: params.paymentCoinIds,
+    coinCount: params.paymentCoinIds.length,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+    curveId: params.curveId,
+    deadlineMs,
+  });
+
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    // Multiple coins - merge them all at once
+    const rest = params.paymentCoinIds.slice(1);
+    const restObjects = rest.map(id => tx.object(id));
+    debugLogger.debug('Merging coins', {
+      primary: params.paymentCoinIds[0],
+      rest: rest,
+    });
+    tx.mergeCoins(mergedCoin, restObjects);
+  } else {
+    debugLogger.debug('Single coin, no merge needed', params.paymentCoinIds[0]);
+  }
+  
+  // Split the payment amount from the merged coin
+  // The Move function requires coin value <= max_sui_in (aborts if >)
+  // It will handle refunds internally if not all is used
+  debugLogger.debug('Splitting coin for payment', {
+    amount: params.maxSuiIn,
+    amountType: typeof params.maxSuiIn,
+  });
+  
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [
+    tx.pure.u64(params.maxSuiIn)
+  ]);
+  
+  debugLogger.debug('Payment coin created, building moveCall');
+  
+  // Both legacy and new contracts use the same signature
+  // Function signature: buy(cfg, curve, referral_registry, payment, max_sui_in, min_tokens_out, deadline, referrer, clock)
+  debugLogger.debug('Building moveCall with arguments', {
+    target: `${platformPackage}::bonding_curve::buy`,
+    coinType: params.coinType,
+    state,
+    curveId: params.curveId,
+    referralRegistry,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
+    deadlineMs,
+    referrer: getReferrerAddress(),
+  });
+
+  const buyArgs = [
+    tx.object(state), // cfg: &PlatformConfig
+    tx.object(params.curveId), // curve: &mut BondingCurve<T>
+    tx.object(referralRegistry), // referral_registry: &mut ReferralRegistry
+    paymentCoin, // mut payment: Coin<SUI> or Coin<SUILFG_MEMEFI>
+    tx.pure.u64(params.maxSuiIn), // max_sui_in: u64
+    tx.pure.u64(params.minTokensOut), // min_tokens_out: u64
+    tx.pure.u64(deadlineMs), // deadline_ts_ms: u64
+    tx.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())), // referrer: Option<address>
+    tx.object('0x6'), // clk: &Clock
+  ];
+  
+  tx.moveCall({
+    target: `${platformPackage}::bonding_curve::buy`,
+    typeArguments: [params.coinType],
+    arguments: buyArgs,
+  });
+  
+  debugLogger.debug('moveCall constructed successfully');
+  
+  // Don't set gas budget - wallet SDK will estimate automatically (SAME AS SELL)
   // This provides the most accurate gas estimation without extra RPC calls
   // The wallet will dry-run the transaction to calculate exact gas needed
   
@@ -250,7 +406,7 @@ export function sellTokensTransaction(params: {
   const tx = new Transaction();
   
   // Deadline: 5 minutes from now
-  const deadlineMs = Date.now() + 300000;
+  const deadlineMs = Date.now() + 1800000; // 30 minutes (large buffer for clock sync)
   
   // Detect which contract this curve belongs to based on coinType
   const contractInfo = getContractForCurve(params.coinType);
