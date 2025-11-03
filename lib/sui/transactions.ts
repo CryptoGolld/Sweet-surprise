@@ -208,20 +208,29 @@ export function buyTokensTransaction(params: {
     [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
     
   } else {
-    // MAINNET: Merge all coins, split payment, SDK uses remainder for gas
-    console.log(`💎 Mainnet: merging all ${params.paymentCoinIds.length} SUI coins`);
+    // MAINNET: Handle both single coin and multiple coins
+    console.log(`💎 Mainnet: processing ${params.paymentCoinIds.length} SUI coin(s)`);
     
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
+    if (params.paymentCoinIds.length === 1) {
+      // Single coin case: Split it into payment + keep remainder for gas
+      console.log('🪙 Single SUI coin: splitting for payment, SDK uses remainder for gas');
+      const singleCoin = tx.object(params.paymentCoinIds[0]);
+      [paymentCoin] = tx.splitCoins(singleCoin, [tx.pure.u64(params.maxSuiIn)]);
+      // singleCoin now has (original - maxSuiIn) and is automatically used for gas
+      console.log('✅ Split from single coin, remainder used for gas');
+    } else {
+      // Multiple coins: Merge all, then split payment
+      console.log('💰 Multiple SUI coins: merging all then splitting payment');
+      let mergedCoin = tx.object(params.paymentCoinIds[0]);
       const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
       tx.mergeCoins(mergedCoin, otherCoins);
+      
+      // Split payment from merged
+      [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+      
+      // Remainder in mergedCoin is used by SDK for gas
+      console.log('✅ Merged all, split payment, SDK will use remainder for gas');
     }
-    
-    // Split payment from merged
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    
-    // Remainder in mergedCoin is used by SDK for gas
-    console.log('✅ Merged all, split payment, SDK will use remainder for gas');
   }
   
   // Both legacy and new contracts use the same signature

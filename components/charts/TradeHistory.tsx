@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { NETWORK } from '@/lib/constants';
 
 interface Trade {
   timestamp: string;
@@ -8,7 +9,7 @@ interface Trade {
   trader: string;
   token_amount: string;
   sui_amount: string;
-  price_per_token: string;
+  price_per_token: string | number; // API returns number, but we accept both
 }
 
 interface TradeHistoryProps {
@@ -49,6 +50,18 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
   }
 
   const trades: Trade[] = data?.trades || [];
+  
+  // Debug: Count buy vs sell trades
+  const buyCount = trades.filter(t => t.type === 'buy').length;
+  const sellCount = trades.filter(t => t.type === 'sell').length;
+  
+  console.log('📊 Trade History Debug:', {
+    coinType: coinType.substring(0, 50) + '...',
+    totalTrades: trades.length,
+    buys: buyCount,
+    sells: sellCount,
+    firstTrade: trades[0]?.type,
+  });
 
   if (trades.length === 0) {
     return (
@@ -81,7 +94,12 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
 
   return (
     <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-4 md:p-6">
-      <h3 className="font-bold text-lg mb-4">📜 Recent Trades</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-lg">📜 Recent Trades</h3>
+        <div className="text-xs text-gray-400">
+          🟢 {buyCount} buys · 🔴 {sellCount} sells
+        </div>
+      </div>
       
       {/* Mobile-optimized trade list */}
       <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -102,7 +120,7 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
                 <span className="text-xs text-gray-400">{formatTime(trade.timestamp)}</span>
               </div>
               <a
-                href={`https://testnet.suivision.xyz/account/${trade.trader}`}
+                href={`https://${NETWORK === 'mainnet' ? 'suivision' : 'testnet.suivision'}.xyz/account/${trade.trader}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-meme-purple hover:text-meme-pink font-mono"
@@ -118,13 +136,19 @@ export function TradeHistory({ coinType }: TradeHistoryProps) {
               </div>
               <div>
                 <span className="text-gray-400">Price: </span>
-                <span className="font-mono font-semibold">{parseFloat(trade.price_per_token).toFixed(8)}</span>
+                <span className="font-mono font-semibold">
+                  {typeof trade.price_per_token === 'number' 
+                    ? trade.price_per_token.toFixed(8) 
+                    : parseFloat(trade.price_per_token).toFixed(8)}
+                </span>
               </div>
             </div>
             
             <div className="mt-2 text-sm">
               <span className="text-gray-400">Total: </span>
-              <span className="font-semibold">{(parseFloat(trade.sui_amount) / 1e9).toFixed(4)} SUILFG</span>
+              <span className="font-semibold">
+                {(parseFloat(trade.sui_amount) / 1e9).toFixed(4)} {NETWORK === 'mainnet' ? 'SUI' : 'SUILFG'}
+              </span>
             </div>
           </div>
         ))}
