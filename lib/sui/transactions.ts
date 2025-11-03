@@ -218,28 +218,39 @@ export function buyTokensTransaction(params: {
   let paymentCoin;
 
   if (isMainnet) {
-    console.log('💎 Mainnet: splitting from gas coin for payment');
+    console.log(`💎 Mainnet: preparing payment from ${providedCoins.length} SUI coins`);
 
-    // When possible, hint the wallet which coins to use for gas to avoid selecting small coins
-    const gasPayments = providedCoins
-      .filter((coin) => coin.digest && coin.version)
-      .map((coin) => ({
-        objectId: coin.coinObjectId,
-        digest: coin.digest!,
-        version: String(coin.version!),
-      }));
+    const [primary, ...rest] = providedCoins;
 
-    if (gasPayments.length > 0) {
+    if (!primary) {
+      throw new Error('No SUI coins available for mainnet buy');
+    }
+
+    if (primary.digest && primary.version) {
       try {
-        tx.setGasPayment(gasPayments);
+        tx.setGasPayment([
+          {
+            objectId: primary.coinObjectId,
+            digest: primary.digest,
+            version: String(primary.version),
+          },
+        ]);
       } catch (error) {
         console.warn('Failed to set gas payment hint:', error);
       }
     }
 
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
+    let primaryCoinArg = tx.object(primary.coinObjectId);
 
-    console.log('✅ Split payment directly from gas coin');
+    if (rest.length > 0) {
+      const otherCoinArgs = rest.map((coin) => tx.object(coin.coinObjectId));
+      tx.mergeCoins(primaryCoinArg, otherCoinArgs);
+      console.log(`✅ Merged ${rest.length} additional SUI coins into primary coin`);
+    }
+
+    [paymentCoin] = tx.splitCoins(primaryCoinArg, [tx.pure.u64(params.maxSuiIn)]);
+
+    console.log('✅ Split payment from consolidated SUI coin');
   } else {
     console.log(`🔵 Testnet: merging ${providedCoins.length} payment coins`);
 

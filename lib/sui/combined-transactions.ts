@@ -74,24 +74,34 @@ export function createCurveAndBuyTransaction(params: {
   let paymentCoin;
 
   if (isMainnet) {
-    // Hint wallet which coins to use for gas if we have full metadata
-    const gasPayments = providedCoins
-      .filter((coin) => coin.digest && coin.version)
-      .map((coin) => ({
-        objectId: coin.coinObjectId,
-        digest: coin.digest!,
-        version: String(coin.version!),
-      }));
+    const [primary, ...rest] = providedCoins;
 
-    if (gasPayments.length > 0) {
+    if (!primary) {
+      throw new Error('No SUI coins available for combined create + buy');
+    }
+
+    if (primary.digest && primary.version) {
       try {
-        tx.setGasPayment(gasPayments);
+        tx.setGasPayment([
+          {
+            objectId: primary.coinObjectId,
+            digest: primary.digest,
+            version: String(primary.version),
+          },
+        ]);
       } catch (error) {
         console.warn('Failed to set gas payment hint (combined tx):', error);
       }
     }
 
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
+    let primaryCoinArg = tx.object(primary.coinObjectId);
+
+    if (rest.length > 0) {
+      const mergeArgs = rest.map((coin) => tx.object(coin.coinObjectId));
+      tx.mergeCoins(primaryCoinArg, mergeArgs);
+    }
+
+    [paymentCoin] = tx.splitCoins(primaryCoinArg, [tx.pure.u64(params.maxSuiIn)]);
   } else {
     let mergedCoin = tx.object(providedCoins[0].coinObjectId);
 
