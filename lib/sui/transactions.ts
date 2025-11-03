@@ -190,23 +190,39 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // OPTION 1 SOLUTION: Simple - just split from first coin (already sorted - biggest first)
-  // SDK automatically handles gas from other coins or the remainder
+  // SMART SOLUTION: Check if biggest coin has enough, merge if needed
+  // Coins are already sorted (biggest first from component)
   
-  console.log(`💎 Using first coin (biggest) for payment, SDK handles gas`);
+  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
   
-  // Just split from the first (biggest) coin - SDK does the rest!
-  const [paymentCoin] = tx.splitCoins(
-    tx.object(params.paymentCoinIds[0]),
-    [tx.pure.u64(params.maxSuiIn)]
-  );
+  let paymentCoin;
   
-  // That's it! SDK will:
-  // - Use remainder of first coin for gas (if enough left)
-  // - OR use other coins for gas
-  // - Works with 1 coin or 100 coins!
-  
-  console.log('✅ Split from first coin, SDK auto-handling gas');
+  // On testnet, always merge and split (gas is separate)
+  if (!isMainnet) {
+    console.log('🔵 Testnet: merging all payment coins');
+    let mergedCoin = tx.object(params.paymentCoinIds[0]);
+    if (params.paymentCoinIds.length > 1) {
+      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+      tx.mergeCoins(mergedCoin, otherCoins);
+    }
+    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+    
+  } else {
+    // MAINNET: Merge all coins, split payment, SDK uses remainder for gas
+    console.log(`💎 Mainnet: merging all ${params.paymentCoinIds.length} SUI coins`);
+    
+    let mergedCoin = tx.object(params.paymentCoinIds[0]);
+    if (params.paymentCoinIds.length > 1) {
+      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+      tx.mergeCoins(mergedCoin, otherCoins);
+    }
+    
+    // Split payment from merged
+    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+    
+    // Remainder in mergedCoin is used by SDK for gas
+    console.log('✅ Merged all, split payment, SDK will use remainder for gas');
+  }
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [
