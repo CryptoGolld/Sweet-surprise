@@ -131,11 +131,19 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           return;
         }
 
-        // Build buy transaction - all coin handling inside buyTokensTransaction
+        // Sort coins by balance (biggest first) - important for gas handling!
+        const sortedCoins = [...paymentCoins].sort((a, b) => 
+          Number(b.balance) - Number(a.balance)
+        );
+        
+        console.log(`?? Sorted ${sortedCoins.length} coins:`, 
+          sortedCoins.map((c, i) => `#${i}: ${(Number(c.balance) / 1e9).toFixed(4)} SUI`)
+        );
+        
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
+          paymentCoinIds: sortedCoins.map(c => c.coinObjectId), // Pass SORTED coins
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });
