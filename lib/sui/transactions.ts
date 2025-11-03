@@ -190,46 +190,23 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // SOLUTION: Don't merge ALL coins - keep coins SEPARATE so SDK can pick one for gas
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
+  // OPTION 1 SOLUTION: Simple - just split from first coin (already sorted - biggest first)
+  // SDK automatically handles gas from other coins or the remainder
   
-  console.log(`💎 Processing ${params.paymentCoinIds.length} payment coins`);
+  console.log(`💎 Using first coin (biggest) for payment, SDK handles gas`);
   
-  let paymentCoin;
+  // Just split from the first (biggest) coin - SDK does the rest!
+  const [paymentCoin] = tx.splitCoins(
+    tx.object(params.paymentCoinIds[0]),
+    [tx.pure.u64(params.maxSuiIn)]
+  );
   
-  if (!isMainnet || params.paymentCoinIds.length === 1) {
-    // TESTNET or SINGLE COIN: Merge all and split
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, otherCoins);
-    }
-    
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    console.log('✅ Single coin mode: split payment, SDK uses remainder for gas');
-    
-  } else {
-    // MAINNET with MULTIPLE COINS
-    // Now coins are sorted (biggest first)
-    // Use BIGGEST coin for payment, skip SMALLEST (SDK uses small ones for gas)
-    
-    // Use first N coins that have enough balance, skip tiny ones
-    const bigCoins = params.paymentCoinIds.filter((_, i) => i < params.paymentCoinIds.length - 1); // All except last (smallest)
-    
-    if (bigCoins.length === 0) {
-      // Fallback: use all
-      bigCoins.push(...params.paymentCoinIds);
-    }
-    
-    let mergedPayment = tx.object(bigCoins[0]);
-    if (bigCoins.length > 1) {
-      const coinsToMerge = bigCoins.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedPayment, coinsToMerge);
-    }
-    
-    [paymentCoin] = tx.splitCoins(mergedPayment, [tx.pure.u64(params.maxSuiIn)]);
-    console.log(`✅ Multi-coin mode: merged ${bigCoins.length} big coins for payment, smallest coin for gas`);
-  }
+  // That's it! SDK will:
+  // - Use remainder of first coin for gas (if enough left)
+  // - OR use other coins for gas
+  // - Works with 1 coin or 100 coins!
+  
+  console.log('✅ Split from first coin, SDK auto-handling gas');
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [
