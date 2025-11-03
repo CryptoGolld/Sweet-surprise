@@ -31,6 +31,8 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
   const { data: suiPrice = 1.0 } = useSuiPrice();
+  const isMainnet = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') === 'mainnet';
+  const GAS_BUFFER_MIST = 50_000_000n; // 0.05 SUI buffer for gas on mainnet
   
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -131,6 +133,16 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           return;
         }
 
+        if (isMainnet) {
+          const remainder = userBalanceBigInt - BigInt(amountInSmallest);
+          if (remainder < GAS_BUFFER_MIST) {
+            toast.error('Leave a little SUI for gas', {
+              description: 'Keep at least 0.05 SUI unspent to cover transaction fees',
+            });
+            return;
+          }
+        }
+
         // Sort coins by balance (biggest first) - important for gas handling!
         const sortedCoins = [...paymentCoins].sort((a, b) => 
           Number(b.balance) - Number(a.balance)
@@ -143,7 +155,12 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: sortedCoins.map(c => c.coinObjectId), // Pass SORTED coins
+          paymentCoins: sortedCoins.map((c) => ({
+            coinObjectId: c.coinObjectId,
+            balance: c.balance,
+            digest: c.digest,
+            version: c.version,
+          })),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });

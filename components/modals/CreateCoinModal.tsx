@@ -57,6 +57,8 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
   } | null>(null);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const isMainnet = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') === 'mainnet';
+  const GAS_BUFFER_MIST = 50_000_000n;
 
   // Persist state to localStorage to survive page reloads
   useEffect(() => {
@@ -300,7 +302,12 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
           structName: publishedData!.structName,
           treasuryCapId: publishedData!.treasuryCapId,
           metadataId: publishedData!.metadataId,
-          paymentCoinIds: coins.data.map(c => c.coinObjectId),
+          paymentCoins: coins.data.map((coin) => ({
+            coinObjectId: coin.coinObjectId,
+            balance: coin.balance,
+            digest: coin.digest,
+            version: coin.version,
+          })),
           maxSuiIn: buyAmountMist,
           minTokensOut: minTokensOut,
           referrerAddress: undefined,
@@ -491,12 +498,30 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       
       // Use all coins
       const amountInMist = BigInt(Math.floor(parseFloat(buyAmount) * 1_000_000_000));
+      const totalBalance = coins.data.reduce((sum: bigint, coin: any) => sum + BigInt(coin.balance), 0n);
+
+      if (amountInMist > totalBalance) {
+        const tokenName = networkType === 'mainnet' ? 'SUI' : 'SUILFG_MEMEFI';
+        throw new Error(`Insufficient balance. You only have ${(Number(totalBalance) / 1e9).toFixed(4)} ${tokenName}`);
+      }
+
+      if (isMainnet) {
+        const remainder = totalBalance - amountInMist;
+        if (remainder < GAS_BUFFER_MIST) {
+          throw new Error('Leave at least 0.05 SUI unspent to cover gas fees');
+        }
+      }
       
       setStatus('Creating buy transaction...');
       const buyTx = buyTokensTransaction({
         curveId: curveData.curveId,
         coinType: curveData.coinType,
-        paymentCoinIds: coins.data.map(c => c.coinObjectId),
+        paymentCoins: coins.data.map((coin) => ({
+          coinObjectId: coin.coinObjectId,
+          balance: coin.balance,
+          digest: coin.digest,
+          version: coin.version,
+        })),
         maxSuiIn: amountInMist.toString(),
         minTokensOut: '0', // Accept any amount (user accepts slippage)
       });

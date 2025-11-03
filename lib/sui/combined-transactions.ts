@@ -6,6 +6,7 @@
 import { Transaction } from '@mysten/sui/transactions';
 import { bcs } from '@mysten/sui/bcs';
 import { CONTRACTS, COIN_TYPES } from '../constants';
+import type { PaymentCoinInput } from './transactions';
 
 /**
  * STEP 2+3 COMBINED: Create bonding curve + Buy tokens in ONE transaction
@@ -23,7 +24,8 @@ export function createCurveAndBuyTransaction(params: {
   treasuryCapId: string;
   metadataId: string;
   // Buy parameters
-  paymentCoinIds: string[];
+  paymentCoinIds?: string[];
+  paymentCoins?: PaymentCoinInput[];
   maxSuiIn: string;
   minTokensOut: string;
   referrerAddress?: string;
@@ -53,33 +55,60 @@ export function createCurveAndBuyTransaction(params: {
   // On mainnet (payment = SUI = gas), use tx.gas
   // On testnet (payment = SUILFG_MEMEFI), merge user's coins
   const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
-  // Convert maxSuiIn to number for proper u64 handling
-  const maxSuiInNum = Number(params.maxSuiIn);
-  
+
+  const providedCoins: PaymentCoinInput[] = params.paymentCoins
+    ? [...params.paymentCoins]
+    : (params.paymentCoinIds || []).map((coinObjectId) => ({ coinObjectId }));
+
+  if (!isMainnet && providedCoins.length === 0) {
+    throw new Error('No payment coins provided for createCurveAndBuyTransaction');
+  }
+
+  // Sort by balance when available to keep largest coins first
+  providedCoins.sort((a, b) => {
+    const balanceA = a.balance ? BigInt(a.balance) : 0n;
+    const balanceB = b.balance ? BigInt(b.balance) : 0n;
+    return balanceA === balanceB ? 0 : balanceA > balanceB ? -1 : 1;
+  });
+
   let paymentCoin;
+
   if (isMainnet) {
-    // Use gas coin for payment on mainnet
-    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(maxSuiInNum)]);
-  } else {
-    // Merge user's payment coins on testnet
-    paymentCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      tx.mergeCoins(
-        paymentCoin,
-        params.paymentCoinIds.slice(1).map(id => tx.object(id))
-      );
+    // Hint wallet which coins to use for gas if we have full metadata
+    const gasPayments = providedCoins
+      .filter((coin) => coin.digest && coin.version)
+      .map((coin) => ({
+        objectId: coin.coinObjectId,
+        digest: coin.digest!,
+        version: String(coin.version!),
+      }));
+
+    if (gasPayments.length > 0) {
+      try {
+        tx.setGasPayment(gasPayments);
+      } catch (error) {
+        console.warn('Failed to set gas payment hint (combined tx):', error);
+      }
     }
+
+    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
+  } else {
+    let mergedCoin = tx.object(providedCoins[0].coinObjectId);
+
+    if (providedCoins.length > 1) {
+      const remaining = providedCoins.slice(1).map((coin) => tx.object(coin.coinObjectId));
+      tx.mergeCoins(mergedCoin, remaining);
+    }
+
+    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
   }
   
   // PART 3: Buy tokens immediately
   const deadline = Date.now() + 5 * 60 * 1000; // 5 minutes
   
-  const minTokensOutNum = Number(params.minTokensOut);
-  
   console.log('?? Buy params:', {
-    maxSuiIn: maxSuiInNum,
-    minTokensOut: minTokensOutNum,
+    maxSuiIn: params.maxSuiIn,
+    minTokensOut: params.minTokensOut,
     deadline,
     isMainnet,
   });
@@ -91,8 +120,8 @@ export function createCurveAndBuyTransaction(params: {
       tx.object(CONTRACTS.PLATFORM_STATE),
       curve, // Use the curve we just created!
       paymentCoin,
-      tx.pure.u64(maxSuiInNum),
-      tx.pure.u64(minTokensOutNum),
+      tx.pure.u64(params.maxSuiIn),
+      tx.pure.u64(params.minTokensOut),
       tx.pure.u64(deadline),
       tx.object(CONTRACTS.REFERRAL_REGISTRY),
       tx.pure.option('address', params.referrerAddress),

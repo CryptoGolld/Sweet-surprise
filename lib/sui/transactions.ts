@@ -168,10 +168,18 @@ export function createCurveTransaction(params: {
  * 
  * Note: Payment must be in SUILFG_MEMEFI tokens on testnet (SUI on mainnet)
  */
+export type PaymentCoinInput = {
+  coinObjectId: string;
+  balance?: string;
+  digest?: string;
+  version?: string | number;
+};
+
 export function buyTokensTransaction(params: {
   curveId: string;
   coinType: string;
-  paymentCoinIds: string[]; // Array of payment coin object IDs
+  paymentCoinIds?: string[]; // Deprecated - use paymentCoins instead
+  paymentCoins?: PaymentCoinInput[]; // Array of payment coin metadata
   maxSuiIn: string; // Amount in MIST
   minTokensOut: string;
 }): Transaction {
@@ -190,38 +198,59 @@ export function buyTokensTransaction(params: {
     isLegacy: contractInfo.isLegacy,
   });
   
-  // SMART SOLUTION: Check if biggest coin has enough, merge if needed
-  // Coins are already sorted (biggest first from component)
-  
+  const providedCoins: PaymentCoinInput[] = params.paymentCoins
+    ? [...params.paymentCoins]
+    : (params.paymentCoinIds || []).map((coinObjectId) => ({ coinObjectId }));
+
+  if (providedCoins.length === 0) {
+    throw new Error('No payment coins provided for buy transaction');
+  }
+
+  // Sort by balance (desc) when available to keep largest first
+  providedCoins.sort((a, b) => {
+    const balanceA = a.balance ? BigInt(a.balance) : 0n;
+    const balanceB = b.balance ? BigInt(b.balance) : 0n;
+    return balanceA === balanceB ? 0 : balanceA > balanceB ? -1 : 1;
+  });
+
   const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
-  
+
   let paymentCoin;
-  
-  // On testnet, always merge and split (gas is separate)
-  if (!isMainnet) {
-    console.log('🔵 Testnet: merging all payment coins');
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, otherCoins);
+
+  if (isMainnet) {
+    console.log('💎 Mainnet: splitting from gas coin for payment');
+
+    // When possible, hint the wallet which coins to use for gas to avoid selecting small coins
+    const gasPayments = providedCoins
+      .filter((coin) => coin.digest && coin.version)
+      .map((coin) => ({
+        objectId: coin.coinObjectId,
+        digest: coin.digest!,
+        version: String(coin.version!),
+      }));
+
+    if (gasPayments.length > 0) {
+      try {
+        tx.setGasPayment(gasPayments);
+      } catch (error) {
+        console.warn('Failed to set gas payment hint:', error);
+      }
     }
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    
+
+    [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
+
+    console.log('✅ Split payment directly from gas coin');
   } else {
-    // MAINNET: Merge all coins, split payment, SDK uses remainder for gas
-    console.log(`💎 Mainnet: merging all ${params.paymentCoinIds.length} SUI coins`);
-    
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+    console.log(`🔵 Testnet: merging ${providedCoins.length} payment coins`);
+
+    let mergedCoin = tx.object(providedCoins[0].coinObjectId);
+
+    if (providedCoins.length > 1) {
+      const otherCoins = providedCoins.slice(1).map((coin) => tx.object(coin.coinObjectId));
       tx.mergeCoins(mergedCoin, otherCoins);
     }
-    
-    // Split payment from merged
+
     [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    
-    // Remainder in mergedCoin is used by SDK for gas
-    console.log('✅ Merged all, split payment, SDK will use remainder for gas');
   }
   
   // Both legacy and new contracts use the same signature

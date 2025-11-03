@@ -22,6 +22,8 @@ export default function TokenPage() {
   const tokenId = params.id as string;
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
+  const isMainnet = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') === 'mainnet';
+  const GAS_BUFFER_MIST = 50_000_000n;
   
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -101,11 +103,26 @@ export default function TokenPage() {
           return;
         }
 
+        if (isMainnet) {
+          const remaining = BigInt(paymentBalance) - BigInt(amountInSmallest);
+          if (remaining < GAS_BUFFER_MIST) {
+            toast.error('Leave a little SUI for gas', {
+              description: 'Keep at least 0.05 SUI unspent to cover fees',
+            });
+            return;
+          }
+        }
+
         // Build buy transaction (gas handled inside with tx.gas on mainnet)
         const tx = buyTokensTransaction({
           curveId: token.id,
           coinType: token.coinType,
-          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
+          paymentCoins: paymentCoins.map((coin) => ({
+            coinObjectId: coin.coinObjectId,
+            balance: coin.balance,
+            digest: coin.digest,
+            version: coin.version,
+          })),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });
