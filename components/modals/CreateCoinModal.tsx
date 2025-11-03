@@ -237,7 +237,7 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
       setStatus('');
       
       toast.success('✅ Step 1 Complete!', {
-        description: formData.initialBuyAmount ? 'Next: Launch and buy tokens together!' : 'Coin package created. Now publish to bonding curve.',
+        description: 'Coin package created. Now publish to bonding curve.',
         duration: 4000,
       });
       
@@ -840,24 +840,6 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
               </a>
             </div>
 
-            {/* Buy on Launch */}
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold">💰 Buy on Launch (Optional)</label>
-              
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                placeholder="Amount to buy immediately (0 = skip)"
-                value={formData.initialBuyAmount}
-                onChange={(e) => setFormData({ ...formData, initialBuyAmount: e.target.value })}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none transition-colors"
-              />
-              <p className="text-xs text-white/50">
-                💡 Combine curve creation + buy into one transaction for first-mover advantage!
-              </p>
-            </div>
-
             {/* Info box */}
             <div className="bg-sui-blue/10 border border-sui-blue/30 rounded-lg p-4 space-y-2 text-sm">
               <p className="font-semibold text-sui-blue">ℹ️ Step 2: Publish to Bonding Curve</p>
@@ -866,7 +848,6 @@ export function CreateCoinModal({ isOpen, onClose }: CreateCoinModalProps) {
                 <li>737M tokens available for fair launch</li>
                 <li>Graduates at 13K SUI collected</li>
                 <li>Cost: ~0.1 SUI for gas</li>
-                <li>Optionally buy tokens immediately in same transaction</li>
               </ul>
             </div>
 

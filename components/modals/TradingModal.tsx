@@ -476,7 +476,16 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                 </label>
                 {currentAccount && (
                   <button
-                    onClick={() => setAmount(userBalance)}
+                    onClick={() => {
+                      if (mode === 'buy') {
+                        // For buy mode, subtract 0.01 to leave room for gas
+                        const maxAmount = Math.max(0, rawBalance - 0.01);
+                        setAmount(maxAmount.toString());
+                      } else {
+                        // For sell mode, use full balance
+                        setAmount(userBalance);
+                      }
+                    }}
                     className="text-xs text-gray-400 hover:text-white transition-colors"
                   >
                     Balance: {userBalance}
@@ -515,7 +524,11 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                       key={preset.label}
                       onClick={() => {
                         if (!isNaN(rawBalance) && rawBalance > 0) {
-                          const calculatedAmount = rawBalance * preset.value;
+                          let calculatedAmount = rawBalance * preset.value;
+                          // For 100%, subtract 0.01 to leave room for gas
+                          if (preset.value === 1.0) {
+                            calculatedAmount = Math.max(0, calculatedAmount - 0.01);
+                          }
                           // Set the amount with proper precision
                           setAmount(calculatedAmount.toString());
                         }
