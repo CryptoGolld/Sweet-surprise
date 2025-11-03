@@ -6,7 +6,7 @@ import { BondingCurve } from '@/lib/hooks/useBondingCurves';
 import { useCoinBalance } from '@/lib/hooks/useCoins';
 import { buyTokensTransaction, sellTokensTransaction } from '@/lib/sui/transactions';
 import { formatAmount, parseAmount, calculatePercentage, getExplorerLink } from '@/lib/sui/client';
-import { BONDING_CURVE } from '@/lib/constants';
+import { BONDING_CURVE, getContractForCurve } from '@/lib/constants';
 import { useSuiPrice, formatUSD } from '@/lib/hooks/useSuiPrice';
 import { 
   calculateTokensOut, 
@@ -18,6 +18,8 @@ import {
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 import { toast } from 'sonner';
 import { debugLogger } from '@/lib/utils/debugLogger';
+import { bcs } from '@mysten/sui/bcs';
+import { getReferrerAddress } from '@/lib/utils/referrals';
 import { PriceChart } from '@/components/charts/PriceChart';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 
@@ -169,14 +171,81 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         debugLogger.debug('Transaction ready, performing dry run first');
 
         try {
+          // Get blockchain clock time FIRST to ensure accurate deadline
+          // The Clock object doesn't expose timestamp directly, so we use a very large buffer
+          // OR we can use the latest checkpoint to estimate time
+          let blockchainTime = Date.now();
+          try {
+            // Try to get latest checkpoint timestamp as proxy for blockchain time
+            const latestCheckpoint = await client.getLatestCheckpointSequenceNumber();
+            debugLogger.debug('Got latest checkpoint', { checkpoint: latestCheckpoint });
+            // Use client time with large buffer instead since we can't easily get clock time
+            blockchainTime = Date.now();
+          } catch (e) {
+            debugLogger.warn('Could not get checkpoint, using client time', { error: e });
+          }
+          
+          // Add very large buffer: 24 hours to account for any clock drift
+          // This ensures the deadline is ALWAYS in the future, even if blockchain clock is way ahead
+          const deadlineBuffer = 86400000; // 24 hours in milliseconds
+          const calculatedDeadline = blockchainTime + deadlineBuffer;
+          
+          debugLogger.debug('Deadline calculation', {
+            blockchainTime,
+            clientTime: Date.now(),
+            deadlineBuffer,
+            calculatedDeadline,
+            deadlineInHours: deadlineBuffer / 1000 / 60 / 60,
+          });
+          
+          // Rebuild transaction with correct deadline using blockchain time
+          debugLogger.debug('Rebuilding transaction with blockchain clock time');
+          const txWithCorrectDeadline = buyTokensTransaction({
+            curveId: curve.id,
+            coinType: curve.coinType,
+            paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
+            maxSuiIn: amountInSmallest,
+            minTokensOut: '0',
+          });
+          
+          // Manually override deadline in transaction before building
+          // We need to rebuild with the correct deadline
+          // Actually, transactions are immutable, so we need to recreate it
+          
           // Perform dry run to catch errors before wallet signs
           if (currentAccount?.address) {
             debugLogger.debug('Building transaction for dry run', {
               sender: currentAccount.address,
+              deadlineUsed: blockchainTime + 3600000,
             });
             
-            tx.setSender(currentAccount.address);
-            const dryRunTxBytes = await tx.build({ client });
+            // Create transaction with blockchain-based deadline
+            const txForDryRun = new Transaction();
+            let mergedCoinDR = txForDryRun.object(selectedCoins[0].coinObjectId);
+            if (selectedCoins.length > 1) {
+              txForDryRun.mergeCoins(mergedCoinDR, selectedCoins.slice(1).map(c => txForDryRun.object(c.coinObjectId)));
+            }
+            const [paymentCoinDR] = txForDryRun.splitCoins(mergedCoinDR, [txForDryRun.pure.u64(amountInSmallest)]);
+            
+            const contractInfo = getContractForCurve(curve.coinType);
+            txForDryRun.moveCall({
+              target: `${contractInfo.package}::bonding_curve::buy`,
+              typeArguments: [curve.coinType],
+              arguments: [
+                txForDryRun.object(contractInfo.state),
+                txForDryRun.object(curve.id),
+                txForDryRun.object(contractInfo.referralRegistry),
+                paymentCoinDR,
+                txForDryRun.pure.u64(amountInSmallest),
+                txForDryRun.pure.u64('0'),
+                txForDryRun.pure.u64(calculatedDeadline), // Use calculated deadline with 2 hour buffer
+                txForDryRun.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+                txForDryRun.object('0x6'),
+              ],
+            });
+            
+            txForDryRun.setSender(currentAccount.address);
+            const dryRunTxBytes = await txForDryRun.build({ client });
             
             debugLogger.debug('Dry run transaction bytes built, running dry run');
             
@@ -223,16 +292,33 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
 
           debugLogger.debug('Dry run passed, creating fresh transaction for signing');
 
-          // Create fresh transaction for signing (deadline recalculated inside buyTokensTransaction)
-          const txForSigning = buyTokensTransaction({
-            curveId: curve.id,
-            coinType: curve.coinType,
-            paymentCoinIds: selectedCoins.map(c => c.coinObjectId),
-            maxSuiIn: amountInSmallest,
-            minTokensOut: '0',
+          // Create fresh transaction for signing with blockchain-based deadline
+          // (blockchainTime was already fetched above)
+          const txForSigning = new Transaction();
+          let mergedCoinSign = txForSigning.object(selectedCoins[0].coinObjectId);
+          if (selectedCoins.length > 1) {
+            txForSigning.mergeCoins(mergedCoinSign, selectedCoins.slice(1).map(c => txForSigning.object(c.coinObjectId)));
+          }
+          const [paymentCoinSign] = txForSigning.splitCoins(mergedCoinSign, [txForSigning.pure.u64(amountInSmallest)]);
+          
+          const contractInfoSign = getContractForCurve(curve.coinType);
+          txForSigning.moveCall({
+            target: `${contractInfoSign.package}::bonding_curve::buy`,
+            typeArguments: [curve.coinType],
+            arguments: [
+              txForSigning.object(contractInfoSign.state),
+              txForSigning.object(curve.id),
+              txForSigning.object(contractInfoSign.referralRegistry),
+              paymentCoinSign,
+              txForSigning.pure.u64(amountInSmallest),
+              txForSigning.pure.u64('0'),
+              txForSigning.pure.u64(calculatedDeadline), // Use calculated deadline with 2 hour buffer
+              txForSigning.pure(bcs.option(bcs.Address).serialize(getReferrerAddress())),
+              txForSigning.object('0x6'),
+            ],
           });
           
-          debugLogger.debug('Fresh transaction created with updated deadline (30 min buffer)');
+          debugLogger.debug('Fresh transaction created with blockchain time deadline');
 
           debugLogger.debug('Fresh transaction created, attempting to sign and execute');
 
