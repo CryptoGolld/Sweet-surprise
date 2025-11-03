@@ -212,12 +212,11 @@ export function buyTokensTransaction(params: {
     console.log(`💎 Mainnet: processing ${params.paymentCoinIds.length} SUI coin(s)`);
     
     if (params.paymentCoinIds.length === 1) {
-      // Single coin case: Split it into payment + keep remainder for gas
-      console.log('🪙 Single SUI coin: splitting for payment, SDK uses remainder for gas');
-      const singleCoin = tx.object(params.paymentCoinIds[0]);
-      [paymentCoin] = tx.splitCoins(singleCoin, [tx.pure.u64(params.maxSuiIn)]);
-      // singleCoin now has (original - maxSuiIn) and is automatically used for gas
-      console.log('✅ Split from single coin, remainder used for gas');
+      // Single coin case: Use tx.gas to split payment
+      // This way the single coin stays as gas coin and we split payment from the gas budget
+      console.log('🪙 Single SUI coin: splitting payment from tx.gas (special gas reference)');
+      [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
+      console.log('✅ Split from tx.gas, single coin remains available for gas payment');
     } else {
       // Multiple coins: Merge all, then split payment
       console.log('💰 Multiple SUI coins: merging all then splitting payment');
