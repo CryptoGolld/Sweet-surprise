@@ -209,22 +209,26 @@ export function buyTokensTransaction(params: {
     console.log('✅ Single coin mode: split payment, SDK uses remainder for gas');
     
   } else {
-    // MAINNET with MULTIPLE COINS: Use some for payment, SDK picks others for gas
-    // Merge all EXCEPT the first coin (SDK will use first for gas)
-    const paymentCoinIds = params.paymentCoinIds.slice(1); // Skip first coin
+    // MAINNET with MULTIPLE COINS
+    // Now coins are sorted (biggest first)
+    // Use BIGGEST coin for payment, skip SMALLEST (SDK uses small ones for gas)
     
-    if (paymentCoinIds.length === 0) {
-      throw new Error('Internal error: no payment coins after reserving for gas');
+    // Use first N coins that have enough balance, skip tiny ones
+    const bigCoins = params.paymentCoinIds.filter((_, i) => i < params.paymentCoinIds.length - 1); // All except last (smallest)
+    
+    if (bigCoins.length === 0) {
+      // Fallback: use all
+      bigCoins.push(...params.paymentCoinIds);
     }
     
-    let mergedPayment = tx.object(paymentCoinIds[0]);
-    if (paymentCoinIds.length > 1) {
-      const coinsToMerge = paymentCoinIds.slice(1).map(id => tx.object(id));
+    let mergedPayment = tx.object(bigCoins[0]);
+    if (bigCoins.length > 1) {
+      const coinsToMerge = bigCoins.slice(1).map(id => tx.object(id));
       tx.mergeCoins(mergedPayment, coinsToMerge);
     }
     
     [paymentCoin] = tx.splitCoins(mergedPayment, [tx.pure.u64(params.maxSuiIn)]);
-    console.log(`✅ Multi-coin mode: using ${paymentCoinIds.length} for payment, first coin available for gas`);
+    console.log(`✅ Multi-coin mode: merged ${bigCoins.length} big coins for payment, smallest coin for gas`);
   }
   
   // Both legacy and new contracts use the same signature
