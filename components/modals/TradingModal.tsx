@@ -572,6 +572,19 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
               </div>
             </div>
 
+            {/* First Ever Buyer Warning */}
+            {mode === 'buy' && isFirstEverBuy && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-sm">
+                <p className="text-yellow-400 font-semibold flex items-center gap-2">
+                  <span>??</span>
+                  <span>You'll be the first buyer!</span>
+                </p>
+                <p className="text-gray-300 text-xs mt-1">
+                  Contract charges a 1 SUI first buyer fee. Minimum buy: 1.01 SUI
+                </p>
+              </div>
+            )}
+
             {/* Trade Preview */}
             {tradePreview && (
               <div className="bg-gradient-to-br from-meme-purple/10 to-sui-blue/10 border border-meme-purple/30 rounded-lg p-4">
@@ -584,6 +597,21 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                       {tradePreview.input.toFixed(2)} {mode === 'buy' ? getPaymentTokenSymbol() : curve.ticker}
                     </span>
                   </div>
+                  
+                  {/* Show first buyer fee breakdown */}
+                  {tradePreview.firstBuyerFee > 0 && (
+                    <>
+                      <div className="flex justify-between text-yellow-400">
+                        <span>- First buyer fee:</span>
+                        <span>-{tradePreview.firstBuyerFee.toFixed(2)} SUI</span>
+                      </div>
+                      <div className="flex justify-between text-gray-400">
+                        <span>Effective amount:</span>
+                        <span>{tradePreview.effectiveAmount.toFixed(2)} SUI</span>
+                      </div>
+                      <div className="border-t border-white/10 my-1"></div>
+                    </>
+                  )}
                   
                   <div className="flex justify-between items-center">
                     <span className="text-gray-400">You {mode === 'buy' ? 'receive' : 'get'}:</span>
