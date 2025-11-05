@@ -5,7 +5,7 @@
  */
 
 import { SuiClient } from '@mysten/sui/client';
-import pg from 'dotenv';
+import pg from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
