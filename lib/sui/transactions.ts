@@ -193,36 +193,19 @@ export function buyTokensTransaction(params: {
   // SMART SOLUTION: Check if biggest coin has enough, merge if needed
   // Coins are already sorted (biggest first from component)
   
-  const isMainnet = COIN_TYPES.PAYMENT_TOKEN === COIN_TYPES.SUI;
+  // Simple approach: merge all payment coins and split the payment amount
+  // The wallet SDK will automatically handle gas from available coins
+  console.log(`💰 Processing ${params.paymentCoinIds.length} payment coin(s)`);
   
-  let paymentCoin;
-  
-  // On testnet, always merge and split (gas is separate)
-  if (!isMainnet) {
-    console.log('🔵 Testnet: merging all payment coins');
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    if (params.paymentCoinIds.length > 1) {
-      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, otherCoins);
-    }
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    
-  } else {
-    // MAINNET: Payment token IS SUI (same as gas token)
-    // Don't merge coins - use biggest coin for payment, wallet SDK uses others for gas
-    console.log(`💎 Mainnet SUI: processing ${params.paymentCoinIds.length} coin(s)`);
-    
-    // Use the first (biggest) coin for payment splitting
-    // Don't merge - this allows wallet SDK to use other coins for gas
-    const mainCoin = tx.object(params.paymentCoinIds[0]);
-    [paymentCoin] = tx.splitCoins(mainCoin, [tx.pure.u64(params.maxSuiIn)]);
-    
-    console.log('✅ Payment split from biggest coin, wallet SDK will use available coins for gas');
-    // The wallet SDK will automatically:
-    // 1. Use the remainder in mainCoin for gas (if needed)
-    // 2. Use other coins from the wallet for gas (if available)
-    // 3. Return any unused coins/remainder to sender
+  let mergedCoin = tx.object(params.paymentCoinIds[0]);
+  if (params.paymentCoinIds.length > 1) {
+    const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
+    tx.mergeCoins(mergedCoin, otherCoins);
   }
+  
+  const [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+  
+  console.log('✅ Payment coin prepared, wallet SDK will handle gas automatically');
   
   // Both legacy and new contracts use the same signature
   const buyArgs = [
