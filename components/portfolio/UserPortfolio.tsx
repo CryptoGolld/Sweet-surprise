@@ -122,29 +122,46 @@ export function UserPortfolio() {
       try {
         // Fetch all tokens from indexer through proxy
         const response = await fetch('/api/proxy/tokens?limit=1000');
-        if (!response.ok) throw new Error('Failed to fetch from indexer');
+        if (!response.ok) {
+          console.error('Indexer API error:', response.status, response.statusText);
+          return;
+        }
         
         const data = await response.json();
         const tokens = data.tokens || [];
+        
+        console.log(`📦 Indexer has ${tokens.length} tokens`);
         
         // Match owned coins with indexed tokens
         const newCurveData = new Map<string, { curveSupply: string; curveId: string }>();
         
         for (const coin of memeCoins) {
-          const indexedToken = tokens.find((t: any) => t.coinType === coin.type);
+          // Try exact match first
+          let indexedToken = tokens.find((t: any) => t.coinType === coin.type);
+          
+          // If no exact match, try case-insensitive match
+          if (!indexedToken) {
+            indexedToken = tokens.find((t: any) => 
+              t.coinType?.toLowerCase() === coin.type.toLowerCase()
+            );
+          }
+          
           if (indexedToken) {
             newCurveData.set(coin.type, {
               curveSupply: indexedToken.curveSupply || '0',
               curveId: indexedToken.id,
             });
-            console.log(`📊 Matched ${coin.symbol}: curveId=${indexedToken.id.slice(0, 10)}...`);
+            console.log(`✅ Matched ${coin.symbol}: curveId=${indexedToken.id.slice(0, 10)}... supply=${indexedToken.curveSupply}`);
           } else {
-            console.log(`⚠️ No curve found for ${coin.symbol} (${coin.type.slice(0, 30)}...)`);
+            console.warn(`⚠️ No curve found for ${coin.symbol}`, {
+              coinType: coin.type,
+              availableTokens: tokens.map((t: any) => ({ symbol: t.ticker, type: t.coinType?.slice(0, 50) })).slice(0, 5)
+            });
           }
         }
         
         setCurveData(newCurveData);
-        console.log(`✅ Loaded curve data for ${newCurveData.size} tokens`);
+        console.log(`✅ Loaded curve data for ${newCurveData.size}/${memeCoins.length} tokens`);
       } catch (error) {
         console.error('Failed to fetch curve data from indexer:', error);
       }
@@ -322,16 +339,16 @@ export function UserPortfolio() {
           if (curve) {
             const currentSupply = Number(curve.curveSupply);
             
-            if (currentSupply > 0 && !isNaN(currentSupply)) {
+            if (currentSupply >= 0 && !isNaN(currentSupply)) {
               // Spot price is already in SUI, multiply by SUI USD price for display
               const spotPriceInSui = calculateSpotPrice(currentSupply);
               pricePerToken = spotPriceInSui * suiPrice; // Convert to USD
               totalValue = balanceNum * pricePerToken;
-            } else {
-              const spotPriceInSui = calculateSpotPrice(0);
-              pricePerToken = spotPriceInSui * suiPrice;
-              totalValue = balanceNum * pricePerToken;
             }
+          } else {
+            // No curve data yet - price will show "Loading price..."
+            pricePerToken = 0;
+            totalValue = 0;
           }
         }
 
