@@ -208,29 +208,20 @@ export function buyTokensTransaction(params: {
     [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
     
   } else {
-    // MAINNET: Payment token IS SUI
-    // Frontend already reserved coins for gas, so we can merge the payment coins
-    console.log(`💎 Mainnet: processing ${params.paymentCoinIds.length} SUI coin(s) for payment`);
+    // MAINNET: Payment token IS SUI (same as gas token)
+    // Don't merge coins - use biggest coin for payment, wallet SDK uses others for gas
+    console.log(`💎 Mainnet SUI: processing ${params.paymentCoinIds.length} coin(s)`);
     
-    if (params.paymentCoinIds.length === 1) {
-      // Single coin: split payment from it
-      // The frontend should have ensured this coin has enough for both payment + gas
-      console.log('🪙 Single SUI coin: splitting payment from coin');
-      const coin = tx.object(params.paymentCoinIds[0]);
-      [paymentCoin] = tx.splitCoins(coin, [tx.pure.u64(params.maxSuiIn)]);
-      console.log('✅ Payment split, remainder stays in coin for gas');
-    } else {
-      // Multiple coins: Merge them, then split payment
-      // Frontend has already reserved the smallest coin for gas (not in this list)
-      console.log('💰 Multiple SUI coins: merging and splitting payment');
-      let mergedCoin = tx.object(params.paymentCoinIds[0]);
-      const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
-      tx.mergeCoins(mergedCoin, otherCoins);
-      
-      // Split payment from merged coins
-      [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-      console.log('✅ Payment split from merged coins, separate coin reserved for gas');
-    }
+    // Use the first (biggest) coin for payment splitting
+    // Don't merge - this allows wallet SDK to use other coins for gas
+    const mainCoin = tx.object(params.paymentCoinIds[0]);
+    [paymentCoin] = tx.splitCoins(mainCoin, [tx.pure.u64(params.maxSuiIn)]);
+    
+    console.log('✅ Payment split from biggest coin, wallet SDK will use available coins for gas');
+    // The wallet SDK will automatically:
+    // 1. Use the remainder in mainCoin for gas (if needed)
+    // 2. Use other coins from the wallet for gas (if available)
+    // 3. Return any unused coins/remainder to sender
   }
   
   // Both legacy and new contracts use the same signature

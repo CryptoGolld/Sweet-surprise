@@ -187,38 +187,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
           sortedCoins.map((c, i) => `#${i}: ${(Number(c.balance) / 1e9).toFixed(4)} SUI`)
         );
         
-        // On mainnet with SUI, we need to handle gas carefully
-        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
-        const isPaymentTokenSUI = process.env.NEXT_PUBLIC_PAYMENT_TOKEN === '0x2::sui::SUI' || 
-                                  !process.env.NEXT_PUBLIC_PAYMENT_TOKEN;
-        
-        let coinsForPayment = sortedCoins;
-        
-        if (isMainnet && isPaymentTokenSUI) {
-          if (sortedCoins.length > 1) {
-            // Multiple coins: Keep smallest coin for gas, use rest for payment
-            coinsForPayment = sortedCoins.slice(0, -1);
-            console.log(`⛽ Mainnet SUI: reserving smallest coin for gas, using ${coinsForPayment.length} coins for payment`);
-          } else {
-            // Single coin: Need to leave enough for gas (at least 0.1 SUI)
-            const gasReserve = 0.1 * 1e9; // 0.1 SUI in MIST
-            const availableForPayment = BigInt(paymentBalance) - BigInt(Math.ceil(gasReserve));
-            
-            if (BigInt(amountInSmallest) > availableForPayment) {
-              const maxPayment = Number(availableForPayment) / 1e9;
-              toast.error('Insufficient balance for payment + gas', {
-                description: `Maximum you can spend: ${maxPayment.toFixed(4)} SUI (reserves 0.1 SUI for gas)`,
-              });
-              return;
-            }
-            console.log(`⛽ Mainnet SUI with single coin: using coin for payment, SDK will use remainder for gas`);
-          }
-        }
-        
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: coinsForPayment.map(c => c.coinObjectId),
+          paymentCoinIds: sortedCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });
