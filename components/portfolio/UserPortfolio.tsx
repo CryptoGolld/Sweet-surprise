@@ -19,6 +19,19 @@ interface CoinWithMetadata {
   decimals: number;
 }
 
+// Normalize Sui address to 64 characters (pad with leading zeros if needed)
+function normalizeSuiAddress(coinType: string): string {
+  const parts = coinType.split('::');
+  if (parts.length < 3) return coinType;
+  
+  const address = parts[0];
+  // Remove 0x prefix, pad to 64 chars, add 0x back
+  const hexPart = address.replace('0x', '');
+  const paddedHex = hexPart.padStart(64, '0');
+  
+  return `0x${paddedHex}::${parts.slice(1).join('::')}`;
+}
+
 export function UserPortfolio() {
   const account = useCurrentAccount();
   const client = useSuiClient();
@@ -138,15 +151,17 @@ export function UserPortfolio() {
         for (const coin of memeCoins) {
           console.log(`🔍 Looking for ${coin.symbol}:`, coin.type);
           
-          // Try exact match first
-          let indexedToken = tokens.find((t: any) => t.coinType === coin.type);
+          // Normalize coin type: Sui addresses must be 64 chars (32 bytes)
+          // Wallet sometimes returns without leading zeros
+          const normalizedCoinType = normalizeSuiAddress(coin.type);
           
-          // If no exact match, try case-insensitive match
-          if (!indexedToken) {
-            indexedToken = tokens.find((t: any) => 
-              t.coinType?.toLowerCase() === coin.type.toLowerCase()
-            );
-          }
+          console.log(`🔧 Normalized:`, normalizedCoinType);
+          
+          // Try exact match with normalized address
+          let indexedToken = tokens.find((t: any) => {
+            const normalizedIndexer = normalizeSuiAddress(t.coinType);
+            return normalizedIndexer === normalizedCoinType;
+          });
           
           if (indexedToken) {
             newCurveData.set(coin.type, {
@@ -156,12 +171,11 @@ export function UserPortfolio() {
             console.log(`✅ Matched ${coin.symbol}:`, {
               curveId: indexedToken.id,
               supply: indexedToken.curveSupply,
-              indexerCoinType: indexedToken.coinType
             });
           } else {
             console.error(`❌ NO MATCH for ${coin.symbol}`, {
               walletCoinType: coin.type,
-              indexerHasTypes: tokens.slice(0, 3).map((t: any) => t.coinType)
+              normalizedType: normalizedCoinType,
             });
           }
         }
