@@ -16,8 +16,13 @@ const { Pool } = pg;
 const app = express();
 const PORT = process.env.API_PORT || 3001;
 
-// Connect to database
-const db = new Pool({ connectionString: process.env.DATABASE_URL });
+// Connect to database with optimized settings
+const db = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  max: 20, // Maximum pool size
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
 
 // Middleware
 app.use(cors());
