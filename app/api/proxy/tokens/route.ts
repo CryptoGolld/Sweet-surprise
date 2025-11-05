@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Use env var to support both testnet and mainnet
-const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || 'http://51.20.74.15:3002';
+// Default to MAINNET (port 3003), testnet is 3002
+const INDEXER_API = process.env.NEXT_PUBLIC_INDEXER_API || 'http://51.20.74.15:3003';
 
 // Mark route as dynamic to avoid static rendering errors
 export const dynamic = 'force-dynamic';
