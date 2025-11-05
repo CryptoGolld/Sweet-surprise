@@ -101,11 +101,44 @@ export default function TokenPage() {
           return;
         }
 
-        // Build buy transaction (gas handled inside with tx.gas on mainnet)
+        // On mainnet with SUI, we need to handle gas carefully
+        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet';
+        const isPaymentTokenSUI = process.env.NEXT_PUBLIC_PAYMENT_TOKEN === '0x2::sui::SUI' || 
+                                  !process.env.NEXT_PUBLIC_PAYMENT_TOKEN;
+        
+        // Sort coins by balance (biggest first)
+        const sortedCoins = [...paymentCoins].sort((a, b) => 
+          Number(b.balance) - Number(a.balance)
+        );
+        
+        let coinsForPayment = sortedCoins;
+        
+        if (isMainnet && isPaymentTokenSUI) {
+          if (sortedCoins.length > 1) {
+            // Multiple coins: Keep smallest coin for gas, use rest for payment
+            coinsForPayment = sortedCoins.slice(0, -1);
+            console.log(`⛽ Mainnet SUI: reserving smallest coin for gas, using ${coinsForPayment.length} coins for payment`);
+          } else {
+            // Single coin: Need to leave enough for gas (at least 0.1 SUI)
+            const gasReserve = 0.1 * 1e9; // 0.1 SUI in MIST
+            const availableForPayment = BigInt(paymentBalance) - BigInt(Math.ceil(gasReserve));
+            
+            if (BigInt(amountInSmallest) > availableForPayment) {
+              const maxPayment = Number(availableForPayment) / 1e9;
+              toast.error('Insufficient balance for payment + gas', {
+                description: `Maximum you can spend: ${maxPayment.toFixed(4)} SUI (reserves 0.1 SUI for gas)`,
+              });
+              return;
+            }
+            console.log(`⛽ Mainnet SUI with single coin: using coin for payment, SDK will use remainder for gas`);
+          }
+        }
+
+        // Build buy transaction
         const tx = buyTokensTransaction({
           curveId: token.id,
           coinType: token.coinType,
-          paymentCoinIds: paymentCoins.map(c => c.coinObjectId),
+          paymentCoinIds: coinsForPayment.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });

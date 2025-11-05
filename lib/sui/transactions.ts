@@ -208,27 +208,29 @@ export function buyTokensTransaction(params: {
     [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
     
   } else {
-    // MAINNET: Handle both single coin and multiple coins
-    console.log(`💎 Mainnet: processing ${params.paymentCoinIds.length} SUI coin(s)`);
+    // MAINNET: Payment token IS SUI
+    // Frontend already reserved coins for gas, so we can merge the payment coins
+    console.log(`💎 Mainnet: processing ${params.paymentCoinIds.length} SUI coin(s) for payment`);
     
-    // For both single and multiple coins, use the same approach:
-    // Use the coin(s) directly, split payment, SDK uses remainder for gas
-    let mergedCoin = tx.object(params.paymentCoinIds[0]);
-    
-    if (params.paymentCoinIds.length > 1) {
-      // Multiple coins: Merge all first
-      console.log('💰 Multiple SUI coins: merging all then splitting payment');
+    if (params.paymentCoinIds.length === 1) {
+      // Single coin: split payment from it
+      // The frontend should have ensured this coin has enough for both payment + gas
+      console.log('🪙 Single SUI coin: splitting payment from coin');
+      const coin = tx.object(params.paymentCoinIds[0]);
+      [paymentCoin] = tx.splitCoins(coin, [tx.pure.u64(params.maxSuiIn)]);
+      console.log('✅ Payment split, remainder stays in coin for gas');
+    } else {
+      // Multiple coins: Merge them, then split payment
+      // Frontend has already reserved the smallest coin for gas (not in this list)
+      console.log('💰 Multiple SUI coins: merging and splitting payment');
+      let mergedCoin = tx.object(params.paymentCoinIds[0]);
       const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
       tx.mergeCoins(mergedCoin, otherCoins);
-    } else {
-      console.log('🪙 Single SUI coin: splitting payment directly from coin');
+      
+      // Split payment from merged coins
+      [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+      console.log('✅ Payment split from merged coins, separate coin reserved for gas');
     }
-    
-    // Split payment from the coin (single or merged)
-    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-    
-    // Remainder in mergedCoin is automatically used by SDK for gas
-    console.log('✅ Payment split, SDK will use coin remainder for gas');
   }
   
   // Both legacy and new contracts use the same signature
