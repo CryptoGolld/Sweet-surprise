@@ -476,25 +476,36 @@ async function processBuyEvent(event) {
     }
     
     // Fetch latest curve state from blockchain to get accurate supply
-    try {
-      const curveObject = await withTimeout(
-        client.getObject({
-          id: curveId,
-          options: { showContent: true },
-        }),
-        10000,
-        'getObject (refresh curve)'
-      );
-      
-      if (curveObject.data?.content?.dataType === 'moveObject') {
-        const fields = curveObject.data.content.fields;
-        await db.query(
-          `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
-          [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+    if (!curveId) {
+      console.warn(`⚠️  No curve ID found for buy of ${coinType.slice(0, 50)}... - cannot update curve supply`);
+    } else {
+      try {
+        const curveObject = await withTimeout(
+          client.getObject({
+            id: curveId,
+            options: { showContent: true },
+          }),
+          10000,
+          'getObject (refresh curve)'
         );
+        
+        if (curveObject.data?.content?.dataType === 'moveObject') {
+          const fields = curveObject.data.content.fields;
+          const updateResult = await db.query(
+            `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
+            [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+          );
+          if (updateResult.rowCount > 0) {
+            console.log(`✅ Buy: Updated curve supply to ${fields.token_supply}`);
+          } else {
+            console.warn(`⚠️  Buy: UPDATE returned 0 rows for ${coinType.slice(0, 50)}...`);
+          }
+        } else {
+          console.warn(`⚠️  Buy: Invalid curve object for ${curveId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Buy: Failed to refresh curve ${curveId}:`, error.message);
       }
-    } catch (error) {
-      console.warn('Failed to refresh curve state:', error.message);
     }
     
     // Update token price and market data (using fresh supply)
@@ -623,25 +634,36 @@ async function processSellEvent(event) {
     }
     
     // Fetch latest curve state from blockchain to get accurate supply
-    try {
-      const curveObject = await withTimeout(
-        client.getObject({
-          id: curveId,
-          options: { showContent: true },
-        }),
-        10000,
-        'getObject (refresh curve)'
-      );
-      
-      if (curveObject.data?.content?.dataType === 'moveObject') {
-        const fields = curveObject.data.content.fields;
-        await db.query(
-          `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
-          [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+    if (!curveId) {
+      console.warn(`⚠️  No curve ID found for sell of ${coinType.slice(0, 50)}... - cannot update curve supply`);
+    } else {
+      try {
+        const curveObject = await withTimeout(
+          client.getObject({
+            id: curveId,
+            options: { showContent: true },
+          }),
+          10000,
+          'getObject (refresh curve)'
         );
+        
+        if (curveObject.data?.content?.dataType === 'moveObject') {
+          const fields = curveObject.data.content.fields;
+          const updateResult = await db.query(
+            `UPDATE tokens SET curve_supply = $1, curve_balance = $2, updated_at = NOW() WHERE coin_type = $3`,
+            [fields.token_supply || '0', fields.sui_reserve || '0', coinType]
+          );
+          if (updateResult.rowCount > 0) {
+            console.log(`✅ Sell: Updated curve supply to ${fields.token_supply}`);
+          } else {
+            console.warn(`⚠️  Sell: UPDATE returned 0 rows for ${coinType.slice(0, 50)}...`);
+          }
+        } else {
+          console.warn(`⚠️  Sell: Invalid curve object for ${curveId}`);
+        }
+      } catch (error) {
+        console.error(`❌ Sell: Failed to refresh curve ${curveId}:`, error.message);
       }
-    } catch (error) {
-      console.warn('Failed to refresh curve state:', error.message);
     }
     
     // Update token price and market data (using fresh supply)

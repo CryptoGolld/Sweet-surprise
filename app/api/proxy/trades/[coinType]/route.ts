@@ -33,7 +33,7 @@ export async function GET(
     
     return NextResponse.json(data, {
       headers: {
-        'Cache-Control': 'public, s-maxage=2, stale-while-revalidate=3',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
       },
     });
   } catch (error: any) {
