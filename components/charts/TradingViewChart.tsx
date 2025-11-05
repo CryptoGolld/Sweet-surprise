@@ -13,27 +13,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [consoleErrors, setConsoleErrors] = useState<string[]>([]);
-  
-  // Capture console errors
-  useEffect(() => {
-    const originalError = console.error;
-    const errors: string[] = [];
-    
-    console.error = (...args: any[]) => {
-      const errorMsg = args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ');
-      errors.push(errorMsg);
-      setConsoleErrors([...errors]);
-      originalError.apply(console, args);
-    };
-    
-    return () => {
-      console.error = originalError;
-    };
-  }, []);
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
@@ -43,18 +22,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=1m&limit=1000`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
-      const json = await response.json();
-      
-      // Store debug info
-      setDebugInfo({
-        candleCount: json.candles?.length || 0,
-        firstCandle: json.candles?.[0],
-        lastCandle: json.candles?.[json.candles?.length - 1],
-        sampleCandles: json.candles?.slice(0, 3),
-        fetchedAt: new Date().toISOString(),
-      });
-      
-      return json;
+      return response.json();
     },
     refetchInterval: 5000, // Update every 5 seconds
     staleTime: 2000,
@@ -148,23 +116,11 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       .reverse(); // TradingView wants oldest first
 
     if (candles.length > 0) {
-      console.log('📊 Setting chart data:', {
-        totalCandles: candles.length,
-        firstCandle: candles[0],
-        lastCandle: candles[candles.length - 1],
-        timeRange: {
-          first: new Date(candles[0].time * 1000).toISOString(),
-          last: new Date(candles[candles.length - 1].time * 1000).toISOString(),
-        }
-      });
-      
       try {
         candleSeriesRef.current.setData(candles);
         chartRef.current?.timeScale().fitContent();
-        console.log('✅ Chart data set successfully');
       } catch (err: any) {
-        console.error('❌ Error setting chart data:', err);
-        setDebugInfo((prev: any) => ({ ...prev, chartError: err?.message || String(err) }));
+        console.error('Error setting chart data:', err);
       }
     }
   }, [data]);
@@ -174,7 +130,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
         <div className="text-white/60">Chart unavailable</div>
-        <div className="text-sm text-white/40 mt-2">Error: {error.message}</div>
       </div>
     );
   }
@@ -187,7 +142,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     );
   }
 
-  // Show placeholder with stats if we have data but can't render chart
   const hasTradeData = data?.candles && data.candles.length > 0;
   
   if (!hasTradeData) {
@@ -195,8 +149,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
         <div className="text-xl font-semibold mb-2">No Trading History Yet</div>
-        <div className="text-white/60 mb-2">This token hasn't had any trades yet</div>
-        <div className="text-sm text-white/40">Be the first to trade and the chart will appear!</div>
+        <div className="text-white/60">Be the first to trade!</div>
       </div>
     );
   }
@@ -211,23 +164,12 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         </div>
       </div>
 
-      {/* Chart - With placeholder if rendering fails */}
-      <div className="relative">
-        <div 
-          ref={chartContainerRef} 
-          className="w-full"
-          style={{ minHeight: '400px' }}
-        />
-        
-        {/* Placeholder overlay if chart is empty/not rendering */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-sm rounded-xl p-6 text-center">
-            <div className="text-4xl mb-2">📊</div>
-            <div className="text-sm text-gray-400">Chart updating...</div>
-            <div className="text-xs text-gray-500 mt-1">Stats below show current data</div>
-          </div>
-        </div>
-      </div>
+      {/* Chart */}
+      <div 
+        ref={chartContainerRef} 
+        className="w-full"
+        style={{ minHeight: '400px' }}
+      />
 
       {/* Stats */}
       {data?.candles && data.candles.length > 0 && (
