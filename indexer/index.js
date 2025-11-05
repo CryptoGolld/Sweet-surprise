@@ -389,8 +389,12 @@ async function processBuyEvent(event) {
     );
     
     // Find minted tokens (newly created coins of the memecoin type)
+    // Filter out payment tokens: SUILFG_MEMEFI (testnet) and SUI (mainnet)
     const mintedCoins = txDetails.objectChanges?.filter(
-      obj => obj.type === 'created' && obj.objectType?.includes('::coin::Coin<') && !obj.objectType?.includes('SUILFG_MEMEFI')
+      obj => obj.type === 'created' && 
+             obj.objectType?.includes('::coin::Coin<') && 
+             !obj.objectType?.includes('SUILFG_MEMEFI') &&
+             !obj.objectType?.includes('::sui::SUI')
     );
     
     if (!mintedCoins || mintedCoins.length === 0) {
