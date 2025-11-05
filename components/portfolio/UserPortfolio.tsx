@@ -136,6 +136,8 @@ export function UserPortfolio() {
         const newCurveData = new Map<string, { curveSupply: string; curveId: string }>();
         
         for (const coin of memeCoins) {
+          console.log(`🔍 Looking for ${coin.symbol}:`, coin.type);
+          
           // Try exact match first
           let indexedToken = tokens.find((t: any) => t.coinType === coin.type);
           
@@ -151,11 +153,15 @@ export function UserPortfolio() {
               curveSupply: indexedToken.curveSupply || '0',
               curveId: indexedToken.id,
             });
-            console.log(`✅ Matched ${coin.symbol}: curveId=${indexedToken.id.slice(0, 10)}... supply=${indexedToken.curveSupply}`);
+            console.log(`✅ Matched ${coin.symbol}:`, {
+              curveId: indexedToken.id,
+              supply: indexedToken.curveSupply,
+              indexerCoinType: indexedToken.coinType
+            });
           } else {
-            console.warn(`⚠️ No curve found for ${coin.symbol}`, {
-              coinType: coin.type,
-              availableTokens: tokens.map((t: any) => ({ symbol: t.ticker, type: t.coinType?.slice(0, 50) })).slice(0, 5)
+            console.error(`❌ NO MATCH for ${coin.symbol}`, {
+              walletCoinType: coin.type,
+              indexerHasTypes: tokens.slice(0, 3).map((t: any) => t.coinType)
             });
           }
         }
