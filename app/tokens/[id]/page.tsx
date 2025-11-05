@@ -101,7 +101,7 @@ export default function TokenPage() {
           return;
         }
 
-        // Build buy transaction (gas handled inside with tx.gas on mainnet)
+        // Build buy transaction
         const tx = buyTokensTransaction({
           curveId: token.id,
           coinType: token.coinType,

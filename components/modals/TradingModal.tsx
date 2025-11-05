@@ -190,7 +190,7 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
         const tx = buyTokensTransaction({
           curveId: curve.id,
           coinType: curve.coinType,
-          paymentCoinIds: sortedCoins.map(c => c.coinObjectId), // Pass SORTED coins
+          paymentCoinIds: sortedCoins.map(c => c.coinObjectId),
           maxSuiIn: amountInSmallest,
           minTokensOut: '0',
         });
