@@ -149,16 +149,18 @@ export function UserPortfolio() {
         const newCurveData = new Map<string, { curveSupply: string; curveId: string }>();
         
         for (const coin of memeCoins) {
-          console.log(`🔍 Looking for ${coin.symbol}:`, coin.type);
-          
           // Normalize coin type: Sui addresses must be 64 chars (32 bytes)
           // Wallet sometimes returns without leading zeros
           const normalizedCoinType = normalizeSuiAddress(coin.type);
           
-          console.log(`🔧 Normalized:`, normalizedCoinType);
+          console.log(`🔍 Searching for ${coin.symbol}:`, {
+            original: coin.type,
+            normalized: normalizedCoinType,
+          });
           
           // Try exact match with normalized address
           let indexedToken = tokens.find((t: any) => {
+            if (!t.coinType) return false;
             const normalizedIndexer = normalizeSuiAddress(t.coinType);
             return normalizedIndexer === normalizedCoinType;
           });
@@ -168,14 +170,15 @@ export function UserPortfolio() {
               curveSupply: indexedToken.curveSupply || '0',
               curveId: indexedToken.id,
             });
-            console.log(`✅ Matched ${coin.symbol}:`, {
+            console.log(`✅ MATCHED ${coin.symbol}:`, {
               curveId: indexedToken.id,
               supply: indexedToken.curveSupply,
+              indexerType: indexedToken.coinType,
             });
           } else {
-            console.error(`❌ NO MATCH for ${coin.symbol}`, {
-              walletCoinType: coin.type,
+            console.warn(`⚠️ Token not in indexer: ${coin.symbol}`, {
               normalizedType: normalizedCoinType,
+              reason: 'This token may be from old deployment or not yet indexed',
             });
           }
         }
