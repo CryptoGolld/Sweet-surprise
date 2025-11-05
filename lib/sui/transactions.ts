@@ -211,25 +211,24 @@ export function buyTokensTransaction(params: {
     // MAINNET: Handle both single coin and multiple coins
     console.log(`💎 Mainnet: processing ${params.paymentCoinIds.length} SUI coin(s)`);
     
-    if (params.paymentCoinIds.length === 1) {
-      // Single coin case: Use tx.gas to split payment
-      // This way the single coin stays as gas coin and we split payment from the gas budget
-      console.log('🪙 Single SUI coin: splitting payment from tx.gas (special gas reference)');
-      [paymentCoin] = tx.splitCoins(tx.gas, [tx.pure.u64(params.maxSuiIn)]);
-      console.log('✅ Split from tx.gas, single coin remains available for gas payment');
-    } else {
-      // Multiple coins: Merge all, then split payment
+    // For both single and multiple coins, use the same approach:
+    // Use the coin(s) directly, split payment, SDK uses remainder for gas
+    let mergedCoin = tx.object(params.paymentCoinIds[0]);
+    
+    if (params.paymentCoinIds.length > 1) {
+      // Multiple coins: Merge all first
       console.log('💰 Multiple SUI coins: merging all then splitting payment');
-      let mergedCoin = tx.object(params.paymentCoinIds[0]);
       const otherCoins = params.paymentCoinIds.slice(1).map(id => tx.object(id));
       tx.mergeCoins(mergedCoin, otherCoins);
-      
-      // Split payment from merged
-      [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
-      
-      // Remainder in mergedCoin is used by SDK for gas
-      console.log('✅ Merged all, split payment, SDK will use remainder for gas');
+    } else {
+      console.log('🪙 Single SUI coin: splitting payment directly from coin');
     }
+    
+    // Split payment from the coin (single or merged)
+    [paymentCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(params.maxSuiIn)]);
+    
+    // Remainder in mergedCoin is automatically used by SDK for gas
+    console.log('✅ Payment split, SDK will use coin remainder for gas');
   }
   
   // Both legacy and new contracts use the same signature
