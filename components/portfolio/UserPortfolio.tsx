@@ -144,6 +144,10 @@ export function UserPortfolio() {
         const tokens = data.tokens || [];
         
         console.log(`📦 Indexer has ${tokens.length} tokens`);
+        console.log(`📋 Sample indexer types:`, tokens.slice(0, 5).map((t: any) => ({
+          symbol: t.symbol,
+          coinType: t.coinType,
+        })));
         
         // Match owned coins with indexed tokens
         const newCurveData = new Map<string, { curveSupply: string; curveId: string }>();
