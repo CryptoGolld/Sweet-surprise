@@ -17,7 +17,7 @@ import {
 } from '@/lib/utils/bondingCurve';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 import { toast } from 'sonner';
-import { PriceChart } from '@/components/charts/PriceChart';
+import { PriceChartWrapper as PriceChart } from '@/components/charts/PriceChartWrapper';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 
 interface TradingModalProps {
