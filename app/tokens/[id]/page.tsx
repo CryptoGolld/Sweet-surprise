@@ -12,7 +12,7 @@ import { formatAmount, parseAmount, getExplorerLink } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
 import { calculateTokensOut, calculateSuiOut } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
-import { TradingViewChart } from '@/components/charts/TradingViewChart';
+import { TradingViewChartWrapper as TradingViewChart } from '@/components/charts/TradingViewChartWrapper';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 
