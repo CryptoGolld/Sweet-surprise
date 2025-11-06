@@ -13,6 +13,12 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
+  const [isClient, setIsClient] = useState(false);
+  
+  // Only render chart on client side to avoid hydration errors
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
@@ -31,7 +37,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
 
   // Initialize chart
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!isClient || !chartContainerRef.current) return;
 
     const chart: any = createChart(chartContainerRef.current, {
       layout: {
@@ -91,7 +97,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, []);
+  }, [isClient]);
 
   // Update chart data
   useEffect(() => {
@@ -134,7 +140,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     );
   }
 
-  if (isLoading) {
+  if (!isClient || isLoading) {
     return (
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="animate-pulse text-gray-400">Loading chart...</div>
