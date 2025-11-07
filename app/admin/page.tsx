@@ -37,21 +37,34 @@ export default function AdminPage() {
   });
 
   // Special launch settings
-  const [specialLaunchCurveId, setSpecialLaunchCurveId] = useState('');
+  const [specialLaunchSearch, setSpecialLaunchSearch] = useState('');
+  const [selectedToken, setSelectedToken] = useState<any>(null);
   const [specialLaunchEnabled, setSpecialLaunchEnabled] = useState(false);
 
-  // Fetch graduated tokens
+  // Fetch all tokens
   const { data: tokensData, refetch } = useQuery({
-    queryKey: ['graduated-tokens'],
+    queryKey: ['all-tokens', activeTab],
     queryFn: async () => {
       const response = await fetch('/api/proxy/tokens?limit=1000');
       if (!response.ok) throw new Error('Failed to fetch tokens');
       return response.json();
     },
-    enabled: authenticated && activeTab === 'graduated',
+    enabled: authenticated,
   });
 
-  const graduatedTokens = tokensData?.tokens?.filter((t: any) => t.graduated && !t.cetusPoolAddress) || [];
+  const allTokens = tokensData?.tokens || [];
+  const graduatedTokens = allTokens.filter((t: any) => t.graduated && !t.cetusPoolAddress) || [];
+  
+  // Filter tokens for special launch search
+  const filteredTokensForSpecial = allTokens.filter((t: any) => {
+    if (!specialLaunchSearch) return false;
+    const search = specialLaunchSearch.toLowerCase();
+    return (
+      t.ticker?.toLowerCase().includes(search) ||
+      t.name?.toLowerCase().includes(search) ||
+      t.id?.toLowerCase().includes(search)
+    );
+  }).slice(0, 10); // Limit to 10 results
 
   function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -253,40 +266,31 @@ export default function AdminPage() {
   }
 
   async function setSpecialLaunch() {
-    if (!specialLaunchCurveId || !specialLaunchCurveId.startsWith('0x')) {
-      toast.error('Enter valid curve ID');
+    if (!selectedToken) {
+      toast.error('Please select a token first');
       return;
     }
-    if (!confirm(`${specialLaunchEnabled ? 'ENABLE' : 'DISABLE'} special launch for this token?\n\nSpecial launch = Mint all 54M to treasury instead of burning`)) {
+    if (!confirm(`${specialLaunchEnabled ? 'ENABLE' : 'DISABLE'} special launch for ${selectedToken.ticker}?\n\nSpecial launch = Mint all 54M to treasury instead of burning\n\n⚠️ This can only be set BEFORE graduation!`)) {
       return;
     }
     setIsProcessing(true);
     try {
-      // We need to know the coin type - let's fetch it from the token
-      const tokenResponse = await fetch('/api/proxy/tokens?limit=1000');
-      const tokensData = await tokenResponse.json();
-      const token = tokensData.tokens.find((t: any) => t.id === specialLaunchCurveId);
-      
-      if (!token) {
-        toast.error('Token not found');
-        setIsProcessing(false);
-        return;
-      }
-
       const tx = new Transaction();
       tx.moveCall({
         target: `${CONTRACTS.PLATFORM_PACKAGE}::bonding_curve::set_special_launch`,
-        typeArguments: [token.coinType],
+        typeArguments: [selectedToken.coinType],
         arguments: [
           tx.object(CONTRACTS.ADMIN_CAP),
-          tx.object(specialLaunchCurveId),
+          tx.object(selectedToken.id),
           tx.pure.bool(specialLaunchEnabled),
         ],
       });
       const result = await signAndExecute({ transaction: tx });
-      toast.success(`Special launch ${specialLaunchEnabled ? 'enabled' : 'disabled'}!`, {
+      toast.success(`Special launch ${specialLaunchEnabled ? 'enabled' : 'disabled'} for ${selectedToken.ticker}!`, {
         action: { label: 'View', onClick: () => window.open(getExplorerLink(result.digest, 'txblock'), '_blank') },
       });
+      setSelectedToken(null);
+      setSpecialLaunchSearch('');
     } catch (error: any) {
       toast.error('Failed: ' + error.message);
     } finally {
@@ -377,6 +381,17 @@ export default function AdminPage() {
             </p>
           </div>
         )}
+
+        {/* Security Notice */}
+        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-6">
+          <p className="text-green-400 font-semibold">🔒 AdminCap Security</p>
+          <p className="text-sm text-gray-400 mt-2">
+            ✅ All admin functions use AdminCap by <strong>reference only</strong> - it never leaves your wallet
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            The AdminCap is only used for authorization checks. It cannot be transferred, consumed, or destroyed by these functions.
+          </p>
+        </div>
 
         {/* Tab Navigation */}
         <div className="flex gap-2 mb-6 overflow-x-auto">
@@ -617,18 +632,80 @@ export default function AdminPage() {
               </p>
 
               <div className="space-y-4">
+                {/* Search/Select Token */}
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Curve ID</label>
+                  <label className="block text-sm font-semibold mb-2">Search Token</label>
                   <input
                     type="text"
-                    value={specialLaunchCurveId}
-                    onChange={(e) => setSpecialLaunchCurveId(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none font-mono text-sm"
+                    value={specialLaunchSearch}
+                    onChange={(e) => {
+                      setSpecialLaunchSearch(e.target.value);
+                      setSelectedToken(null);
+                    }}
+                    placeholder="Search by ticker, name, or curve ID..."
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:border-meme-purple outline-none"
                   />
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Search Results */}
+                {specialLaunchSearch && filteredTokensForSpecial.length > 0 && !selectedToken && (
+                  <div className="bg-white/5 border border-white/10 rounded-lg p-2 max-h-60 overflow-y-auto">
+                    {filteredTokensForSpecial.map((token: any) => (
+                      <button
+                        key={token.id}
+                        onClick={() => {
+                          setSelectedToken(token);
+                          setSpecialLaunchSearch('');
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-white/10 rounded-lg transition-colors"
+                      >
+                        <div className="font-bold">${token.ticker}</div>
+                        <div className="text-sm text-gray-400">{token.name}</div>
+                        <div className="text-xs text-gray-500 font-mono mt-1">
+                          {token.id.slice(0, 30)}...
+                        </div>
+                        {token.graduated && (
+                          <div className="text-xs text-yellow-400 mt-1">⚠️ Already graduated</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Selected Token Display */}
+                {selectedToken && (
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-bold text-lg text-green-400">${selectedToken.ticker}</div>
+                        <div className="text-sm text-gray-400">{selectedToken.name}</div>
+                        <div className="text-xs text-gray-500 font-mono mt-2">
+                          Curve ID: {selectedToken.id}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          Supply: {Number(selectedToken.curveSupply || 0).toLocaleString()}
+                        </div>
+                        {selectedToken.graduated && (
+                          <div className="text-xs text-red-400 font-semibold mt-2">
+                            ⚠️ Warning: Token has already graduated - special launch flag may not be changeable!
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedToken(null);
+                          setSpecialLaunchSearch('');
+                        }}
+                        className="text-gray-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Enable/Disable Toggle */}
+                <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg p-4">
                   <input
                     type="checkbox"
                     id="specialLaunchEnabled"
@@ -637,23 +714,56 @@ export default function AdminPage() {
                     className="w-5 h-5"
                   />
                   <label htmlFor="specialLaunchEnabled" className="text-sm">
-                    Enable Special Launch (mint 54M to treasury instead of burning)
+                    <strong>Enable Special Launch</strong> - Mint all 54M to treasury instead of burning
                   </label>
                 </div>
 
+                {/* Submit Button */}
                 <button
                   onClick={setSpecialLaunch}
-                  disabled={isProcessing || !currentAccount || !specialLaunchCurveId}
+                  disabled={isProcessing || !currentAccount || !selectedToken}
                   className="w-full px-6 py-3 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg font-semibold hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
                 >
-                  {isProcessing ? '⏳ Processing...' : '⚡ Set Special Launch Flag'}
+                  {isProcessing ? '⏳ Processing...' : selectedToken ? `⚡ Set Special Launch for ${selectedToken.ticker}` : '⚡ Select a token first'}
                 </button>
               </div>
 
               <div className="mt-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
                 <p className="text-yellow-400 text-sm">
-                  <strong>⚠️ Warning:</strong> This can only be called BEFORE pool creation. Once LP is seeded, this cannot be changed.
+                  <strong>⚠️ Critical:</strong> This can only be called BEFORE pool creation. Once LP is seeded, this cannot be changed.
                 </p>
+              </div>
+            </div>
+
+            {/* All Tokens List for Reference */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+              <h3 className="text-xl font-bold mb-4">📋 All Tokens ({allTokens.length})</h3>
+              <div className="max-h-96 overflow-y-auto space-y-2">
+                {allTokens.map((token: any) => (
+                  <div
+                    key={token.id}
+                    className="bg-white/5 border border-white/10 rounded-lg p-3 hover:bg-white/10 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedToken(token);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-bold">${token.ticker}</span>
+                        <span className="text-sm text-gray-400 ml-2">{token.name}</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        {token.graduated && (
+                          <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded">🎓 Graduated</span>
+                        )}
+                        {token.cetusPoolAddress && (
+                          <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">💎 Pool Created</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
