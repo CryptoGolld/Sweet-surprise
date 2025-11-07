@@ -22,10 +22,10 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
-    queryKey: ['chart', coinType],
+    queryKey: ['chart', coinType, '1m'],
     queryFn: async () => {
       const response = await fetch(
-        `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=1m&limit=1000`
+        `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=1m&limit=500`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
       return response.json();
@@ -181,32 +181,34 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       {data?.candles && data.candles.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-white/10 pt-4">
           <div>
-            <div className="text-white/60 text-xs mb-1">24h High</div>
+            <div className="text-white/60 text-xs mb-1">High</div>
             <div className="font-mono font-semibold text-green-400">
               {Math.max(...data.candles.map((c: any) => c.high)).toFixed(10)}
             </div>
           </div>
           <div>
-            <div className="text-white/60 text-xs mb-1">24h Low</div>
+            <div className="text-white/60 text-xs mb-1">Low</div>
             <div className="font-mono font-semibold text-red-400">
               {Math.min(...data.candles.map((c: any) => c.low)).toFixed(10)}
             </div>
           </div>
           <div>
-            <div className="text-white/60 text-xs mb-1">24h Change</div>
+            <div className="text-white/60 text-xs mb-1">Change</div>
             <div className={`font-mono font-semibold ${
-              data.candles[0].close >= data.candles[data.candles.length - 1].open
+              data.candles[data.candles.length - 1]?.close >= data.candles[0]?.open
                 ? 'text-green-400'
                 : 'text-red-400'
             }`}>
-              {(((data.candles[0].close - data.candles[data.candles.length - 1].open) / 
-                data.candles[data.candles.length - 1].open) * 100).toFixed(2)}%
+              {data.candles.length >= 2 ? 
+                (((data.candles[data.candles.length - 1].close - data.candles[0].open) / 
+                  data.candles[0].open) * 100).toFixed(2) + '%'
+                : '0.00%'}
             </div>
           </div>
           <div>
-            <div className="text-white/60 text-xs mb-1">Data Points</div>
+            <div className="text-white/60 text-xs mb-1">Trades</div>
             <div className="font-mono font-semibold">
-              {data.candles.length} candles
+              {data.totalTrades || data.candles.length}
             </div>
           </div>
         </div>
