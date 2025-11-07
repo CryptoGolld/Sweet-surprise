@@ -57,6 +57,12 @@ export default function TokenPage() {
   const { balance: paymentBalance, coins: paymentCoins, refetch: refetchPayment } = useCoinBalance();
   const { balance: memeBalance, coins: memeCoins, refetch: refetchMeme } = useCoinBalance(token?.coinType);
   
+  // Detect if this is first ever buy (curve supply is 0)
+  const isFirstEverBuy = useMemo(() => {
+    if (!token) return false;
+    return Number(token.curveSupply) === 0;
+  }, [token?.curveSupply]);
+  
   // Calculate trade preview
   const tradePreview = useMemo(() => {
     if (!amount || !token || parseFloat(amount) <= 0) return null;
@@ -82,6 +88,17 @@ export default function TokenPage() {
     if (!amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
+    }
+
+    // Validate first ever buyer amount (minimum 1.1 SUI required)
+    if (mode === 'buy' && isFirstEverBuy) {
+      const buyAmount = parseFloat(amount);
+      const MIN_FIRST_BUY = 1.1;
+      
+      if (buyAmount < MIN_FIRST_BUY) {
+        toast.error(`Minimum buy amount is ${MIN_FIRST_BUY} ${getPaymentTokenSymbol()}`);
+        return;
+      }
     }
 
     try {
