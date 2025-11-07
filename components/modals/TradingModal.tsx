@@ -130,21 +130,24 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
       return;
     }
     
-    // Validate first ever buyer amount (minimum 1.1 SUI required)
+    // Validate first ever buyer amount (minimum >1 SUI required)
     if (mode === 'buy' && isFirstEverBuy) {
       const buyAmount = parseFloat(amount);
-      const MIN_FIRST_BUY = 1.1;
+      const MIN_FIRST_BUY = 1.0;
       
       console.log('🔍 First buyer validation:', {
         isFirstEverBuy,
         buyAmount,
         minRequired: MIN_FIRST_BUY,
-        willBlock: buyAmount < MIN_FIRST_BUY,
+        willBlock: buyAmount <= MIN_FIRST_BUY,
       });
       
-      if (buyAmount < MIN_FIRST_BUY) {
+      if (buyAmount <= MIN_FIRST_BUY) {
         console.log('❌ BLOCKING transaction: amount too low for first buyer');
-        toast.error(`Minimum buy amount is ${MIN_FIRST_BUY} ${getPaymentTokenSymbol()}`);
+        toast.error(`First buy for any token cannot be less than 1 ${getPaymentTokenSymbol()}`, {
+          description: 'We recommend buying at least 1.5 SUI',
+          duration: 5000,
+        });
         return; // BLOCK the transaction
       }
       
@@ -529,8 +532,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                         const maxAmount = Math.max(0, rawBalance - 0.01);
                         setAmount(maxAmount.toString());
                       } else {
-                        // For sell mode, use full balance
-                        setAmount(userBalance);
+                        // For sell mode, leave 1 token back (subtract 1 from balance)
+                        const balanceNum = parseFloat(userBalance);
+                        const maxSellAmount = Math.max(0, balanceNum - 1);
+                        setAmount(maxSellAmount.toString());
                       }
                     }}
                     className="text-xs text-gray-400 hover:text-white transition-colors"

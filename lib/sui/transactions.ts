@@ -273,28 +273,34 @@ export function sellTokensTransaction(params: {
     minSuiOut: params.minSuiOut,
   });
   
-  // Strategy: Create coin references, merge if needed, then pass to moveCall
-  let coinArg;
+  // Strategy: Merge coins, then SPLIT only the amount we want to sell
+  // This prevents wallet dry-run from showing the entire coin balance
+  let mergedCoin;
   
   if (params.memeTokenCoinIds.length === 1) {
-    // Single coin - use it directly
-    coinArg = tx.object(params.memeTokenCoinIds[0]);
+    // Single coin
+    mergedCoin = tx.object(params.memeTokenCoinIds[0]);
   } else {
     // Multiple coins - merge them all at once
     const [first, ...rest] = params.memeTokenCoinIds;
-    coinArg = tx.object(first);
+    mergedCoin = tx.object(first);
     const restObjects = rest.map(id => tx.object(id));
-    
-    // Merge all at once (not in a loop)
-    tx.mergeCoins(coinArg, restObjects);
+    tx.mergeCoins(mergedCoin, restObjects);
   }
+  
+  // CRITICAL FIX: Split only the amount we want to sell
+  // This makes wallet dry-run show correct amount (e.g., "-200k tokens")
+  // instead of the entire coin balance (e.g., "-5m tokens")
+  const tokensInSmallestUnits = BigInt(params.tokensToSell);
+  const [sellCoin] = tx.splitCoins(mergedCoin, [tx.pure.u64(tokensInSmallestUnits)]);
+  
+  // The remainder stays in mergedCoin and returns to user automatically
+  const coinArg = sellCoin;
   
   // IMPORTANT: The Move sell function expects amount_tokens in SMALLEST UNITS
   // The contract tracks token_supply in whole tokens internally
   // But amount_tokens parameter is in smallest units to match coin::value
   // The contract handles the conversion internally (divides by 1_000_000_000)
-  
-  const tokensInSmallestUnits = BigInt(params.tokensToSell);
   
   console.log('Sell amount:', {
     tokensInSmallestUnits: tokensInSmallestUnits.toString(),

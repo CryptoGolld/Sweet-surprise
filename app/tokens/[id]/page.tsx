@@ -90,13 +90,16 @@ export default function TokenPage() {
       return;
     }
 
-    // Validate first ever buyer amount (minimum 1.1 SUI required)
+    // Validate first ever buyer amount (minimum >1 SUI required)
     if (mode === 'buy' && isFirstEverBuy) {
       const buyAmount = parseFloat(amount);
-      const MIN_FIRST_BUY = 1.1;
+      const MIN_FIRST_BUY = 1.0;
       
-      if (buyAmount < MIN_FIRST_BUY) {
-        toast.error(`Minimum buy amount is ${MIN_FIRST_BUY} ${getPaymentTokenSymbol()}`);
+      if (buyAmount <= MIN_FIRST_BUY) {
+        toast.error(`First buy for any token cannot be less than 1 ${getPaymentTokenSymbol()}`, {
+          description: 'We recommend buying at least 1.5 SUI',
+          duration: 5000,
+        });
         return;
       }
     }
