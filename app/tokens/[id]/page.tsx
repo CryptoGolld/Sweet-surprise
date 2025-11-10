@@ -1,5 +1,8 @@
 'use client';
 
+'use client';
+
+import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { BottomNav } from '@/components/BottomNav';
@@ -16,7 +19,7 @@ import { TradingViewChartWrapper as TradingViewChart } from '@/components/charts
 import { TradeHistory } from '@/components/charts/TradeHistory';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 
-export default function TokenPage() {
+function TokenPage() {
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
@@ -33,6 +36,10 @@ export default function TokenPage() {
 
   return <TokenPageContent />;
 }
+
+export default dynamic(() => Promise.resolve(TokenPage), {
+  ssr: false,
+});
 
 function TokenPageContent() {
   const params = useParams();
