@@ -15,7 +15,7 @@ import { formatAmount, parseAmount, getExplorerLink } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
 import { calculateTokensOut, calculateSuiOut } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
-import { TradingViewChartWrapper as TradingViewChart } from '@/components/charts/TradingViewChartWrapper';
+import { PriceChartWrapper as PriceChart } from '@/components/charts/PriceChartWrapper';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 
@@ -473,7 +473,7 @@ function TokenPageContent() {
 
         {/* Charts Section - Full Width, No Boxes */}
         <div className="space-y-6 mb-6">
-          <TradingViewChart coinType={token.coinType} />
+          <PriceChart coinType={token.coinType} />
           <TradeHistory coinType={token.coinType} />
         </div>
 
