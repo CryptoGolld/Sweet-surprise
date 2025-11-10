@@ -55,8 +55,10 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     if (!isClient || !chartContainerRef.current) return;
 
     const container = chartContainerRef.current;
+    const initialWidth = container.clientWidth || 600;
+
     const chart: any = createChart(container, {
-      autoSize: true,
+      width: initialWidth,
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#9ca3af',
@@ -103,7 +105,27 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
 
+    const handleResize = () => {
+      if (!chartRef.current || !chartContainerRef.current) return;
+      const { clientWidth } = chartContainerRef.current;
+      if (clientWidth > 0) {
+        chartRef.current.applyOptions({ width: clientWidth });
+        chartRef.current.timeScale().fitContent();
+      }
+    };
+
+    handleResize();
+
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(container);
+    }
+
     return () => {
+      resizeObserver?.disconnect();
       chart.remove();
       candleSeriesRef.current = null;
       chartRef.current = null;
