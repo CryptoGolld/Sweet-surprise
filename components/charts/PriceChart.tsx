@@ -63,7 +63,23 @@ export function PriceChart({ coinType }: PriceChartProps) {
     );
   }
 
-  const candles: Candle[] = data?.candles || [];
+  const rawCandles: Candle[] = data?.candles || [];
+  const candles = rawCandles
+    .map((candle) => ({
+      time: Number(candle.time),
+      open: Number(candle.open),
+      high: Number(candle.high),
+      low: Number(candle.low),
+      close: Number(candle.close),
+      volume: candle.volume,
+    }))
+    .filter((candle) => [
+      candle.time,
+      candle.open,
+      candle.high,
+      candle.low,
+      candle.close,
+    ].every((value) => Number.isFinite(value)));
   
   if (candles.length === 0) {
     return (
