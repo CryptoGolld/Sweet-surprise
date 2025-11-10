@@ -15,7 +15,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const candleSeriesRef = useRef<any>(null);
   const [isClient, setIsClient] = useState(false);
   const [interval, setInterval] = useState('1m');
-  const [seriesReady, setSeriesReady] = useState(false);
   
   // Only render chart on client side to avoid hydration errors
   useEffect(() => {
@@ -56,9 +55,8 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     if (!isClient || !chartContainerRef.current) return;
 
     const container = chartContainerRef.current;
-    const initialWidth = container.clientWidth || 600;
-
     const chart: any = createChart(container, {
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#9ca3af',
@@ -67,7 +65,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
         horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
       },
-      width: initialWidth,
       height: 400,
       timeScale: {
         timeVisible: true,
@@ -105,49 +102,17 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
-    setSeriesReady(true);
-
-    // Handle resize
-    const handleResize = () => {
-      if (!chartContainerRef.current || !chartRef.current) return;
-      const width = chartContainerRef.current.clientWidth || initialWidth;
-      if (width > 0) {
-        chartRef.current.applyOptions({ width });
-        chartRef.current.timeScale().fitContent();
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    let resizeObserver: ResizeObserver | undefined;
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(entries => {
-        if (!chartRef.current) return;
-        for (const entry of entries) {
-          const { width } = entry.contentRect;
-          if (width > 0) {
-            chartRef.current.applyOptions({ width });
-            chartRef.current.timeScale().fitContent();
-          }
-        }
-      });
-      resizeObserver.observe(container);
-    }
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      resizeObserver?.disconnect();
       chart.remove();
       candleSeriesRef.current = null;
       chartRef.current = null;
-      setSeriesReady(false);
     };
   }, [isClient]);
 
   // Update chart data
   useEffect(() => {
-    if (!seriesReady || !candleSeriesRef.current || !data?.candles || data.candles.length === 0) return;
+    if (!candleSeriesRef.current || !chartRef.current || !data?.candles || data.candles.length === 0) return;
 
     console.log('📊 Chart data received:', {
       candleCount: data.candles.length,
@@ -202,7 +167,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       } else {
         console.warn('⚠️ No valid candles to display');
       }
-    }, [data, seriesReady]);
+  }, [data]);
 
   if (error) {
     return (
