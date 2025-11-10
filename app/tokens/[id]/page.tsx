@@ -17,6 +17,24 @@ import { TradeHistory } from '@/components/charts/TradeHistory';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 
 export default function TokenPage() {
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  if (!hasMounted) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-gray-400">Loading token...</div>
+      </div>
+    );
+  }
+
+  return <TokenPageContent />;
+}
+
+function TokenPageContent() {
   const params = useParams();
   const router = useRouter();
   const tokenId = params.id as string;
