@@ -55,7 +55,10 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   useEffect(() => {
     if (!isClient || !chartContainerRef.current) return;
 
-    const chart: any = createChart(chartContainerRef.current, {
+    const container = chartContainerRef.current;
+    const initialWidth = container.clientWidth || 600;
+
+    const chart: any = createChart(container, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#9ca3af',
@@ -64,7 +67,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
         vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
         horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
       },
-      width: chartContainerRef.current.clientWidth,
+      width: initialWidth,
       height: 400,
       timeScale: {
         timeVisible: true,
@@ -106,17 +109,35 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
 
     // Handle resize
     const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        });
+      if (!chartContainerRef.current || !chartRef.current) return;
+      const width = chartContainerRef.current.clientWidth || initialWidth;
+      if (width > 0) {
+        chartRef.current.applyOptions({ width });
+        chartRef.current.timeScale().fitContent();
       }
     };
 
     window.addEventListener('resize', handleResize);
+    handleResize();
+
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(entries => {
+        if (!chartRef.current) return;
+        for (const entry of entries) {
+          const { width } = entry.contentRect;
+          if (width > 0) {
+            chartRef.current.applyOptions({ width });
+            chartRef.current.timeScale().fitContent();
+          }
+        }
+      });
+      resizeObserver.observe(container);
+    }
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver?.disconnect();
       chart.remove();
       candleSeriesRef.current = null;
       chartRef.current = null;
@@ -164,23 +185,23 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       })
       .sort((a: any, b: any) => a.time - b.time); // Sort oldest to newest
 
-    console.log('📊 Processed candles for chart:', {
-      count: candles.length,
-      first: candles[0],
-      last: candles[candles.length - 1]
-    });
+      console.log('📊 Processed candles for chart:', {
+        count: candles.length,
+        first: candles[0],
+        last: candles[candles.length - 1],
+      });
 
-    if (candles.length > 0) {
-      try {
-        candleSeriesRef.current.setData(candles);
-        chartRef.current?.timeScale().fitContent();
-        console.log('✅ Chart data set successfully');
-      } catch (err: any) {
-        console.error('❌ Error setting chart data:', err);
+      if (candles.length > 0) {
+        try {
+          candleSeriesRef.current.setData(candles);
+          chartRef.current?.timeScale().fitContent();
+          console.log('✅ Chart data set successfully');
+        } catch (err: any) {
+          console.error('❌ Error setting chart data:', err);
+        }
+      } else {
+        console.warn('⚠️ No valid candles to display');
       }
-    } else {
-      console.warn('⚠️ No valid candles to display');
-    }
     }, [data, seriesReady]);
 
   if (error) {
