@@ -44,13 +44,8 @@ export function TokenPageClient({ tokenId }: TokenPageClientProps) {
   const currentAccount = useCurrentAccount();
   const { mutate: signAndExecute, isPending } = useSignAndExecuteTransaction();
 
-  const [hasMounted, setHasMounted] = useState(false);
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
 
   const { data: tokensResponse, isLoading, refetch } = useQuery({
     queryKey: ['indexer-tokens'],
@@ -224,14 +219,6 @@ export function TokenPageClient({ tokenId }: TokenPageClientProps) {
     } catch (error: any) {
       toast.error('Transaction failed: ' + error.message);
     }
-  }
-
-  if (!hasMounted) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-gray-400">Loading token...</div>
-      </div>
-    );
   }
 
   if (isLoading) {
