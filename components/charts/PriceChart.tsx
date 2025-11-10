@@ -102,12 +102,18 @@ export function PriceChart({ coinType }: PriceChartProps) {
   const prices = candles.flatMap(c => [c.high, c.low]);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
-  const priceRange = maxPrice - minPrice;
+  const priceRange = Math.max(maxPrice - minPrice, Number.EPSILON);
 
   const chartHeight = 240;
-  const scaleY = (price: number) => {
-    return chartHeight - ((price - minPrice) / priceRange) * chartHeight;
-  };
+  const scaleY = (price: number) => 
+    chartHeight - ((price - minPrice) / priceRange) * chartHeight;
+
+  const candleWidthPercent = 100 / candles.length;
+  const closeLinePoints = candles.map((candle, i) => {
+    const centerPercent = (i * candleWidthPercent) + candleWidthPercent / 2;
+    const y = scaleY(candle.close);
+    return `${centerPercent}%,${y}`;
+  }).join(' ');
 
   return (
     <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-4 md:p-6 space-y-4">
@@ -143,10 +149,20 @@ export function PriceChart({ coinType }: PriceChartProps) {
       {/* Chart - Responsive */}
       <div className="w-full overflow-hidden">
         <div className="relative w-full" style={{ height: chartHeight }}>
-          <svg width="100%" height={chartHeight} className="overflow-visible">
+            <svg width="100%" height={chartHeight} className="overflow-visible">
+              {candles.length > 1 && (
+                <polyline
+                  points={closeLinePoints}
+                  fill="none"
+                  stroke="rgba(148, 163, 184, 0.6)" // slate-400
+                  strokeWidth="1"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              )}
             {candles.map((candle, i) => {
-              const x = (i / candles.length) * 100;
-              const width = (1 / candles.length) * 100;
+                const x = (i / candles.length) * 100;
+                const width = (1 / candles.length) * 100;
               
               const yHigh = scaleY(candle.high);
               const yLow = scaleY(candle.low);
