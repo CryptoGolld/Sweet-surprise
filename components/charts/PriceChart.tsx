@@ -148,52 +148,59 @@ export function PriceChart({ coinType }: PriceChartProps) {
 
       {/* Chart - Responsive */}
       <div className="w-full overflow-hidden">
-        <div className="relative w-full" style={{ height: chartHeight }}>
-            <svg width="100%" height={chartHeight} className="overflow-visible">
-              {candles.length > 1 && (
-                <polyline
-                  points={closeLinePoints}
-                  fill="none"
-                  stroke="rgba(148, 163, 184, 0.6)" // slate-400
-                  strokeWidth="1"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-              )}
-            {candles.map((candle, i) => {
-                const x = (i / candles.length) * 100;
-                const width = (1 / candles.length) * 100;
-              
-              const yHigh = scaleY(candle.high);
-              const yLow = scaleY(candle.low);
-              const yOpen = scaleY(candle.open);
-              const yClose = scaleY(candle.close);
-              
-              const isGreen = candle.close >= candle.open;
-              const color = isGreen ? '#10b981' : '#ef4444';
-              
-              return (
-                <g key={i}>
-                  <line
-                    x1={`${x + width / 2}%`}
-                    y1={yHigh}
-                    x2={`${x + width / 2}%`}
-                    y2={yLow}
-                    stroke={color}
+          <div className="relative w-full flex" style={{ height: chartHeight }}>
+            <div className="relative flex-1">
+              <svg width="100%" height={chartHeight} className="overflow-visible">
+                {candles.length > 1 && (
+                  <polyline
+                    points={closeLinePoints}
+                    fill="none"
+                    stroke="rgba(148, 163, 184, 0.6)" // slate-400
                     strokeWidth="1"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
                   />
-                  <rect
-                    x={`${x + width * 0.2}%`}
-                    y={Math.min(yOpen, yClose)}
-                    width={`${width * 0.6}%`}
-                    height={Math.max(Math.abs(yClose - yOpen), 1)}
-                    fill={color}
-                  />
-                </g>
-              );
-            })}
-          </svg>
-        </div>
+                )}
+                {candles.map((candle, i) => {
+                  const x = (i / candles.length) * 100;
+                  const width = (1 / candles.length) * 100;
+                  
+                  const yHigh = scaleY(candle.high);
+                  const yLow = scaleY(candle.low);
+                  const yOpen = scaleY(candle.open);
+                  const yClose = scaleY(candle.close);
+                  
+                  const isGreen = candle.close >= candle.open;
+                  const color = isGreen ? '#10b981' : '#ef4444';
+                  
+                  return (
+                    <g key={i}>
+                      <line
+                        x1={`${x + width / 2}%`}
+                        y1={yHigh}
+                        x2={`${x + width / 2}%`}
+                        y2={yLow}
+                        stroke={color}
+                        strokeWidth="1"
+                      />
+                      <rect
+                        x={`${x + width * 0.2}%`}
+                        y={Math.min(yOpen, yClose)}
+                        width={`${width * 0.6}%`}
+                        height={Math.max(Math.abs(yClose - yOpen), 1)}
+                        fill={color}
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+            <div className="w-16 border-l border-white/10 pl-2 flex flex-col justify-between text-xs text-gray-400">
+              <div>{maxPrice.toFixed(8)}</div>
+              <div>{((maxPrice + minPrice) / 2).toFixed(8)}</div>
+              <div>{minPrice.toFixed(8)}</div>
+            </div>
+          </div>
       </div>
 
       {/* Stats - Mobile grid */}
