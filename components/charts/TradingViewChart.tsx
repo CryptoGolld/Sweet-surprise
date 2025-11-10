@@ -15,6 +15,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const candleSeriesRef = useRef<any>(null);
   const [isClient, setIsClient] = useState(false);
   const [interval, setInterval] = useState('1m');
+  const [seriesReady, setSeriesReady] = useState(false);
   
   // Only render chart on client side to avoid hydration errors
   useEffect(() => {
@@ -96,6 +97,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
+    setSeriesReady(true);
 
     // Handle resize
     const handleResize = () => {
@@ -111,12 +113,15 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     return () => {
       window.removeEventListener('resize', handleResize);
       chart.remove();
+      candleSeriesRef.current = null;
+      chartRef.current = null;
+      setSeriesReady(false);
     };
   }, [isClient]);
 
   // Update chart data
   useEffect(() => {
-    if (!candleSeriesRef.current || !data?.candles || data.candles.length === 0) return;
+    if (!seriesReady || !candleSeriesRef.current || !data?.candles || data.candles.length === 0) return;
 
     console.log('📊 Chart data received:', {
       candleCount: data.candles.length,
@@ -171,7 +176,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     } else {
       console.warn('⚠️ No valid candles to display');
     }
-  }, [data]);
+    }, [data, seriesReady]);
 
   if (error) {
     return (
