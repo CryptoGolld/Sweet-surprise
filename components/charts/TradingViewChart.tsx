@@ -93,6 +93,11 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       borderDownColor: '#ef4444',
       wickUpColor: '#10b981',
       wickDownColor: '#ef4444',
+      priceFormat: {
+        type: 'price',
+        precision: 10,
+        minMove: 0.0000000001,
+      },
     });
 
     chartRef.current = chart;
