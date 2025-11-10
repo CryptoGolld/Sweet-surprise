@@ -12,7 +12,7 @@ import { formatAmount, parseAmount, getExplorerLink } from '@/lib/sui/client';
 import { BONDING_CURVE } from '@/lib/constants';
 import { calculateTokensOut, calculateSuiOut } from '@/lib/utils/bondingCurve';
 import { toast } from 'sonner';
-import { TradingViewChart } from '@/components/charts/TradingViewChart';
+import { TradingViewChartWrapper as TradingViewChart } from '@/components/charts/TradingViewChartWrapper';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 
@@ -57,6 +57,12 @@ export default function TokenPage() {
   const { balance: paymentBalance, coins: paymentCoins, refetch: refetchPayment } = useCoinBalance();
   const { balance: memeBalance, coins: memeCoins, refetch: refetchMeme } = useCoinBalance(token?.coinType);
   
+  // Detect if this is first ever buy (curve supply is 0)
+  const isFirstEverBuy = useMemo(() => {
+    if (!token) return false;
+    return Number(token.curveSupply) === 0;
+  }, [token?.curveSupply]);
+  
   // Calculate trade preview
   const tradePreview = useMemo(() => {
     if (!amount || !token || parseFloat(amount) <= 0) return null;
@@ -82,6 +88,20 @@ export default function TokenPage() {
     if (!amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
+    }
+
+    // Validate first ever buyer amount (minimum >1 SUI required)
+    if (mode === 'buy' && isFirstEverBuy) {
+      const buyAmount = parseFloat(amount);
+      const MIN_FIRST_BUY = 1.0;
+      
+      if (buyAmount <= MIN_FIRST_BUY) {
+        toast.error(`First buy for any token cannot be less than 1 ${getPaymentTokenSymbol()}`, {
+          description: 'We recommend buying at least 1.5 SUI',
+          duration: 5000,
+        });
+        return;
+      }
     }
 
     try {

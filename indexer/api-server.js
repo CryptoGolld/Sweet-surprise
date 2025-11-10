@@ -102,9 +102,21 @@ app.get('/api/chart/:coinType', async (req, res) => {
   try {
     const coinType = decodeURIComponent(req.params.coinType);
     const interval = req.query.interval || '1m';
-    const limit = parseInt(req.query.limit || '1440'); // 24 hours of 1-minute candles
+    const limit = parseInt(req.query.limit || '500');
 
-    // Fetch trades for the last 24 hours
+    // Define interval parameters
+    const intervalConfig = {
+      '1m': { ms: 60000, maxCandles: 1440, daysBack: 1 },        // 1 day
+      '5m': { ms: 300000, maxCandles: 576, daysBack: 2 },        // 2 days
+      '15m': { ms: 900000, maxCandles: 384, daysBack: 4 },       // 4 days
+      '1h': { ms: 3600000, maxCandles: 336, daysBack: 14 },      // 14 days
+      '4h': { ms: 14400000, maxCandles: 180, daysBack: 30 },     // 30 days
+      '1d': { ms: 86400000, maxCandles: 90, daysBack: 90 },      // 90 days
+    };
+
+    const config = intervalConfig[interval] || intervalConfig['1m'];
+
+    // Fetch ALL trades (no time limit!) - sorted oldest to newest
     const tradesResult = await db.query(
       `SELECT 
         timestamp,
@@ -112,7 +124,6 @@ app.get('/api/chart/:coinType', async (req, res) => {
         CAST(token_amount AS NUMERIC) as token_amount
        FROM trades
        WHERE coin_type = $1
-         AND timestamp > NOW() - INTERVAL '24 hours'
        ORDER BY timestamp ASC`,
       [coinType]
     );
@@ -122,27 +133,25 @@ app.get('/api/chart/:coinType', async (req, res) => {
     }
 
     const trades = tradesResult.rows;
-    
-    // Generate 1-minute candles from trades
+    const firstTradeTime = new Date(trades[0].timestamp);
     const currentTime = new Date();
-    const chartStartTime = new Date(currentTime.getTime() - 24 * 60 * 60 * 1000);
+    
+    // Start from first trade, not arbitrary 24h ago
+    const chartStartTime = firstTradeTime;
     const candles = [];
     
-    // Get initial price (first trade price or 0)
+    // Get initial price from first trade
     let currentPrice = parseFloat(trades[0].price_per_token);
     let tradeIndex = 0;
 
-    // Generate candles for each minute in last 24 hours
-    // Safety: limit to max 1440 candles (24 hours × 60 minutes)
+    // Generate candles from first trade to now
     let candleCount = 0;
-    const MAX_CANDLES = 1440;
     
-    for (let candleTime = new Date(chartStartTime); candleTime <= currentTime && candleCount < MAX_CANDLES; candleTime = new Date(candleTime.getTime() + 60000)) {
+    for (let candleTime = new Date(chartStartTime); candleTime <= currentTime && candleCount < config.maxCandles * 2; candleTime = new Date(candleTime.getTime() + config.ms)) {
       const candleStart = candleTime;
-      const candleEnd = new Date(candleTime.getTime() + 60000);
-      candleCount++;
+      const candleEnd = new Date(candleTime.getTime() + config.ms);
 
-      // Find trades in this minute
+      // Find trades in this candle period
       const candleTrades = [];
       while (tradeIndex < trades.length) {
         const tradeTime = new Date(trades[tradeIndex].timestamp);
@@ -156,33 +165,50 @@ app.get('/api/chart/:coinType', async (req, res) => {
         }
       }
 
-      let open, high, low, close, volume;
-      if (candleTrades.length > 0) {
-        // Candle with trades
-        const prices = candleTrades.map(t => parseFloat(t.price_per_token));
-        open = prices[0];
-        high = Math.max(...prices);
-        low = Math.min(...prices);
-        close = prices[prices.length - 1];
-        volume = candleTrades.reduce((sum, t) => sum + parseFloat(t.token_amount), 0);
-        currentPrice = close;
-      } else {
-        // No trades - flat candle at last price
-        open = high = low = close = currentPrice;
-        volume = 0;
-      }
+      // Only create candle if there were trades OR it's a recent candle (for fill-forward)
+      const hoursSinceCandle = (currentTime - candleStart) / (1000 * 60 * 60);
+      const shouldInclude = candleTrades.length > 0 || hoursSinceCandle <= 24;
 
-      candles.push({
-        time: candleStart.getTime(),
-        open,
-        high,
-        low,
-        close,
-        volume: volume.toString(),
-      });
+      if (shouldInclude) {
+        let open, high, low, close, volume;
+        if (candleTrades.length > 0) {
+          // Candle with trades
+          const prices = candleTrades.map(t => parseFloat(t.price_per_token));
+          open = prices[0];
+          high = Math.max(...prices);
+          low = Math.min(...prices);
+          close = prices[prices.length - 1];
+          volume = candleTrades.reduce((sum, t) => sum + parseFloat(t.token_amount), 0);
+          currentPrice = close;
+        } else {
+          // No trades - flat candle at last price (fill-forward for last 24h only)
+          open = high = low = close = currentPrice;
+          volume = 0;
+        }
+
+        candles.push({
+          time: candleStart.getTime(),
+          open,
+          high,
+          low,
+          close,
+          volume: volume.toString(),
+        });
+        candleCount++;
+      }
     }
 
-    res.json({ coinType, interval, candles: candles.slice(-limit) });
+    // Return last N candles based on limit
+    const limitedCandles = candles.slice(-limit);
+    
+    res.json({ 
+      coinType, 
+      interval, 
+      candles: limitedCandles,
+      totalTrades: trades.length,
+      firstTradeAt: firstTradeTime.toISOString(),
+      dataPoints: limitedCandles.length
+    });
   } catch (error) {
     console.error('Chart API Error:', error);
     res.status(500).json({ error: error.message });

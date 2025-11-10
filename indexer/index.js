@@ -332,6 +332,8 @@ async function processCreatedEvent(event) {
     }
     
     // Insert into database with initial price of 0
+    // IMPORTANT: ON CONFLICT preserves social links (twitter, telegram, website)
+    // because they're set separately via /api/update-metadata and not on blockchain
     await db.query(
       `INSERT INTO tokens (id, coin_type, ticker, name, description, image_url, creator, curve_supply, curve_balance, graduated, created_at, current_price_sui, market_cap_sui)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0, 0)
@@ -340,6 +342,9 @@ async function processCreatedEvent(event) {
          curve_supply = EXCLUDED.curve_supply,
          curve_balance = EXCLUDED.curve_balance,
          graduated = EXCLUDED.graduated,
+         name = COALESCE(NULLIF(EXCLUDED.name, ''), tokens.name),
+         description = COALESCE(NULLIF(EXCLUDED.description, ''), tokens.description),
+         image_url = COALESCE(NULLIF(EXCLUDED.image_url, ''), tokens.image_url),
          updated_at = NOW()`,
       [
         curveId,
@@ -389,8 +394,12 @@ async function processBuyEvent(event) {
     );
     
     // Find minted tokens (newly created coins of the memecoin type)
+    // Filter out payment tokens: SUILFG_MEMEFI (testnet) and SUI (mainnet)
     const mintedCoins = txDetails.objectChanges?.filter(
-      obj => obj.type === 'created' && obj.objectType?.includes('::coin::Coin<') && !obj.objectType?.includes('SUILFG_MEMEFI')
+      obj => obj.type === 'created' && 
+             obj.objectType?.includes('::coin::Coin<') && 
+             !obj.objectType?.includes('SUILFG_MEMEFI') &&
+             !obj.objectType?.includes('::sui::SUI')
     );
     
     if (!mintedCoins || mintedCoins.length === 0) {

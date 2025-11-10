@@ -9,8 +9,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'coinType is required' }, { status: 400 });
     }
 
-    // Use the same backend API URL as other proxies
-    const backendUrl = 'http://13.60.235.109:3002';
+    // Use the correct backend API based on environment (mainnet vs testnet)
+    const backendUrl = process.env.NEXT_PUBLIC_INDEXER_API || 'http://51.20.74.15:3003';
     
     console.log('Updating metadata:', { coinType, hasImage: !!imageUrl, hasTwitter: !!twitter });
     

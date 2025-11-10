@@ -17,7 +17,7 @@ import {
 } from '@/lib/utils/bondingCurve';
 import { getPaymentTokenSymbol } from '@/lib/utils/networkText';
 import { toast } from 'sonner';
-import { PriceChart } from '@/components/charts/PriceChart';
+import { PriceChartWrapper as PriceChart } from '@/components/charts/PriceChartWrapper';
 import { TradeHistory } from '@/components/charts/TradeHistory';
 
 interface TradingModalProps {
@@ -130,20 +130,23 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
       return;
     }
     
-    // Validate first ever buyer amount (must be > 1 SUI due to contract fee)
+    // Validate first ever buyer amount (minimum >1 SUI required)
     if (mode === 'buy' && isFirstEverBuy) {
       const buyAmount = parseFloat(amount);
-      console.log('?? First buyer validation:', {
+      const MIN_FIRST_BUY = 1.0;
+      
+      console.log('🔍 First buyer validation:', {
         isFirstEverBuy,
         buyAmount,
-        willBlock: buyAmount <= 1.0,
+        minRequired: MIN_FIRST_BUY,
+        willBlock: buyAmount <= MIN_FIRST_BUY,
       });
       
-      if (buyAmount <= 1.0) {
-        console.log('? BLOCKING transaction: amount too low for first buyer');
-        toast.error('First buy must be more than 1 SUI', {
-          description: 'The contract charges a 1 SUI first buyer fee. Your buy amount must be greater than 1 SUI. Try 1.5 SUI or more.',
-          duration: 6000,
+      if (buyAmount <= MIN_FIRST_BUY) {
+        console.log('❌ BLOCKING transaction: amount too low for first buyer');
+        toast.error(`First buy for any token cannot be less than 1 ${getPaymentTokenSymbol()}`, {
+          description: 'We recommend buying at least 1.5 SUI',
+          duration: 5000,
         });
         return; // BLOCK the transaction
       }
@@ -529,8 +532,10 @@ export function TradingModal({ isOpen, onClose, curve, fullPage = false }: Tradi
                         const maxAmount = Math.max(0, rawBalance - 0.01);
                         setAmount(maxAmount.toString());
                       } else {
-                        // For sell mode, use full balance
-                        setAmount(userBalance);
+                        // For sell mode, leave 1 token back (subtract 1 from balance)
+                        const balanceNum = parseFloat(userBalance);
+                        const maxSellAmount = Math.max(0, balanceNum - 1);
+                        setAmount(maxSellAmount.toString());
                       }
                     }}
                     className="text-xs text-gray-400 hover:text-white transition-colors"

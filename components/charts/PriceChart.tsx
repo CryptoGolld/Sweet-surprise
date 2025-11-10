@@ -19,11 +19,25 @@ interface PriceChartProps {
 export function PriceChart({ coinType }: PriceChartProps) {
   const [interval, setInterval] = useState('1m');
 
+  // Calculate appropriate limit based on interval
+  const getLimitForInterval = (int: string) => {
+    const limits: Record<string, number> = {
+      '1m': 500,   // 8+ hours
+      '5m': 288,   // 24 hours
+      '15m': 192,  // 48 hours
+      '1h': 168,   // 7 days
+      '4h': 180,   // 30 days
+      '1d': 90,    // 90 days
+    };
+    return limits[int] || 500;
+  };
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['chart', coinType, interval],
     queryFn: async () => {
+      const limit = getLimitForInterval(interval);
       const response = await fetch(
-        `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=${interval}&limit=100`
+        `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=${interval}&limit=${limit}`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
       return response.json();
@@ -62,8 +76,9 @@ export function PriceChart({ coinType }: PriceChartProps) {
     );
   }
 
-  const firstCandle = candles[candles.length - 1];
-  const lastCandle = candles[0];
+  // Candles are returned newest first (descending time)
+  const firstCandle = candles[0];  // Oldest in current view
+  const lastCandle = candles[candles.length - 1];  // Newest
   const priceChange = lastCandle && firstCandle 
     ? ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100 
     : 0;
@@ -84,7 +99,7 @@ export function PriceChart({ coinType }: PriceChartProps) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="text-2xl md:text-3xl font-bold">
-            {lastCandle?.close.toFixed(8)} SUILFG
+            {lastCandle?.close.toFixed(8)} {process.env.NEXT_PUBLIC_NETWORK === 'mainnet' ? 'SUI' : 'SUILFG'}
           </div>
           <div className={`text-sm font-semibold ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             {priceChange >= 0 ? '↗' : '↘'} {Math.abs(priceChange).toFixed(2)}%

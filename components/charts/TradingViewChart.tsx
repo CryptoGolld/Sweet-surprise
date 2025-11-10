@@ -13,48 +13,37 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
   const candleSeriesRef = useRef<any>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-  const [consoleErrors, setConsoleErrors] = useState<string[]>([]);
+  const [isClient, setIsClient] = useState(false);
+  const [interval, setInterval] = useState('1m');
   
-  // Capture console errors
+  // Only render chart on client side to avoid hydration errors
   useEffect(() => {
-    const originalError = console.error;
-    const errors: string[] = [];
-    
-    console.error = (...args: any[]) => {
-      const errorMsg = args.map(arg => 
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ');
-      errors.push(errorMsg);
-      setConsoleErrors([...errors]);
-      originalError.apply(console, args);
-    };
-    
-    return () => {
-      console.error = originalError;
-    };
+    setIsClient(true);
   }, []);
+
+  // Calculate appropriate limit based on interval
+  const getLimitForInterval = (int: string) => {
+    const limits: Record<string, number> = {
+      '1m': 500,   // 8+ hours
+      '5m': 288,   // 24 hours
+      '15m': 192,  // 48 hours
+      '1h': 168,   // 7 days
+      '4h': 180,   // 30 days
+      '1d': 90,    // 90 days
+    };
+    return limits[int] || 500;
+  };
   
   // Fetch candle data
   const { data, isLoading, error } = useQuery({
-    queryKey: ['chart', coinType],
+    queryKey: ['chart', coinType, interval],
     queryFn: async () => {
+      const limit = getLimitForInterval(interval);
       const response = await fetch(
-        `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=1m&limit=1000`
+        `/api/proxy/chart/${encodeURIComponent(coinType)}?interval=${interval}&limit=${limit}`
       );
       if (!response.ok) throw new Error('Failed to fetch chart data');
-      const json = await response.json();
-      
-      // Store debug info
-      setDebugInfo({
-        candleCount: json.candles?.length || 0,
-        firstCandle: json.candles?.[0],
-        lastCandle: json.candles?.[json.candles?.length - 1],
-        sampleCandles: json.candles?.slice(0, 3),
-        fetchedAt: new Date().toISOString(),
-      });
-      
-      return json;
+      return response.json();
     },
     refetchInterval: 5000, // Update every 5 seconds
     staleTime: 2000,
@@ -63,7 +52,7 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
 
   // Initialize chart
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!isClient || !chartContainerRef.current) return;
 
     const chart: any = createChart(chartContainerRef.current, {
       layout: {
@@ -123,49 +112,64 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, []);
+  }, [isClient]);
 
   // Update chart data
   useEffect(() => {
-    if (!candleSeriesRef.current || !data?.candles) return;
+    if (!candleSeriesRef.current || !data?.candles || data.candles.length === 0) return;
 
-    // Filter out invalid candles and convert to TradingView format
+    console.log('📊 Chart data received:', {
+      candleCount: data.candles.length,
+      firstCandle: data.candles[0],
+      lastCandle: data.candles[data.candles.length - 1],
+      interval: data.interval
+    });
+
+    // Convert to TradingView format (timestamps in SECONDS)
     const candles = data.candles
-      .map((candle: any) => ({
-        time: Math.floor(candle.time / 1000), // Convert to seconds
-        open: parseFloat(candle.open),
-        high: parseFloat(candle.high),
-        low: parseFloat(candle.low),
-        close: parseFloat(candle.close),
-      }))
+      .map((candle: any) => {
+        const timeInSeconds = Math.floor(candle.time / 1000);
+        return {
+          time: timeInSeconds,
+          open: parseFloat(candle.open),
+          high: parseFloat(candle.high),
+          low: parseFloat(candle.low),
+          close: parseFloat(candle.close),
+        };
+      })
       .filter((candle: any) => {
         // Filter out invalid data
-        return !isNaN(candle.time) && 
+        const isValid = !isNaN(candle.time) && 
                !isNaN(candle.open) && 
+               !isNaN(candle.high) &&
+               !isNaN(candle.low) &&
+               !isNaN(candle.close) &&
                candle.open > 0 &&
                candle.time > 0;
+        
+        if (!isValid) {
+          console.warn('⚠️ Filtered out invalid candle:', candle);
+        }
+        return isValid;
       })
-      .reverse(); // TradingView wants oldest first
+      .sort((a: any, b: any) => a.time - b.time); // Sort oldest to newest
+
+    console.log('📊 Processed candles for chart:', {
+      count: candles.length,
+      first: candles[0],
+      last: candles[candles.length - 1]
+    });
 
     if (candles.length > 0) {
-      console.log('📊 Setting chart data:', {
-        totalCandles: candles.length,
-        firstCandle: candles[0],
-        lastCandle: candles[candles.length - 1],
-        timeRange: {
-          first: new Date(candles[0].time * 1000).toISOString(),
-          last: new Date(candles[candles.length - 1].time * 1000).toISOString(),
-        }
-      });
-      
       try {
         candleSeriesRef.current.setData(candles);
         chartRef.current?.timeScale().fitContent();
         console.log('✅ Chart data set successfully');
       } catch (err: any) {
         console.error('❌ Error setting chart data:', err);
-        setDebugInfo((prev: any) => ({ ...prev, chartError: err?.message || String(err) }));
       }
+    } else {
+      console.warn('⚠️ No valid candles to display');
     }
   }, [data]);
 
@@ -174,12 +178,12 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
         <div className="text-white/60">Chart unavailable</div>
-        <div className="text-sm text-white/40 mt-2">Error: {error.message}</div>
+        <div className="text-sm text-red-400 mt-2">{error.message}</div>
       </div>
     );
   }
 
-  if (isLoading) {
+  if (!isClient || isLoading) {
     return (
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="animate-pulse text-gray-400">Loading chart...</div>
@@ -187,7 +191,6 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
     );
   }
 
-  // Show placeholder with stats if we have data but can't render chart
   const hasTradeData = data?.candles && data.candles.length > 0;
   
   if (!hasTradeData) {
@@ -195,72 +198,94 @@ export function TradingViewChart({ coinType }: TradingViewChartProps) {
       <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-8 text-center">
         <div className="text-6xl mb-4">📊</div>
         <div className="text-xl font-semibold mb-2">No Trading History Yet</div>
-        <div className="text-white/60 mb-2">This token hasn't had any trades yet</div>
-        <div className="text-sm text-white/40">Be the first to trade and the chart will appear!</div>
+        <div className="text-white/60">Be the first to trade!</div>
       </div>
     );
   }
 
+  // Calculate stats
+  const candles = data.candles;
+  const firstCandle = candles[0];
+  const lastCandle = candles[candles.length - 1];
+  const priceChange = firstCandle && lastCandle
+    ? ((lastCandle.close - firstCandle.open) / firstCandle.open) * 100
+    : 0;
+  const high = Math.max(...candles.map((c: any) => parseFloat(c.high)));
+  const low = Math.min(...candles.map((c: any) => parseFloat(c.low)));
+
   return (
     <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-2xl p-4 md:p-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold">📈 Price Chart</h3>
-        <div className="text-sm text-gray-400">
-          Powered by TradingView
+      {/* Header with Interval Selector */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold mb-1">📈 Price Chart</h3>
+          <div className="text-sm text-gray-400">
+            {lastCandle?.close.toFixed(10)} {process.env.NEXT_PUBLIC_NETWORK === 'mainnet' ? 'SUI' : 'SUILFG'}
+            <span className={`ml-2 font-semibold ${priceChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {priceChange >= 0 ? '↗' : '↘'} {Math.abs(priceChange).toFixed(2)}%
+            </span>
+          </div>
+        </div>
+
+        {/* Interval Selector */}
+        <div className="flex gap-1 overflow-x-auto w-full sm:w-auto">
+          {['1m', '5m', '15m', '1h', '4h', '1d'].map(int => (
+            <button
+              key={int}
+              onClick={() => setInterval(int)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                interval === int
+                  ? 'bg-gradient-to-r from-meme-pink to-meme-purple text-white shadow-lg'
+                  : 'bg-white/5 text-white/60 hover:bg-white/10'
+              }`}
+            >
+              {int}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Chart - With placeholder if rendering fails */}
-      <div className="relative">
-        <div 
-          ref={chartContainerRef} 
-          className="w-full"
-          style={{ minHeight: '400px' }}
-        />
-        
-        {/* Placeholder overlay if chart is empty/not rendering */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-sm rounded-xl p-6 text-center">
-            <div className="text-4xl mb-2">📊</div>
-            <div className="text-sm text-gray-400">Chart updating...</div>
-            <div className="text-xs text-gray-500 mt-1">Stats below show current data</div>
-          </div>
-        </div>
-      </div>
+      {/* Chart */}
+      <div 
+        ref={chartContainerRef} 
+        className="w-full"
+        style={{ minHeight: '400px' }}
+      />
 
       {/* Stats */}
-      {data?.candles && data.candles.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-white/10 pt-4">
-          <div>
-            <div className="text-white/60 text-xs mb-1">24h High</div>
-            <div className="font-mono font-semibold text-green-400">
-              {Math.max(...data.candles.map((c: any) => c.high)).toFixed(10)}
-            </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t border-white/10 pt-4">
+        <div>
+          <div className="text-white/60 text-xs mb-1">High</div>
+          <div className="font-mono font-semibold text-green-400">
+            {high.toFixed(10)}
           </div>
-          <div>
-            <div className="text-white/60 text-xs mb-1">24h Low</div>
-            <div className="font-mono font-semibold text-red-400">
-              {Math.min(...data.candles.map((c: any) => c.low)).toFixed(10)}
-            </div>
+        </div>
+        <div>
+          <div className="text-white/60 text-xs mb-1">Low</div>
+          <div className="font-mono font-semibold text-red-400">
+            {low.toFixed(10)}
           </div>
-          <div>
-            <div className="text-white/60 text-xs mb-1">24h Change</div>
-            <div className={`font-mono font-semibold ${
-              data.candles[0].close >= data.candles[data.candles.length - 1].open
-                ? 'text-green-400'
-                : 'text-red-400'
-            }`}>
-              {(((data.candles[0].close - data.candles[data.candles.length - 1].open) / 
-                data.candles[data.candles.length - 1].open) * 100).toFixed(2)}%
-            </div>
+        </div>
+        <div>
+          <div className="text-white/60 text-xs mb-1">Change</div>
+          <div className={`font-mono font-semibold ${
+            priceChange >= 0 ? 'text-green-400' : 'text-red-400'
+          }`}>
+            {priceChange.toFixed(2)}%
           </div>
-          <div>
-            <div className="text-white/60 text-xs mb-1">Data Points</div>
-            <div className="font-mono font-semibold">
-              {data.candles.length} candles
-            </div>
+        </div>
+        <div>
+          <div className="text-white/60 text-xs mb-1">Trades</div>
+          <div className="font-mono font-semibold">
+            {data.totalTrades || candles.length}
           </div>
+        </div>
+      </div>
+
+      {/* Debug info (remove in production) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="text-xs text-gray-500 border-t border-white/5 pt-2">
+          Debug: {candles.length} candles | Interval: {interval} | First: {new Date(firstCandle?.time).toLocaleString()} | Last: {new Date(lastCandle?.time).toLocaleString()}
         </div>
       )}
     </div>
