@@ -15,25 +15,23 @@ export function useSuiPrice() {
     queryKey: ['sui-price'],
     queryFn: async (): Promise<number> => {
       try {
-        const response = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd',
-          {
-            headers: {
-              'Accept': 'application/json',
-            },
-          }
-        );
+        // Use our own API route to avoid CORS and rate limiting issues
+        const response = await fetch('/api/sui-price', {
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
 
         if (!response.ok) {
           throw new Error('Failed to fetch SUI price');
         }
 
-        const data: SuiPriceData = await response.json();
-        return data.sui.usd;
+        const data = await response.json();
+        return data.price;
       } catch (error) {
         console.error('Failed to fetch SUI price:', error);
         // Return fallback price
-        return 1.0;
+        return 2.1;
       }
     },
     refetchInterval: 60000, // Refresh every 60 seconds
