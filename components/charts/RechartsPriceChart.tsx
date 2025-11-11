@@ -169,9 +169,9 @@ export function RechartsPriceChart({ coinType }: PriceChartProps) {
             minTickGap={24}
           />
           <YAxis
-            domain={['dataMin', 'dataMax']}
-            tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 10 }}
-            tickFormatter={(value) => value.toFixed(6)}
+          domain={['dataMin', 'dataMax']}
+          tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 10 }}
+          tickFormatter={(value) => value.toFixed(10)}
             width={80}
           />
           <Tooltip content={<CustomTooltip />} />
