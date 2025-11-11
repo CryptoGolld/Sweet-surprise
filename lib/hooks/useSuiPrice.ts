@@ -4,10 +4,10 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-interface SuiPriceData {
-  sui: {
-    usd: number;
-  };
+interface SuiPriceApiResponse {
+  price: number;
+  source: 'coingecko' | 'cache' | 'fallback';
+  lastUpdated: string;
 }
 
 export function useSuiPrice() {
@@ -16,24 +16,25 @@ export function useSuiPrice() {
     queryFn: async (): Promise<number> => {
       try {
         const response = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd',
+          '/api/sui-price',
           {
             headers: {
-              'Accept': 'application/json',
+              Accept: 'application/json',
             },
-          }
+            cache: 'no-store',
+          },
         );
 
         if (!response.ok) {
           throw new Error('Failed to fetch SUI price');
         }
 
-        const data: SuiPriceData = await response.json();
-        return data.sui.usd;
+        const data: SuiPriceApiResponse = await response.json();
+        return data.price;
       } catch (error) {
         console.error('Failed to fetch SUI price:', error);
         // Return fallback price
-        return 1.0;
+        return 2.1;
       }
     },
     refetchInterval: 60000, // Refresh every 60 seconds
