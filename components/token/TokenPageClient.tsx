@@ -46,6 +46,11 @@ export function TokenPageClient({ tokenId }: TokenPageClientProps) {
 
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
 
   const { data: tokensResponse, isLoading, refetch } = useQuery({
     queryKey: ['indexer-tokens'],
@@ -54,7 +59,8 @@ export function TokenPageClient({ tokenId }: TokenPageClientProps) {
       if (!response.ok) throw new Error('Failed to fetch tokens');
       return response.json();
     },
-    refetchInterval: 1500,
+    enabled: isReady,
+    refetchInterval: isReady ? 1500 : undefined,
     staleTime: 500,
   });
 
@@ -221,7 +227,7 @@ export function TokenPageClient({ tokenId }: TokenPageClientProps) {
     }
   }
 
-  if (isLoading) {
+  if (!isReady || isLoading) {
     return (
       <div className="min-h-screen pb-20 md:pb-0 bg-sui-dark">
         <Header />
